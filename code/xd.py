@@ -1179,4 +1179,6 @@ def main():
     ax8.set_title('des cmass true')
 
 #-----------------------
+main()
+
 
