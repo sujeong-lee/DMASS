@@ -485,12 +485,6 @@ def split_samples(X, y, fractions=[0.75, 0.25], random_state=None):
 def XDGMM_model(sdss, des):
 
     # divide data train and test
-    # XD for cmass, non_cmass
-
-    #sdss, des = DES_to_SDSS.match(sdss, des)
-    # from astroML.utils import split_samples
-    # sdss, sdss_priormask = SDSS_cmass_criteria(sdss, prior = True)
-    # sdss = sdss[(sdss['MODELMAG_R']-sdss['MODELMAG_I']) > -4 ]
     des, _ = priorCut(des)
     sdss, des = DES_to_SDSS.match(sdss, des)
     _, cmass_mask = SDSS_cmass_criteria(sdss)
@@ -517,7 +511,7 @@ def XDGMM_model(sdss, des):
     
 
     
-    # des
+    # stack DES data
     des_g = des['MAG_DETMODEL_G'] - des['XCORR_SFD98_G']
     des_r = des['MAG_DETMODEL_R'] - des['XCORR_SFD98_R']
     des_i = des['MAG_DETMODEL_I'] - des['XCORR_SFD98_I']
@@ -546,6 +540,7 @@ def XDGMM_model(sdss, des):
     ycov = np.zeros(sdss.size, dtype=int)
     y[cmass_mask] = 1
 
+    # mask for train/test sample
     (X_train_ind, X_test_ind), (y_train_ind, y_test_ind) = split_samples(X, y, [0.3,0.7],
                                                      random_state=0)
     X_train = X[X_train_ind]
@@ -557,10 +552,9 @@ def XDGMM_model(sdss, des):
     print 'train/test', len(X_train),len( X_test )  
     # train sample XD convolution
    
-    # cmass
+    # cmass extreme deconvolution compute
     @pickle_results("XD_dmass_train100.pkl")
     def compute_XD(n_clusters=20, n_iter=500, verbose=True):
-        #np.random.seed(rseed)
         clf = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
         #clf.fit(X[X_train_ind][ cmass_mask_train], Xcov[X_train_ind][cmass_mask_train])
         clf.fit(X[cmass_mask], Xcov[cmass_mask])
@@ -569,9 +563,8 @@ def XDGMM_model(sdss, des):
     clf_cmass = compute_XD()
     X_sample_cmass = clf_cmass.sample(50 * X.shape[0])
 
-    fig, (ax, ax2) = plt.subplots(1,2)
-    ax.plot( X[cmass_mask][:,1], X[cmass_mask][:,2], 'r.', alpha = 0.3)
-    ax2.plot( X[cmass_mask][:,0], X[cmass_mask][:,2] - X[cmass_mask][:,1]/8.0, 'r.', alpha = 0.3)
+
+    # 3d number density histogram 
 
     bin1, step1 = np.linspace(X[:,0].min(), X[:,0].max(), 301, retstep=True)
     bin2, step2 = np.linspace(X[:,1].min(), X[:,1].max(), 501, retstep=True)
@@ -592,24 +585,30 @@ def XDGMM_model(sdss, des):
 
     denominator_zero = denominator == 0
     modelProb_CMASS = np.zeros( numerator.shape )
-    modelProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+    modelProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]  # 3D model probability distriution
     
     
-    # test sample
+    # passing test sample to model probability
     inds1 = np.digitize( X_test[:,0], bin1 )-1
     inds2 = np.digitize( X_test[:,1], bin2 )-1
     inds3 = np.digitize( X_test[:,2], bin3 )-1
     inds = np.vstack([inds1,inds2, inds3]).T
     inds = [ tuple(ind) for ind in inds ]    
-    EachProb = np.array([modelProb_CMASS[ind] for ind in inds ])
+    EachProb = np.array([modelProb_CMASS[ind] for ind in inds ]) # Assign probability to each galaxies
+
+    # Getting galaxies higher than threshold
     GetCMASS_mask = EachProb > 0.04
-    
     X_pred = X_test[GetCMASS_mask]
    
+
+    # plotting dmass in color plane
+    fig, (ax, ax2) = plt.subplots(1,2)
+    ax.plot( X[cmass_mask][:,1], X[cmass_mask][:,2], 'r.', alpha = 0.3)
+    ax2.plot( X[cmass_mask][:,0], X[cmass_mask][:,2] - X[cmass_mask][:,1]/8.0, 'r.', alpha = 0.3)
     ax.plot(X_pred[:,1], X_pred[:,2], 'g.', alpha = 0.5 )
     ax2.plot( X_pred[:,0], X_pred[:,2] - X_pred[:,1]/8.0, 'g.', alpha = 0.3)
     ax.set_xlim(-2,3)
-    
+    # 1d histogram
     fig2, (ax, ax2, ax3) = plt.subplots(1,3)
     ax.plot( bin1[:-1], np.sum( np.sum( modelProb_CMASS, axis = 1 ), axis = 1), 'r.')
     ax2.plot( bin3[:-1], np.sum( np.sum( modelProb_CMASS, axis = 1 ), axis = 0), 'r.')
@@ -618,7 +617,7 @@ def XDGMM_model(sdss, des):
     ax2.set_xlabel('g-r')
     ax3.set_xlabel('r-i')
 
-
+    # completeness and purity
     completeness = np.sum( GetCMASS_mask * y_test )* 1.0/np.sum(y_test)
     purity = np.sum( GetCMASS_mask * y_test )* 1.0/np.sum(GetCMASS_mask)
 
@@ -626,52 +625,10 @@ def XDGMM_model(sdss, des):
     print 'num of dmass', np.sum(GetCMASS_mask)  
     return des[X_test_ind][GetCMASS_mask], sdss[X_test_ind][GetCMASS_mask] # des[GetCMASS_mask]
 
-    """
-    # non cmass 
-    @pickle_results("XD_nocmass.pkl")
-    def compute_XD(n_clusters=12, rseed=0, n_iter=100, verbose=True):
-        np.random.seed(rseed)
-        clf2 = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        clf2.fit(X[~cmass_mask], Xcov[~cmass_mask])
-        return clf2
-    
-    clf_no = compute_XD()
-    X_sample_no = clf_no.sample(X.shape[0])
-
-    XDProb_no, edges = np.histogramdd(X_sample_no[:,0:3], bins = (50, 50, 50), normed=True)
-    Pno = 1. - np.sum(y_train) * 1./ X_train.size
-    modelProb_no = XDProb_no * Pno
-
-    inds1 = np.digitize( X_test[:,0], edges[0] )
-    inds2 = np.digitize( X_test[:,1], edges[1] )
-    inds3 = np.digitize( X_test[:,2], edges[2] )
-
-    inds = np.vstack([inds1,inds2, inds3]).T
-    inds = [ tuple(ind) for ind in inds ]
-    
-    ProbList = [ XDProb_cmass[ind] for ind in inds ]
-    
-
-    modelProb = np.zeros((X_test.size, ),dtype=float)
-    modelProb[:,0] = modelProb_cmass[inds]
-    modelProb[:,1] = modelProb_no[inds]
-
-    pred = np.zeros(X_test.size, dtype=int)
-    pred[modelProb[:,0] > modelProb[:,1]] = 1
-    
-    completeness = np.sum(pred*y_test)/np.sum(y_test)
-    purity = np.sum(pred*y_test)/np.sum(pred)
-    print completeness, purity
-    """   
-    # digitize test sample
-
-
 
 
 def main():
     # load dataset
-
-    # large sample
 
     dec = -1.5
     dec2 = 1.5
@@ -693,21 +650,18 @@ def main():
     des =  im3shape.im3shape_galprof_mask(des_data_im3, des_data_f)
     # des = im3shape.im3shape_photoz( des_im3, des )
     
-    
+    # match DES and SDSS catalogs
     MatchedCmass, MatchedCmass_sdss = DES_to_SDSS.match(des, sdss)
-    # cmass, cmass_mask = cmass_criteria
-    #cmass, cmass_mask = SDSS_cmass_criteria(sdss)    
 
+    # expmask = MatchedCmass['IM3_GALPROF'] == 1
+    # devmask = MatchedCmass['IM3_GALPROF'] == 2
+    # noprofmask = MatchedCmass['IM3_GALPROF'] == 0
 
-    expmask = MatchedCmass['IM3_GALPROF'] == 1
-    devmask = MatchedCmass['IM3_GALPROF'] == 2
-    noprofmask = MatchedCmass['IM3_GALPROF'] == 0
-
+    # extreme deconv classifier
     DMASS, DMASS_sdss = XDGMM_model(MatchedCmass_sdss, MatchedCmass)
 
 
     # testing DMASS in SDSS photometry ------------------------
-
     fig, (ax, ax2) = plt.subplots(1,2, figsize = (14, 7))
 
     dmass_sdss = DMASS_sdss.copy()
