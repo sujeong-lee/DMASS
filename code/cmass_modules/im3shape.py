@@ -70,20 +70,36 @@ def im3shape_add_radius(  im3shape, fulldes ):
     return data
 
 
+def im3shape_photoz( im3shape, des ):
+    import esutil
+    import numpy.lib.recfunctions as rf
 
-def im3shape_galprof_mask(  im3shape, fulldes ):
+    ind1, ind2 = esutil.numpy_util.match(im3shape['COADD_OBJECTS_ID'], des['COADD_OBJECTS_ID'])
+    
+    photoz = im3shape[ind1]['DESDM_ZP']
+
+    des2 = rf.append_fields(des[ind2], 'DESDM_ZP', photoz)
+    return des2
+
+
+def matchCatalogs(cat1, cat2 ,tag = 'tagname'):
+    import esutil
+    ind1, ind2 = esutil.numpy_util.match(cat1[tag], cat2[tag])
+    return cat1[ind1], cat2[ind2]
+
+
+
+def im3shape_galprof_mask( im3shape, fulldes ):
     """ add mode to distingush galaxy profiles used in im3shape """
     """ return only full des """
     
-    im3galprofile = np.zeros(len(im3shape), dtype=np.int32)
+    im3galprofile = np.zeros(len(fulldes), dtype=np.int32)
     
     expcut = (im3shape['BULGE_FLUX'] == 0)
     devcut = (im3shape['DISC_FLUX'] == 0)
-    neither = - (expcut|devcut)
     
     des_exp = im3shape[expcut]
     des_dev = im3shape[devcut]
-    #des_star = im3shape[neither]
     
     expID = des_exp['COADD_OBJECTS_ID']
     devID = des_dev['COADD_OBJECTS_ID']
@@ -97,10 +113,10 @@ def im3shape_galprof_mask(  im3shape, fulldes ):
     
     data = rf.append_fields(fulldes, 'IM3_GALPROF', im3galprofile)
     
-    print np.sum(expcut), np.sum(devcut), np.sum(neither)
+    print np.sum(expmask), np.sum(devmask)
     return data
 
-def addMagforim3shape(  im3_des):
+def addMagforim3shape(im3_des):
 
     zeromag = 25.
     mag = zeromag - 2.5 * np.log10((im3_des['DISC_FLUX'] + im3_des['BULGE_FLUX']) * im3_des['MEAN_FLUX'])
