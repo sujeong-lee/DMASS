@@ -34,8 +34,27 @@ def SDSS_cmass_criteria(sdss, prior=None):
     star = (((sdss['PSFMAG_I'] - sdss['EXPMAG_I']) > (0.2 + 0.2*(20.0 - sdss['EXPMAG_I']))) &
          ((sdss['PSFMAG_Z'] - sdss['EXPMAG_Z']) > (9.125 - 0.46 * sdss['EXPMAG_Z'])))
     
-    return sdss[priorCut & star], priorCut&star #sdss[cmass]
+    return sdss[priorCut], priorCut # &star #sdss[cmass]
 
+def SDSS_LOWZ_criteria(sdss):
+
+    modelmag_r = sdss['MODELMAG_R'] - sdss['EXTINCTION_R']
+    modelmag_i = sdss['MODELMAG_I'] - sdss['EXTINCTION_I']
+    modelmag_g = sdss['MODELMAG_G'] - sdss['EXTINCTION_G']
+    cmodelmag_i = sdss['CMODELMAG_I'] - sdss['EXTINCTION_I']
+    cmodelmag_r = sdss['CMODELMAG_R'] - sdss['EXTINCTION_R']
+    cpar = 0.7 * (modelmag_g - modelmag_r) + 1.2 * ((modelmag_r - modelmag_i) - 0.18)
+    cperp = (modelmag_r - modelmag_i) - (modelmag_g - modelmag_r)/4.0 - 0.18
+    # fib2mag = sdss['FIBER2MAG_I']
+
+    priorCut = ((cmodelmag_r > 16 ) &
+                (cmodelmag_r < 19.6) &
+		(cmodelmag_r < (13.5 + cpar/0.3)) &
+ 		( cperp < 0.2 ) &
+ 		( cperp > -0.2))
+
+    star = ( sdss['PSFMAG_R'] - sdss['CMODELMAG_R'] > 0.3 )
+    return sdss[priorCut ], priorCut # &star #sdss[cmass]
 
 
 def priorCut(data, sdss=None):
@@ -58,10 +77,10 @@ def priorCut(data, sdss=None):
     # dperp_des = ( modelmag_r_des - modelmag_i_des) - (modelmag_g_des - modelmag_r_des)/8.0
     
     cut = ((cmodelmag_i_des > 15) &
-           (cmodelmag_i_des < 22.)  &
+           (cmodelmag_i_des < 22.) &
            ((modelmag_r_des - modelmag_i_des ) < 2.0 ) &
            ((modelmag_g_des - modelmag_r_des ) > -2.0 ) &
-	   ((modelmag_g_des - modelmag_r_des ) < 3. ) 
+	    ((modelmag_g_des - modelmag_r_des ) < 3. ) 
            # (fib2mag_des < 25.5 )
              )
 
@@ -482,17 +501,20 @@ def split_samples(X, y, fractions=[0.75, 0.25], random_state=None):
     return X_indices, y_indices
 
 
-def XDGMM_model(sdss, des):
+def XDGMM_model(sdss, des, p_treshold = 0.5):
 
     # divide data train and test
     des, _ = priorCut(des)
     sdss, des = DES_to_SDSS.match(sdss, des)
+
+    # mask should be applied after matching SDSS and DES catalogs (for star-galaxy separation )
     _, cmass_mask = SDSS_cmass_criteria(sdss)
-   
+    _, lowz_mask = SDSS_LOWZ_criteria(sdss)   
  
     Ncmass = len(sdss[cmass_mask])
     Nnon = len(sdss[~cmass_mask])
     print 'cmass/non', Ncmass, Nnon
+    print 'lowz/non', len(sdss[lowz_mask]), len(sdss[~lowz_mask])
 
 
     # sdss
@@ -517,16 +539,18 @@ def XDGMM_model(sdss, des):
     des_i = des['MAG_DETMODEL_I'] - des['XCORR_SFD98_I']
     des_z = des['MAG_DETMODEL_Z'] - des['XCORR_SFD98_Z']
     des_ci = des['MAG_MODEL_I'] - des['XCORR_SFD98_I']
+    des_cr = des['MAG_MODEL_R'] - des['XCORR_SFD98_R']
 
-    X = np.vstack([des_ci, des_g, des_r, des_i, des_z]).T
-    Xerr = np.vstack([ des['MAGERR_MODEL_I'] , des['MAGERR_DETMODEL_G'], des['MAGERR_DETMODEL_R'],des['MAGERR_DETMODEL_I'],des['MAGERR_DETMODEL_Z']]).T
+    X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z]).T
+    Xerr = np.vstack([ des['MAGERR_MODEL_R'] , des['MAGERR_MODEL_I'], des['MAGERR_DETMODEL_G'], des['MAGERR_DETMODEL_R'],des['MAGERR_DETMODEL_I'],des['MAGERR_DETMODEL_Z']]).T
 
     
     # mixing matrix
-    W = np.array([[1, 0, 0, 0, 0],    # i cmagnitude
-                  [0, 1, -1, 0, 0],   # g-r
-                  [0, 0, 1, -1, 0],
-                  [0, 0, 0, 1, -1]])
+    W = np.array([[1, 0, 0, 0, 0, 0],    # r cmag
+		  [0, 1, 0, 0, 0, 0],    # i cmagnitude
+                  [0, 0, 1, -1, 0, 0],   # g-r
+                  [0, 0, 0, 1, -1, 0],
+                  [0, 0, 0, 0, 1, -1]])
 
     X = np.dot(X, W.T)
     Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
@@ -536,9 +560,10 @@ def XDGMM_model(sdss, des):
     # best way to do this is with a tensor dot-product
     Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
 
-    y = np.zeros(sdss.size, dtype=int)
-    ycov = np.zeros(sdss.size, dtype=int)
-    y[cmass_mask] = 1
+    y = np.zeros( ( sdss.size, 2 ), dtype=int)
+    # ycov = np.zeros(sdss.size, dtype=int)
+    y[:,0][cmass_mask] = 1
+    y[:,1][lowz_mask] = 1
 
     # mask for train/test sample
     (X_train_ind, X_test_ind), (y_train_ind, y_test_ind) = split_samples(X, y, [0.3,0.7],
@@ -549,57 +574,98 @@ def XDGMM_model(sdss, des):
     y_test = y[y_test_ind]
 
     _, cmass_mask_train = SDSS_cmass_criteria(sdss[X_train_ind])
+    _, lowz_mask_train = SDSS_LOWZ_criteria(sdss[X_train_ind])
+
     print 'train/test', len(X_train),len( X_test )  
     # train sample XD convolution
-   
+  
     # cmass extreme deconvolution compute
-    @pickle_results("XD_dmass_train100.pkl")
+    @pickle_results("XD_dmass_train30_sg.kl")
     def compute_XD(n_clusters=20, n_iter=500, verbose=True):
-        clf = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        #clf.fit(X[X_train_ind][ cmass_mask_train], Xcov[X_train_ind][cmass_mask_train])
-        clf.fit(X[cmass_mask], Xcov[cmass_mask])
-        return clf
-   
+        clf_cmass= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
+        clf_cmass.fit(X[X_train_ind][cmass_mask_train], Xcov[X_train_ind][cmass_mask_train])
+        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
+        return clf_cmass
+
     clf_cmass = compute_XD()
-    X_sample_cmass = clf_cmass.sample(50 * X.shape[0])
+    X_sample_cmass = clf_cmass.sample(100 * X.shape[0])  
+
+    @pickle_results("XD_lowz_train30_sg.kl")
+    def compute_XD(n_clusters=20, n_iter=500, verbose=True):
+        clf_lowz = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
+        clf_lowz.fit(X[X_train_ind][lowz_mask_train], Xcov[X_train_ind][lowz_mask_train])
+        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
+        return clf_lowz
+
+    clf_lowz = compute_XD()
+    X_sample_lowz = clf_lowz.sample(100 * X.shape[0])
 
 
-    # 3d number density histogram 
-
-    bin1, step1 = np.linspace(X[:,0].min(), X[:,0].max(), 301, retstep=True)
-    bin2, step2 = np.linspace(X[:,1].min(), X[:,1].max(), 501, retstep=True)
-    bin3, step3 = np.linspace(X[:,2].min(), X[:,2].max(), 201, retstep=True)
+    # 3d number density histogram
+    bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 301, retstep=True) # cmodel r
+    bin1, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 301, retstep=True) # cmodel i
+    bin2, step2 = np.linspace(X[:,2].min(), X[:,2].max(), 501, retstep=True) # gr
+    bin3, step3 = np.linspace(X[:,3].min(), X[:,3].max(), 201, retstep=True) # ri
+    bin0 = np.append( bin0, bin0[-1]+step0)
     bin1 = np.append( bin1, bin1[-1]+step1)
     bin2 = np.append( bin2, bin2[-1]+step2)
     bin3 = np.append( bin3, bin3[-1]+step3)
 
-    N_XDProb, edges = np.histogramdd(X_sample_cmass[:,0:3], bins = [bin1, bin2, bin3])
+
+    # cmass histogram
+    N_XDProb, edges = np.histogramdd(X_sample_cmass[:,1:4], bins = [bin1, bin2, bin3])
     n_CMASS = N_XDProb * 1./np.sum( N_XDProb )
 
     X_sample_no = X[~cmass_mask].copy()
-    N_XDProb, edges = np.histogramdd(X_sample_no[:,0:3], bins = [bin1, bin2, bin3])
+    N_XDProb, edges = np.histogramdd(X_sample_no[:,1:4], bins = [bin1, bin2, bin3])
     n_noCMASS = N_XDProb * 1./np.sum( N_XDProb )
 
-    numerator =  n_CMASS * np.sum(y_train) * 1.
-    denominator =  (n_CMASS * np.sum(y_train) + n_noCMASS * (X_train.size - np.sum(y_train) ))
+    numerator =  n_CMASS * np.sum(y_train[:,0]) * 1.
+    denominator =  (n_CMASS * np.sum(y_train[:,0]) + n_noCMASS * (X_train.size - np.sum(y_train[:,0]) ))
 
     denominator_zero = denominator == 0
     modelProb_CMASS = np.zeros( numerator.shape )
     modelProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]  # 3D model probability distriution
     
-    
+    # loz histogram
+    N_XDProb, edges = np.histogramdd(X_sample_lowz[:,(0,2,3)], bins = [bin0, bin2, bin3])
+    n_LOWZ = N_XDProb * 1./np.sum( N_XDProb )
+
+    X_sample_no = X[~lowz_mask].copy()
+    N_XDProb, edges = np.histogramdd(X_sample_no[:,(0,2,3)], bins = [bin0, bin2, bin3])
+    n_noLOWZ = N_XDProb * 1./np.sum( N_XDProb )    
+
+    numerator =  n_LOWZ * np.sum(y_train[:,1]) * 1.
+    denominator =  (n_LOWZ * np.sum(y_train[:,1]) + n_noLOWZ * (X_train.size - np.sum(y_train[:,1]) ))
+
+    denominator_zero = denominator == 0
+    modelProb_LOWZ = np.zeros( numerator.shape )
+    modelProb_LOWZ[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+
+
     # passing test sample to model probability
-    inds1 = np.digitize( X_test[:,0], bin1 )-1
-    inds2 = np.digitize( X_test[:,1], bin2 )-1
-    inds3 = np.digitize( X_test[:,2], bin3 )-1
-    inds = np.vstack([inds1,inds2, inds3]).T
-    inds = [ tuple(ind) for ind in inds ]    
-    EachProb = np.array([modelProb_CMASS[ind] for ind in inds ]) # Assign probability to each galaxies
+    inds0 = np.digitize( X_test[:,0], bin0 )-1
+    inds1 = np.digitize( X_test[:,1], bin1 )-1
+    inds2 = np.digitize( X_test[:,2], bin2 )-1
+    inds3 = np.digitize( X_test[:,3], bin3 )-1
+    inds_CMASS = np.vstack([inds1,inds2, inds3]).T
+    inds_LOWZ = np.vstack([inds0, inds2, inds3]).T
+    inds_CMASS = [ tuple(ind) for ind in inds_CMASS ]    
+    inds_LOWZ = [ tuple(ind) for ind in inds_LOWZ ]
+    EachProb_CMASS = np.array([modelProb_CMASS[ind] for ind in inds_CMASS ]) # Assign probability to each galaxies
+    EachProb_LOWZ = np.array([modelProb_LOWZ[ind] for ind in inds_LOWZ ])
 
     # Getting galaxies higher than threshold
-    GetCMASS_mask = EachProb > 0.04
-    X_pred = X_test[GetCMASS_mask]
-   
+    GetCMASS_mask = EachProb_CMASS > p_treshold
+    X_pred_cmass = X_test[GetCMASS_mask]
+    X_cont_cmass = X_test[GetCMASS_mask * np.logical_not(y_test[:,0])]
+    GetLOWZ_mask = EachProb_LOWZ > p_treshold
+    X_pred_lowz = X_test[GetLOWZ_mask]
+    X_cont_lowz = X_test[GetLOWZ_mask * np.logical_not(y_test[:,1])]
+
+
+
+    """
 
     # plotting dmass in color plane
     fig, (ax, ax2) = plt.subplots(1,2)
@@ -607,6 +673,9 @@ def XDGMM_model(sdss, des):
     ax2.plot( X[cmass_mask][:,0], X[cmass_mask][:,2] - X[cmass_mask][:,1]/8.0, 'r.', alpha = 0.3)
     ax.plot(X_pred[:,1], X_pred[:,2], 'g.', alpha = 0.5 )
     ax2.plot( X_pred[:,0], X_pred[:,2] - X_pred[:,1]/8.0, 'g.', alpha = 0.3)
+    ax.plot(X_cont[:,1], X_cont[:,2], 'k.', alpha = 1.0 )
+    ax2.plot( X_cont[:,0], X_cont[:,2] - X_cont[:,1]/8.0, 'k.', alpha = 1.0)
+    
     ax.set_xlim(-2,3)
     # 1d histogram
     fig2, (ax, ax2, ax3) = plt.subplots(1,3)
@@ -617,15 +686,33 @@ def XDGMM_model(sdss, des):
     ax2.set_xlabel('g-r')
     ax3.set_xlabel('r-i')
 
+    # slicing i axis 
+
+    fig3, a =  plt.subplots(4,2, figsize = (10, 20))
+    a = a.ravel()
+    for i in range(8):
+	im = a[i].imshow( np.log10( modelProb_CMASS[:, :, 60 + 15*i])  )
+    	fig.colorbar(im, ax = a[i] )
+	a[i].text(0.95, 0.01, 'i={:>0.2f}'.format(bin1[i*10]), verticalalignment='bottom', horizontalalignment='right', transform=a[i].transAxes, fontsize=10)
+
+    """
+
     # completeness and purity
-    completeness = np.sum( GetCMASS_mask * y_test )* 1.0/np.sum(y_test)
-    purity = np.sum( GetCMASS_mask * y_test )* 1.0/np.sum(GetCMASS_mask)
+    completeness_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(y_test[:,0])
+    purity_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(GetCMASS_mask)
+    contaminant_cmass = np.sum( GetCMASS_mask * np.logical_not(y_test[:,0]) )
 
-    print 'com/purity', completeness, purity
-    print 'num of dmass', np.sum(GetCMASS_mask)  
-    return des[X_test_ind][GetCMASS_mask], sdss[X_test_ind][GetCMASS_mask] # des[GetCMASS_mask]
+    completeness_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(y_test[:,1])
+    purity_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(GetLOWZ_mask)
+    contaminant_lowz = np.sum( GetLOWZ_mask * np.logical_not(y_test[:,1]) )
 
-
+    print 'com/purity(cmass)', completeness_cmass, purity_cmass
+    print 'com/purity(lowz)', completeness_lowz, purity_lowz
+    print 'num of dmass,dlowz', np.sum(GetCMASS_mask), np.sum(GetLOWZ_mask) 
+    print 'comtaminat', contaminant_cmass, contaminant_lowz
+    return des[X_test_ind][GetCMASS_mask], sdss[X_test_ind][GetCMASS_mask], sdss[X_test_ind][GetCMASS_mask * np.logical_not(y_test[:,0])], des[X_test_ind][GetLOWZ_mask], sdss[X_test_ind][GetLOWZ_mask], sdss[X_test_ind][GetLOWZ_mask * np.logical_not(y_test[:,1])]
+    #return 0
+  
 
 def main():
     # load dataset
@@ -637,6 +724,10 @@ def main():
 
     cmass_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-photoObj_z.fits.gz')
     cmass_data = Cuts.SpatialCuts(cmass_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
+    # cmass_data = cmass_data[ (cmass_data['Z']>0.43) & (cmass_data['Z']<0.7)]
+    lowz_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_LOWZ_South-photoObj.fits.gz')
+    lowz_data = Cuts.SpatialCuts(lowz_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
+
     sdss_data_o = io.getSDSScatalogs(bigSample = True)
     sdss = Cuts.SpatialCuts(sdss_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
     sdss = Cuts.doBasicSDSSCuts(sdss)
@@ -651,14 +742,55 @@ def main():
     # des = im3shape.im3shape_photoz( des_im3, des )
     
     # match DES and SDSS catalogs
-    MatchedCmass, MatchedCmass_sdss = DES_to_SDSS.match(des, sdss)
+    MatchedDES,  MatchedSDSS = DES_to_SDSS.match(des, sdss)
 
     # expmask = MatchedCmass['IM3_GALPROF'] == 1
     # devmask = MatchedCmass['IM3_GALPROF'] == 2
     # noprofmask = MatchedCmass['IM3_GALPROF'] == 0
 
     # extreme deconv classifier
-    DMASS, DMASS_sdss = XDGMM_model(MatchedCmass_sdss, MatchedCmass)
+    DMASS, DMASS_sdss, contaminant_CMASS, LOWZ, LOWZ_sdss, contaminant_LOWZ = XDGMM_model(MatchedSDSS, MatchedDES)
+
+
+
+    # purity vs p_thresh check
+    p = np.linspace(0.0, 0.1, 21)
+    fig, ax = plt.subplots()
+    for pp in p:
+    	com, pur = XDGMM_model(sdss, des, p_treshold = pp )
+   	ax.plot( pp, com, 'r.')
+        ax.plot( pp, pur, 'b.')
+        print pp, com, pur
+
+    # different region check
+    # S1
+    sdss1 = Cuts.SpatialCuts(MatchedCmass_sdss,ra =340, ra2=350 , dec= dec, dec2= dec2 )
+    des1 = Cuts.SpatialCuts(MatchedCmass,ra =340, ra2=350 , dec= dec, dec2= dec2 )
+    sdss2 = Cuts.SpatialCuts(MatchedCmass_sdss,ra =350, ra2=360 , dec= dec, dec2= dec2 )
+    des2 = Cuts.SpatialCuts(MatchedCmass,ra =350, ra2=360 , dec= dec, dec2= dec2 )
+
+
+    com, pur = XDGMM_model(sdss1, des1)
+    com, pur = XDGMM_model(sdss2, des2)
+
+
+
+   # testing DLOWZ in SDSS photometry -------------------------
+    fig, ax = plt.subplots(1,1, figsize = (7, 7))
+    dmass_sdss = LOWZ_sdss.copy()
+    contaminant = contaminant_LOWZ.copy()
+
+    ax.plot( lowz_data['MODELMAG'][:,1]-lowz_data['MODELMAG'][:,2] - lowz_data['EXTINCTION'][:,1] + lowz_data['EXTINCTION'][:,2], lowz_data['MODELMAG'][:,2] - lowz_data['MODELMAG'][:,3] + lowz_data['EXTINCTION'][:,3] - lowz_data['EXTINCTION'][:,2], 'g.', label = 'DR11 LOWZ')
+    ax.plot( dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'],dmass_sdss['MODELMAG_R'] -  dmass_sdss['MODELMAG_I'] + dmass_sdss['EXTINCTION_I'] - dmass_sdss['EXTINCTION_R'], 'r.', label = 'classifier', alpha = 0.5)
+    ax.plot( contaminant['MODELMAG_G']-contaminant['MODELMAG_R'] - contaminant['EXTINCTION_G'] + contaminant['EXTINCTION_R'],contaminant['MODELMAG_R'] -  contaminant['MODELMAG_I'] + contaminant['EXTINCTION_I'] - contaminant['EXTINCTION_R'], 'k.', label = 'contaminant')
+
+    ax.plot( dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'], 0.38 + (dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'])/4.0, 'k--')
+    ax.plot( dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'], 0.02 + (dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'])/4.0, 'k--')
+    ax.set_xlim(0.5,2.5)
+    ax.set_ylim(0.2, 1.0)
+    ax.set_xlabel('g - r')
+    ax.set_ylabel('r - i')
+
 
 
     # testing DMASS in SDSS photometry ------------------------
@@ -669,12 +801,18 @@ def main():
     
     dperp_sdss = dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_R'] + dmass_sdss['EXTINCTION_I']- dmass_sdss['MODELMAG_I'] - (dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'])/8.0
     dperp_des = dmass['MAG_DETMODEL_R'] -  dmass['XCORR_SFD98_R'] + dmass['XCORR_SFD98_I'] - dmass['MAG_DETMODEL_I'] - (dmass['MAG_DETMODEL_G'] - dmass['MAG_DETMODEL_G'] +  dmass['XCORR_SFD98_R'] + dmass['XCORR_SFD98_R'])/8.0
+
+    dperp_cont = contaminant['MODELMAG_R'] - contaminant['EXTINCTION_R'] + contaminant['EXTINCTION_I']- contaminant['MODELMAG_I'] - (contaminant['MODELMAG_G']-contaminant['MODELMAG_R'] - contaminant['EXTINCTION_G'] + contaminant['EXTINCTION_R'])/8.0
+
+
     ax.plot( dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'],dmass_sdss['MODELMAG_R'] -  dmass_sdss['MODELMAG_I'] + dmass_sdss['EXTINCTION_I'] - dmass_sdss['EXTINCTION_R'], 'g.', label = 'classifier')
+    ax.plot( contaminant['MODELMAG_G']-contaminant['MODELMAG_R'] - contaminant['EXTINCTION_G'] + contaminant['EXTINCTION_R'],contaminant['MODELMAG_R'] -  contaminant['MODELMAG_I'] + contaminant['EXTINCTION_I'] - contaminant['EXTINCTION_R'], 'k.', label = 'contaminant')
     ax.set_xlim(0,3)
     ax.plot( dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'], (dmass_sdss['MODELMAG_G']-dmass_sdss['MODELMAG_R'] - dmass_sdss['EXTINCTION_G'] + dmass_sdss['EXTINCTION_R'])/8.0 + 0.55, 'k--')
     ax.set_ylim(0.5, 1.6) 
     
     ax2.plot( dmass_sdss['CMODELMAG_I'] - dmass_sdss['EXTINCTION_I'], dperp_sdss, 'g.')
+    ax2.plot( contaminant['CMODELMAG_I'] - contaminant['EXTINCTION_I'], dperp_cont, 'k.')
     ax2.plot([19.9, 19.9], [0,2], 'k--')
     ax2.plot([15, 22], [0.55, 0.55], 'k--')
     ax2.plot(dmass_sdss['CMODELMAG_I'] - dmass_sdss['EXTINCTION_I'], (dmass_sdss['CMODELMAG_I'] - dmass_sdss['EXTINCTION_I']- 19.86)/1.6 + 0.8, 'k--')
@@ -1133,6 +1271,6 @@ def main():
     ax8.set_title('des cmass true')
 
 #-----------------------
-main()
+#main()
 
 
