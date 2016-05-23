@@ -2,7 +2,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from astroML.decorators import pickle_results
 from astroML.density_estimation import XDGMM
-
 from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 
 
@@ -1043,7 +1042,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
 
 
         # Balrog histogram test -----------------------------------------
-        """
+        
         X = X_pred_cmass_balrog.copy()
         bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 301, retstep=True) # cmodel r
         bin1, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 301, retstep=True) # cmodel i
@@ -1080,7 +1079,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
         ax.legend()
         ax2.legend()
         ax3.legend()
-        """
+        fig.savefig('AmassHistogram')
 
         
     	print 'balrog dmass/dlowz', np.sum(GetCMASS_mask_balrog), np.sum(GetLOWZ_mask_balrog)
@@ -1089,22 +1088,22 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
   
 
 def main():
+    
     # load dataset
 
     dec = -1.0
     dec2 = 1.0
-    ra = 320.0
+    ra = 350.0
     ra2 = 360.
 
-    #cmass_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-photoObj.fits.gz')
+
     cmass_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-photoObj_z.fits.gz')
     cmass_data = Cuts.SpatialCuts(cmass_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
     clean_cmass_data = Cuts.keepGoodRegion(cmass_data)
-
-    # cmass_data = cmass_data[ (cmass_data['Z']>0.43) & (cmass_data['Z']<0.7)]
     lowz_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_LOWZ_South-photoObj.fits.gz')
     lowz_data = Cuts.SpatialCuts(lowz_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
     clean_lowz_data = Cuts.keepGoodRegion(lowz_data)
+    
     #sdss_data_o = io.getSDSScatalogs(bigSample = True)
     #sdss = Cuts.SpatialCuts(sdss_data_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
     #sdss = Cuts.doBasicSDSSCuts(sdss)
@@ -1113,17 +1112,17 @@ def main():
     full_des_data = io.getDESY1A1catalogs(keyword = 'st82')
     des_data_f = Cuts.SpatialCuts(full_des_data, ra = ra, ra2=ra2, dec= dec, dec2= dec2  )
     des = Cuts.doBasicCuts(des_data_f)
-
+    """
     balrog_o = io.LoadBalrog(user = 'EMHUFF', truth = None)
     balrog = Cuts.SpatialCuts(balrog_o,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
     balrog = Cuts.doBasicCuts(balrog, balrog=True)
     balrogname = list( balrog.dtype.names)
-    balrogname[0], balrogname[1] = 'RA', 'DEC' 
+    balrogname[0], balrogname[2] = 'RA', 'DEC'
     balrog.dtype.names = tuple(balrogname)
     balrog = AddingReddening(balrog)
-
-    #y1a1 = io.getDESY1A1catalogs(keyword = 'Y1A1', size = 1000)
-    #des_y1a1 = Cuts.doBasicCuts(y1a1)
+    """
+    y1a1 = io.getDESY1A1catalogs(keyword = 'Y1A1_COADD_OBJECTS_000001', size = 100)
+    des_y1a1 = Cuts.doBasicCuts(y1a1)
 
 
     """
@@ -1143,11 +1142,12 @@ def main():
 
     # extreme deconv classifier
     DMASS,  LOWZ, DMASSALL, LOWZALL = XDGMM_model(des, clean_cmass_data, clean_lowz_data )
-    Balrog_DMASS, Balrog_LOWZ = XDGMM_model(des, clean_cmass_data, clean_lowz_data, balrog = balrog)
+    #Balrog_DMASS, Balrog_LOWZ = XDGMM_model(des, clean_cmass_data, clean_lowz_data, balrog = balrog)
     DMASS_y1a1, LOWZ_y1a1 = XDGMM_model(des, clean_cmass_data, clean_lowz_data, balrog = des_y1a1)
     # balrog, des histogram comparison
     
     
+
     stop
     # -------------------------------------
     
