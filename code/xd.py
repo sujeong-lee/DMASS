@@ -788,6 +788,8 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
 
         return des[X_test_ind][GetCMASS_mask], des[X_test_ind][GetLOWZ_mask], des[GetCMASS_mask_total], des[GetLOWZ_mask_total]
 
+
+
         # Histogram and EXD comparison  ---------------------------------------------
         """
         XX = X_pred_cmass.copy()
@@ -869,6 +871,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
         fig.savefig('hist_ci.png')
         """
 
+        """
         #bin_i = np.linspace(19.0, 20.0, 311)
         #bin_i, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 501, retstep=True) # cmodel i
         fig2, ax2 = plt.subplots(2,5, figsize=(25, 10))
@@ -979,7 +982,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
         #ax2.plot( X_pred_cmass_total[:,1], X_pred_cmass_total[:,3] - X_pred_cmass_total[:,2]/8.0, 'g.', alpha = 0.3)
          #ax.plot( X[cmass_mask][:,2], X[cmass_mask][:,3], 'r.', alpha = 0.3)
          #ax2.plot( X[cmass_mask][:,1], X[cmass_mask][:,3] - X[cmass_mask][:,2]/8.0, 'r.', alpha = 0.3)
-       
+        """
         return des[X_test_ind][GetCMASS_mask], des[X_test_ind][GetLOWZ_mask], des[GetCMASS_mask_total], des[GetLOWZ_mask_total]
 
 
@@ -1040,7 +1043,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
 
 
         # Balrog histogram test -----------------------------------------
-        
+        """
         X = X_pred_cmass_balrog.copy()
         bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 301, retstep=True) # cmodel r
         bin1, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 301, retstep=True) # cmodel i
@@ -1077,7 +1080,7 @@ def XDGMM_model(des, cmass, lowz, p_threshold = 0.5, balrog = None, matchSDSS = 
         ax.legend()
         ax2.legend()
         ax3.legend()
-
+        """
 
         
     	print 'balrog dmass/dlowz', np.sum(GetCMASS_mask_balrog), np.sum(GetLOWZ_mask_balrog)
@@ -1117,20 +1120,11 @@ def main():
     balrogname = list( balrog.dtype.names)
     balrogname[0], balrogname[1] = 'RA', 'DEC' 
     balrog.dtype.names = tuple(balrogname)
-    
     balrog = AddingReddening(balrog)
 
-    y1a1 = io.getDESY1A1catalogs(keyword = 'Y1A1', size = 1000)
-    des_y1a1 = Cuts.doBasicCuts(y1a1)
+    #y1a1 = io.getDESY1A1catalogs(keyword = 'Y1A1', size = 1000)
+    #des_y1a1 = Cuts.doBasicCuts(y1a1)
 
-    # adding reddening correction column to balrog
-
-
-    #des_data_im3 = io.getDEScatalogs(file = '/n/des/huff.791/Projects/CMASS/Data/im3shape_s82_for_xcorr.fits', bigSample = True)
-    #des_im3 = Cuts.SpatialCuts(des_data_im3, ra = ra, ra2=ra2, dec= dec, dec2= dec2  )
-    #des =  im3shape.im3shape_galprof_mask(des_data_im3, des_data_f)
-    # des = im3shape.im3shape_photoz( des_im3, des )
-    
 
     """
     h = esutil.htm.HTM(10)
@@ -1148,11 +1142,32 @@ def main():
 
 
     # extreme deconv classifier
-    DMASS,  LOWZ, DMASSALL, LOWZALL = XDGMM_model(des, clean_cmass_data, clean_lowz_data ) #, matchSDSS = sdss )
+    DMASS,  LOWZ, DMASSALL, LOWZALL = XDGMM_model(des, clean_cmass_data, clean_lowz_data )
     Balrog_DMASS, Balrog_LOWZ = XDGMM_model(des, clean_cmass_data, clean_lowz_data, balrog = balrog)
-
     DMASS_y1a1, LOWZ_y1a1 = XDGMM_model(des, clean_cmass_data, clean_lowz_data, balrog = des_y1a1)
     # balrog, des histogram comparison
+    
+    
+    stop
+    # -------------------------------------
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
 
 
