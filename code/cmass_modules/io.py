@@ -11,15 +11,32 @@ from fitsio import FITS, FITSHDR
 
 
 
-def getDEScatalogs( file = '/n/des/huff.791/Projects/CMASS/Data/DES_Y1_S82.fits', bigSample = False):
-
-
+def getDEScatalogs( file = '/n/des/huff.791/Projects/CMASS/Data/DES_Y1_S82.fits', size = 50000, bigSample = False):
 
 
     if bigSample is True:
-        
-        data = fitsio.read(file)
+	filepath = '/n/des/lee.5922/data/'
 
+	des_files = [filepath+'des_st82_310_330_000001.fits',
+			filepath+'des_st82_310_330_000002.fits',
+			filepath+'des_st82_310_330_000003.fits',
+			filepath+'des_st82_310_330_000004.fits',
+			filepath+'des_st82_310_330_000005.fits',
+			filepath+'des_st82_310_330_000006.fits',
+			filepath+'des_st82_330_335_000001.fits',
+			filepath+'des_st82_330_335_000002.fits',
+			filepath+'des_st82_335_340_000001.fits',
+			filepath+'des_st82_335_340_000002.fits',
+			filepath+'des_st82_340_350_000001.fits',
+			filepath+'des_st82_340_350_000002.fits',
+			filepath+'des_st82_340_350_000003.fits',
+			filepath+'des_st82_340_350_000004.fits',
+			filepath+'des_st82_350_360_000001.fits',
+			filepath+'des_st82_350_360_000002.fits',
+			filepath+'des_st82_350_360_000003.fits',
+			filepath+'des_st82_350_360_000004.fits']
+            
+    
         """
         if file is False :
             
@@ -33,18 +50,18 @@ def getDEScatalogs( file = '/n/des/huff.791/Projects/CMASS/Data/DES_Y1_S82.fits'
         
         else:
         """
-
+	data = esutil.io.read(des_files,combine=True)
         #data = fitsio.read(filename, rows=[0,10], ext=2)
         #data,thing = esutil.io.read_header(cfile,ext=1,rows=rows)
-        #file = '/n/des/huff.791/Projects/combined_i.fits'
 
     else:
-    
-        sample = np.arange(1743613)
-        rows = np.random.choice( sample, size=500000 , replace = False)
+        #if rows is not None:
+        
+        sample = np.arange(139142161)
+        rows = np.random.choice( sample, size=size , replace = False)
         #rows = np.arange(500000)
         data = fitsio.read(file, rows=rows)
-        data = fitsio.read(file)
+        #data = fitsio.read(file)
     
     data.dtype.names = tuple([ data.dtype.names[i].upper() for i in range(len(data.dtype.names))])
     #data.sort(order = 'COADD_OBJECTS_ID')
@@ -74,6 +91,7 @@ def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_em
         #sdss_data = fitsio.read(file)
     
     else:
+    
         #file1 = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_emhuff.fit'
         #file1 = '/Users/SJ/Dropbox/repositories/CMASS/data/test_emhuff.fit'
         #file3 = '../data/sdss_clean_galaxy_350_360_m05_0.fits'
@@ -84,4 +102,61 @@ def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_em
     sdss_data.dtype.names = tuple([ sdss_data.dtype.names[i].upper() for i in range(len(sdss_data.dtype.names))])
     
     return sdss_data
+
+
+def getDESY1A1catalogs(keyword = 'Y1A1', size = None):
+    
+    import time
+    import os
+    
+    colortags = ['FLUX_MODEL', 'FLAGS', 'MAG_MODEL', 'MAG_DETMODEL', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'XCORR_SFD98', 'MAGERR_DETMODEL']
+    filters = ['G', 'R', 'I', 'Z']
+    colortags = [ colortag + '_'+filter for colortag in colortags for filter in filters ]
+
+    tags = ['RA', 'DEC', 'SPREAD_MODEL_I', 'SPREADERR_MODEL_I', 'MAG_AUTO_I','CLASS_STAR_I','MAG_PSF_I', 'MAGERR_MODEL_I', 'MAGERR_MODEL_R'] + colortags
+    
+    path = '/n/des/lee.5922/data/y1a1_coadd/'
+    tables = []
+    for i in os.listdir(path):
+        if os.path.isfile(os.path.join(path,i)) and keyword in i:
+            tables.append(path+i)
+            print i
+
+    rows = None
+    if size is not None:
+        sample = np.arange(152160)
+        rows = np.random.choice( sample, size=size , replace = False)
+
+    des_data = esutil.io.read( tables, combine=True, columns = tags, rows = rows)
+    
+    return des_data
+
+
+def LoadBalrog(user = 'JELENA', truth = None):
+
+    import time
+    import os
+
+    colortags = ['FLUX_MODEL', 'FLAGS', 'MAG_MODEL', 'MAG_DETMODEL', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6']
+    filters = ['G', 'R', 'I', 'Z']
+    colortags = [ colortag + '_'+filter for colortag in colortags for filter in filters ]
+
+    if truth is True:
+        kind = 'TRUTH'
+        tags = ['RA', 'DEC', 'ID', 'Z', ]
+
+    elif truth is None:
+        kind = 'SIM'
+        tags = ['ALPHAWIN_J2000_DET', 'DELTAWIN_J2000_DET', 'SPREAD_MODEL_I', 'SPREADERR_MODEL_I', 'MAG_AUTO_I','CLASS_STAR_I','MAG_PSF_I'] + colortags
+
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    tables = []
+    for i in os.listdir(path):
+        if os.path.isfile(os.path.join(path,i)) and user.upper() in i and kind in i:
+            print i
+            tables.append(path+i)
+
+    balrog_data = esutil.io.read( tables, combine=True, columns = tags)
+
+    return balrog_data
 
