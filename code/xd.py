@@ -16,10 +16,10 @@ def SDSS_cmass_criteria(sdss, prior=None):
     fib2mag = sdss['FIBER2MAG_I']
     
     if prior is True:
-        priorCut = ((cmodelmag_i > 16.0 ) &
+        priorCut = ((cmodelmag_i > 17.0 ) &
                     (cmodelmag_i < 22.0) &
                     ((modelmag_r - modelmag_i ) < 2.0 )&
-                    ((modelmag_g - modelmag_r ) < 3.0 )&
+                    ((modelmag_g - modelmag_r ) < 2.5 )&
                     (fib2mag < 25.0 ))  #&
 
     elif prior is None:
@@ -554,7 +554,7 @@ def AddingReddening(cat):
     return cat
 
 
-def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
+def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testSt82=None):
     
     
     import esutil
@@ -624,9 +624,9 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
     print 'train/test', len(X_train), len( X_test ) 
     # train sample XD convolution
   
-    """
+  
     @pickle_results("XD_train_all.pkl")
-    def compute_XD(n_clusters=30, n_iter=500, verbose=True):
+    def compute_XD(n_clusters=30, n_iter=50, verbose=True):
         clf= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
         
         sample = np.arange( len(X_train) )
@@ -635,32 +635,23 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
         rows_mask[rows] = 1
         
         clf.fit(X_train[rows_mask], Xcov_train[rows_mask])
-        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
         return clf
     
     clf = compute_XD()
-    X_all = clf.sample(500 * X.shape[0])
+    #X_all = clf.sample(500 * X.shape[0])
     
-    """
+    
     
     # cmass extreme deconvolution compute
     @pickle_results("XD_dmass_train_all.pkl")
     def compute_XD(n_clusters=30, n_iter=50, verbose=True):
         clf_cmass= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
         clf_cmass.fit(X_train[cmass_mask], Xcov_train[cmass_mask])
-        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
         return clf_cmass
-
     clf_cmass = compute_XD()
-    X_sample_cmass = clf_cmass.sample(100 * X.shape[0])
     
-    """
-    print "calculate loglikelihood gaussian"
-    logprob_a = clf_cmass.logprob_a( X[X_test_ind], Xcov[X_test_ind] )
-    sum_logprob_a = logsumexp(logprob_a, axis = 1)
-    """
+    
 
-    """
     @pickle_results("XD_dmass_no.pkl")
     def compute_XD(n_clusters=30, n_iter=500, verbose=True):
         clf_nocmass= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
@@ -671,35 +662,62 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
         rows_mask[rows] = 1
         
         clf_nocmass.fit(X_train[~cmass_mask][rows_mask], Xcov_train[~cmass_mask][rows_mask])
-        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
         return clf_nocmass
-    
     clf_nocmass = compute_XD()
-    X_sample_no = clf_nocmass.sample(500 * X.shape[0])
-    """
+    
+    
     
     @pickle_results("XD_lowz_train20.pkl")
     def compute_XD(n_clusters=20, n_iter=500, verbose=True):
         clf_lowz = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
         clf_lowz.fit(X_train[lowz_mask], Xcov_train[lowz_mask])
-        #clf.fit(X[cmass_mask], Xcov[cmass_mask])
         return clf_lowz
-
     clf_lowz = compute_XD()
-    X_sample_lowz = clf_lowz.sample(100 * X.shape[0])
+    
 
 
+
+    # logprob_a ------------------------------------------
+
+    print "calculate loglikelihood gaussian"
+    logprob_a = clf_cmass.logprob_a( X_test, Xcov_test )
+    cmass_logprob_a = logsumexp(logprob_a, axis = 1)
+    logprob_a = clf_lowz.logprob_a( X_test, Xcov_test )
+    lowz_logprob_a = logsumexp(logprob_a, axis = 1)
+    logprob_a = clf.logprob_a( X_test, Xcov_test)
+    all_logprob_a = logsumexp(logprob_a, axis = 1)
+    
+    numerator =  cmass_logprob_a * np.sum(y_train[:,0]) * 1.
+    denominator = all_logprob_a * len(X_train)
+
+    denominator_zero = denominator == 0
+    EachProb_CMASS = np.zeros( numerator.shape )
+    EachProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+    
+    numerator =  lowz_logprob_a * np.sum(y_train[:,1]) * 1.
+    denominator = all_logprob_a * len(X_train)
+
+    denominator_zero = denominator == 0
+    EachProb_LOWZ = np.zeros( numerator.shape )
+    EachProb_LOWZ[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+    
+    
+    # Histogram -----------------------------------------
+    """
+    print "calculate histogram number density"
+    X_sample_cmass = clf_cmass.sample(500 * X.shape[0])
+    X_sample_no = clf_nocmass.sample(500 * X.shape[0])
+    X_sample_lowz = clf_lowz.sample(500 * X.shape[0])
+    
     # 3d number density histogram
     bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 101, retstep=True) # cmodel r
     bin1, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 101, retstep=True) # cmodel i
-    bin2, step2 = np.linspace(X[:,2].min(), X[:,2].max(), 201, retstep=True) # gr
-    bin3, step3 = np.linspace(X[:,3].min(), X[:,3].max(), 201, retstep=True) # ri
+    bin2, step2 = np.linspace(X[:,2].min(), X[:,2].max(), 101, retstep=True) # gr
+    bin3, step3 = np.linspace(X[:,3].min(), X[:,3].max(), 101, retstep=True) # ri
     bin0 = np.append( bin0, bin0[-1]+step0)
     bin1 = np.append( bin1, bin1[-1]+step1)
     bin2 = np.append( bin2, bin2[-1]+step2)
     bin3 = np.append( bin3, bin3[-1]+step3)
-    
-    
     
     # cmass histogram model probability
     N_XDProb, edges = np.histogramdd(X_sample_cmass[:,1:4], bins = [bin1, bin2, bin3])
@@ -742,6 +760,9 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
     inds_LOWZ = np.vstack([inds0, inds2, inds3]).T
     inds_LOWZ = [ tuple(ind) for ind in inds_LOWZ ]
     EachProb_LOWZ = np.array([modelProb_LOWZ[ind] for ind in inds_LOWZ ])
+    """
+    # ---------------------------------------------------------
+
 
     # Getting galaxies higher than threshold
     GetCMASS_mask = EachProb_CMASS > p_threshold
@@ -754,25 +775,33 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
     #Test Histogram -------------------------------
     
     X = X_pred_cmass.copy()
+    
     N_DMASS, edges = np.histogramdd(X[:,1:4], bins = [bin1, bin2, bin3])
     N_DMASS1 = np.sum(np.sum(N_DMASS, axis = 1), axis = 1)
     N_DMASS2 = np.sum(np.sum(N_DMASS, axis = 0), axis = 1)
     N_DMASS3 = np.sum(np.sum(N_DMASS, axis = 0), axis = 0)
     
+    
     X = X_sample_cmass.copy()
+    Y = X_sample_no.copy()
     N_CMASS, edges = np.histogramdd(X[:,1:4], bins = [bin1, bin2, bin3])
+    N_noCMASS, edges = np.histogramdd(Y[:,1:4], bins = [bin1, bin2, bin3])
     N_CMASS1 = np.sum(np.sum(N_CMASS, axis = 1), axis = 1)
     N_CMASS2 = np.sum(np.sum(N_CMASS, axis = 0), axis = 1)
     N_CMASS3 = np.sum(np.sum(N_CMASS, axis = 0), axis = 0)
+    N_noCMASS1 = np.sum(np.sum(N_noCMASS, axis = 1), axis = 1)
+    N_noCMASS2 = np.sum(np.sum(N_noCMASS, axis = 0), axis = 1)
+    N_noCMASS3 = np.sum(np.sum(N_noCMASS, axis = 0), axis = 0)
     
     
     fig, (ax, ax2, ax3) = plt.subplots(1,3, figsize = (15, 5))
+    ax.plot( bin1[:-1], N_noCMASS1 * 1./np.sum(N_noCMASS1), 'b--', label = 'noCMASS cmodel i')
     ax.plot( bin1[:-1], N_DMASS1 * 1./np.sum(N_DMASS1), 'b.', label = 'DMASS cmodel i')
     ax.plot( bin1[:-1], N_CMASS1 * 1./np.sum(N_CMASS1), 'g.', label = 'CMASS cmodel i')
-    #ax2.plot( bin2[:-1], N_BMASS2 * 1./np.sum(N_BMASS2), 'r.', label = 'BMASS g-r')
+    ax2.plot( bin2[:-1], N_noCMASS2 * 1./np.sum(N_noCMASS2), 'b--', label = 'noCMASS g-r')
     ax2.plot( bin2[:-1], N_DMASS2 * 1./np.sum(N_DMASS2), 'b.', label = 'DMASS g-r')
     ax2.plot( bin2[:-1], N_CMASS2 * 1./np.sum(N_CMASS2), 'g.', label = 'CMASS g-r')
-    #ax3.plot( bin3[:-1], N_BMASS3 * 1./np.sum(N_BMASS3), 'r.', label = 'BMASS r-i')
+    ax3.plot( bin3[:-1], N_noCMASS3 * 1./np.sum(N_noCMASS3), 'b--', label = 'noCMASS r-i')
     ax3.plot( bin3[:-1], N_DMASS3 * 1./np.sum(N_DMASS3), 'b.', label = 'DMASS r-i')
     ax3.plot( bin3[:-1], N_CMASS3 * 1./np.sum(N_CMASS3), 'g.', label = 'CMASS r-i')
     ax.legend()
@@ -781,7 +810,7 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
     fig.savefig('AmassHistogram')
     
     
-    """
+    
     if testSt82 is True:
         y_test = np.zeros((len(test), 2), dtype = bool)
         m_des, m_sdss, d12 = h.match(test['RA'],test['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
@@ -806,90 +835,79 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.5, train = None, test = None):
         print 'com/purity(lowz)', completeness_lowz, purity_lowz
         print 'num of dmass, dlowz in test', np.sum(GetCMASS_mask), np.sum(GetLOWZ_mask)
         print 'comtaminat', contaminant_cmass, contaminant_lowz
+
+
+
+        # purity vs p_thresh check -----------------------------
+
+        p = np.linspace(0.0, 1.0, 100)
+        
+        coms = []
+        purs = []
+        coms2 = []
+        purs2 = []
+        
+        pps = []
+        for pp in p:
+            
+            # Getting galaxies higher than threshold
+            GetCMASS_mask = EachProb_CMASS > pp
+            X_pred_cmass = X_test[GetCMASS_mask]
+            X_cont_cmass = X_test[GetCMASS_mask * np.logical_not(y_test[:,0])]
+            GetLOWZ_mask = EachProb_LOWZ > pp
+            X_pred_lowz = X_test[GetLOWZ_mask]
+            X_cont_lowz = X_test[GetLOWZ_mask * np.logical_not(y_test[:,1])]
+            # completeness and purity
+            completeness_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(y_test[:,0])
+            purity_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(GetCMASS_mask)
+            contaminant_cmass = np.sum( GetCMASS_mask * np.logical_not(y_test[:,0]) )
+            
+            completeness_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(y_test[:,1])
+            purity_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(GetLOWZ_mask)
+            contaminant_lowz = np.sum( GetLOWZ_mask * np.logical_not(y_test[:,1]) )
+            
+            coms.append(completeness_cmass)
+            purs.append(purity_cmass)
+            coms2.append(completeness_lowz)
+            purs2.append(purity_lowz)
+            
+            pps.append(pp)
+            print pp, completeness_cmass, purity_cmass
+
+
+        fig, (ax, ax2) = plt.subplots(1,2, figsize=(14,7))
+        ax.plot( pps, coms, 'r.', label = 'completeness')
+        ax.plot( pps, purs, 'b.', label = 'purity')
+        ax.set_title('CMASS')
+        ax.set_xlabel('p_threshold')
+        ax2.plot( pps, coms2, 'r.', label = 'completeness')
+        ax2.plot( pps, purs2, 'b.', label = 'purity')
+        ax2.set_title('LOWZ')
+        ax2.set_xlabel('p_threshold')
+        ax.legend(loc = 'best')
+        ax.set_ylim(0.0, 1.1)
+        ax2.legend(loc = 'best')
+        ax2.set_ylim(0.0, 1.1)
+
+        fig.savefig('com_pur_check')
     
-    """
     return train[cmass_mask], train[lowz_mask], test[GetCMASS_mask], test[GetLOWZ_mask]
 
 
 
-
-    # completeness and purity
-    completeness_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(y_test[:,0])
-    purity_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(GetCMASS_mask)
-    contaminant_cmass = np.sum( GetCMASS_mask * np.logical_not(y_test[:,0]) )
-
-    completeness_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(y_test[:,1])
-    purity_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(GetLOWZ_mask)
-    contaminant_lowz = np.sum( GetLOWZ_mask * np.logical_not(y_test[:,1]) )
-
+def completeness_purity(testC, testL, des_train, des_test, clean_cmass_data, clean_lowz_data ):
+    commonC, _ = DES_to_SDSS.match( testC, clean_cmass_data )
+    commonL, _ = DES_to_SDSS.match( testL, clean_lowz_data )
+    trueC, _ = DES_to_SDSS.match( des_test, clean_cmass_data )
+    trueL, _ = DES_to_SDSS.match( des_test, clean_lowz_data )
+    
+    completeness_cmass = len(commonC) * 1./ len(trueC)
+    purity_cmass = len(commonC) * 1./ len(testC)
+    completeness_lowz = len(commonL) * 1./ len(trueL)
+    purity_lowz = len(commonL) * 1./ len(testL)
+    
     print 'com/purity(cmass)', completeness_cmass, purity_cmass
     print 'com/purity(lowz)', completeness_lowz, purity_lowz
-    print 'num of dmass, dlowz in test', np.sum(GetCMASS_mask), np.sum(GetLOWZ_mask) 
-    print 'comtaminat', contaminant_cmass, contaminant_lowz
-
-
-
-    # purity vs p_thresh check -----------------------------
-    
-    
-    """
-        
-    p = np.linspace(0.0, 1.0, 100)
-    
-    coms = []
-    purs = []
-    coms2 = []
-    purs2 = []
-    
-    pps = []
-    for pp in p:
-        
-        # Getting galaxies higher than threshold
-        GetCMASS_mask = EachProb_CMASS > pp
-        X_pred_cmass = X_test[GetCMASS_mask]
-        X_cont_cmass = X_test[GetCMASS_mask * np.logical_not(y_test[:,0])]
-        GetLOWZ_mask = EachProb_LOWZ > pp
-        X_pred_lowz = X_test[GetLOWZ_mask]
-        X_cont_lowz = X_test[GetLOWZ_mask * np.logical_not(y_test[:,1])]
-        # completeness and purity
-        completeness_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(y_test[:,0])
-        purity_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0/np.sum(GetCMASS_mask)
-        contaminant_cmass = np.sum( GetCMASS_mask * np.logical_not(y_test[:,0]) )
-        
-        completeness_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(y_test[:,1])
-        purity_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0/np.sum(GetLOWZ_mask)
-        contaminant_lowz = np.sum( GetLOWZ_mask * np.logical_not(y_test[:,1]) )
-        
-        coms.append(completeness_cmass)
-        purs.append(purity_cmass)
-        coms2.append(completeness_lowz)
-        purs2.append(purity_lowz)
-        
-        pps.append(pp)
-        print pp, completeness_cmass, purity_cmass
-
-
-    fig, (ax, ax2) = plt.subplots(1,2, figsize=(14,7))
-    ax.plot( pps, coms, 'r.', label = 'completeness')
-    ax.plot( pps, purs, 'b.', label = 'purity')
-    ax.set_title('CMASS')
-    ax.set_xlabel('p_threshold')
-    ax2.plot( pps, coms2, 'r.', label = 'completeness')
-    ax2.plot( pps, purs2, 'b.', label = 'purity')
-    ax2.set_title('LOWZ')
-    ax2.set_xlabel('p_threshold')
-    ax.legend(loc = 'best')
-    ax.set_ylim(0.0, 1.1)
-    ax2.legend(loc = 'best')
-    ax2.set_ylim(0.0, 1.1)
-
-    fig.savefig('com_pur_check')
-
-    
-    """
-    
-    
-
 
 
 def main():
@@ -941,23 +959,12 @@ def main():
     des_test = des[testInd]
     
     # putting sample in classifier
-    trainC, trainL, testC, testL = XDGMM_model(clean_cmass_data, clean_lowz_data, train=des_train, test=des_test )
+    trainC, trainL, testC, testL = XDGMM_model(clean_cmass_data, clean_lowz_data, train=des_train, test=des_test, testSt82=True )
     
     
     # completeness and purity
-    commonC, _ = DES_to_SDSS.match( testC, clean_cmass_data )
-    commonL, _ = DES_to_SDSS.match( testL, clean_lowz_data )
-    trueC, _ = DES_to_SDSS.match( des_test, clean_cmass_data )
-    trueL, _ = DES_to_SDSS.match( des_test, clean_lowz_data )
-    
-    completeness_cmass = len(commonC) * 1./ len(trueC)
-    purity_cmass = len(commonC) * 1./ len(testC)
-    completeness_lowz = len(commonL) * 1./ len(trueL)
-    purity_lowz = len(commonL) * 1./ len(testL)
-    
-    print 'com/purity(cmass)', completeness_cmass, purity_cmass
-    print 'com/purity(lowz)', completeness_lowz, purity_lowz
-    
+
+    completeness_purity(testC, testL, des_train, des_test, clean_cmass_data, clean_lowz_data )
     
 
     stop
