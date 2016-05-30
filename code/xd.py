@@ -25,7 +25,7 @@ def SDSS_cmass_criteria(sdss, prior=None):
                     (cmodelmag_i < 21.0) &
                     ((modelmag_r - modelmag_i ) < 2.0 )&
                     ((modelmag_g - modelmag_r ) < 2.5 )&
-                    (fib2mag < 25.0 ))  #&
+                    (fib2mag < 22.0 ))  #&
 
     elif prior is None:
         
@@ -83,10 +83,11 @@ def priorCut(data, sdss=None):
     cut = ((cmodelmag_i_des > 17) &
            (cmodelmag_i_des < 22.) &
            ((modelmag_r_des - modelmag_i_des ) < 1.5 ) &
-           ((modelmag_r_des - modelmag_i_des ) > 0.2 ) &
-           ((modelmag_g_des - modelmag_r_des ) > 0.2 ) &
-            ((modelmag_g_des - modelmag_r_des ) < 2.5 )
-           # (fib2mag_des < 25.5 )
+           ((modelmag_r_des - modelmag_i_des ) > 0.0 ) &
+           ((modelmag_g_des - modelmag_r_des ) > 0.0 ) &
+            ((modelmag_g_des - modelmag_r_des ) < 2.5 ) &
+           (fib2mag_des < 24.0 ) #&
+           #(data['MAG_APER_4_I'] < 24.0 )
              )
 
 
@@ -144,70 +145,6 @@ def im3shape_galprof_mask( im3shape, fulldes ):
     return data
 
 
-def mixing_color(des):
-    
-    # des
-    des_g = des['MAG_DETMODEL_G'] - des['XCORR_SFD98_G']
-    des_r = des['MAG_DETMODEL_R'] - des['XCORR_SFD98_R']
-    des_i = des['MAG_DETMODEL_I'] - des['XCORR_SFD98_I']
-    #des_z = des['MAG_DETMODEL_Z'] - des['XCORR_SFD98_Z']
-    des_ci = des['MAG_MODEL_I'] - des['XCORR_SFD98_I']
-    Y = np.vstack([des_ci, des_g, des_r, des_i]).T
-    Yerr = np.vstack([ des['MAGERR_MODEL_I'] , des['MAGERR_DETMODEL_G'], des['MAGERR_DETMODEL_R'],des['MAGERR_DETMODEL_I']]).T
-    
-
-    
-    # mixing matrix
-    W = np.array([[1, 0, 0, 0],    # i cmagnitude
-                  [0, 1, -1, 0],   # g-r
-                  [0, 0, 1, -1]])  # r-i
-    Y = np.dot(Y, W.T)
-    
-    return Y
-
-
-def mixing_color_sdss(sdss, iter = 0):
-    """
-    sdss_g = sdss['MODELMAG'][:,1] - sdss['EXTINCTION'][:,1]
-    sdss_r = sdss['MODELMAG'][:,2] - sdss['EXTINCTION'][:,2]
-    sdss_i = sdss['MODELMAG'][:,3] - sdss['EXTINCTION'][:,3]
-    sdss_ci = sdss['CMODELMAG'][:,3] - sdss['EXTINCTION'][:,3]
-    """
-    sdss_g = sdss['MODELMAG_G'] - sdss['EXTINCTION_G']
-    sdss_r = sdss['MODELMAG_R'] - sdss['EXTINCTION_R']
-    sdss_i = sdss['MODELMAG_I'] - sdss['EXTINCTION_I']
-    sdss_ci = sdss['CMODELMAG_I'] - sdss['EXTINCTION_I']
-
-
-    X = np.vstack([sdss_ci, sdss_g, sdss_r, sdss_i]).T
-    W = np.array([[1, 0, 0, 0],    # i cmagnitude
-                  [0, 1, -1, 0],   # g-r
-                  [0, 0, 1, -1]])  # r-i
-
-    X = np.dot(X, W.T)
-    #Xerr = np.vstack([ sdss['CMODELMAGERR'][:,3] , sdss['MODELMAGERR'][:,1], sdss['MODELMAGERR'][:,2],sdss['MODELMAGERR'][:,3]]).T
-    Xerr = np.vstack([ sdss['CMODELMAGERR_I'] , sdss['MODELMAGERR_G'], sdss['MODELMAGERR_R'],sdss['MODELMAGERR_I']]).T
-    
-    
-    Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
-    Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
-    
-    # each covariance C = WCW^T
-    # best way to do this is with a tensor dot-product
-    Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
-    
-    @pickle_results('XD_cmass{}.pkl'.format(iter))
-    def compute_XD(n_clusters=12, rseed=0, n_iter=100, verbose=False):
-        np.random.seed(rseed)
-        clf = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        clf.fit(X, Xcov)
-        return clf
-    
-    clfX = compute_XD()
-    X = clfX.sample(X.shape[0])
-    
-    return X
-
 
 def spatialcheck(data, convert = None):
     
@@ -229,222 +166,9 @@ def spatialcheck(data, convert = None):
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
     fig.savefig('spatialtest')
-    #print 'figsave : ../figure/spatialtest.png'
+    print 'figsave : spatialtest.png'
 
 
-
-def MachineLearningClassifier( cmass, non, k_neighbors_max = 10 ):
-
-    # Author: Jake VanderPlas
-    # License: BSD
-    #   The figure produced by this code is published in the textbook
-    #   "Statistics, Data Mining, and Machine Learning in Astronomy" (2013)
-    #   For more information, see http://astroML.github.com
-    #   To report a bug or issue, use the following forum:
-    #    https://groups.google.com/forum/#!forum/astroml-general
-    
-
-    from astroML.utils import split_samples
-
-    from sklearn.metrics import roc_curve
-    from sklearn.naive_bayes import GaussianNB
-    from sklearn.lda import LDA
-    from sklearn.qda import QDA
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.tree import DecisionTreeClassifier
-    from astroML.classification import GMMBayes
-    from astroML.utils import completeness_contamination
-
-    #----------------------------------------------------------------------
-    # This function adjusts matplotlib settings for a uniform feel in the textbook.
-    # Note that with usetex=True, fonts are rendered with LaTeX.  This may
-    # result in an error if LaTeX is not installed on your system.  In that case,
-    # you can set usetex to False.
-    #from astroML.plotting import setup_text_plots
-    #setup_text_plots(fontsize=8, usetex=True)
-
-
-    #cmass = cmass[::10]
-    #non = non[::10]
-
-
-    # stack colors into matrix X
-    
-    Ncmass = len(cmass)
-    Nnon = len(non)
-    X = np.empty((Ncmass + Nnon, 3), dtype=float)
-
-    X[:Ncmass, 0] = cmass['MAG_DETMODEL_G'] - cmass['MAG_DETMODEL_R']
-    X[:Ncmass, 1] = cmass['MAG_DETMODEL_R'] - cmass['MAG_DETMODEL_I']
-    X[:Ncmass, 2] = cmass['MAG_MODEL_I'] #/np.max(cmass['MAG_MODEL_I'])
-    
-    X[Ncmass:, 0] = non['MAG_DETMODEL_G'] - non['MAG_DETMODEL_R']
-    X[Ncmass:, 1] = non['MAG_DETMODEL_R'] - non['MAG_DETMODEL_I']
-    X[Ncmass:, 2] = non['MAG_MODEL_I'] #/np.max(cmass['MAG_MODEL_I'])
-
-    y = np.zeros(Ncmass + Nnon, dtype=int)
-    y[:Ncmass] = 1
-
-    # split into training and test sets
-    (X_train, X_test), (y_train, y_test) = split_samples(X, y, [0.5, 0.5],
-                                                         random_state=0)
-    
-    #------------------------------------------------------------
-    # Compute fits for all the classifiers
-    def compute_results(*args):
-        names = []
-        probs = []
-        predictions=[]
-        
-        for classifier, kwargs in args:
-            print classifier.__name__
-            model = classifier(**kwargs)
-            model.fit(X_train, y_train)
-            y_prob = model.predict_proba(X_test)
-            y_pred = model.predict(X_test)
-            names.append(classifier.__name__)
-            probs.append(y_prob[:, 1])
-            predictions.append(y_pred)
-        
-        return names, probs, predictions
-
-    LRclass_weight = dict([(i, np.sum(y_train == i)) for i in (0, 1)])
-    
-    names, probs, predictions = compute_results((GaussianNB, {}),
-                                   (LDA, {}),
-                                   (QDA, {}),
-                                   (LogisticRegression,
-                                    dict(class_weight=LRclass_weight)),
-                                   (KNeighborsClassifier,
-                                    dict(n_neighbors=10)),
-                                   (DecisionTreeClassifier,
-                                    dict(random_state=0, max_depth=12,
-                                         criterion='entropy')))
-#,
-#                                   (GMMBayes, dict(n_components=3, min_covar=1E-5,
-#                                                   covariance_type='full')))
-#
-    
-
-  
-
-    #------------------------------------------------------------
-    # Plot results
-    fig = plt.figure(figsize=(5, 2.5))
-    fig.subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.25)
-
-    # First axis shows the data
-    ax1 = fig.add_subplot(121)
-    im = ax1.scatter(X_test[:, 0], X_test[:, 1], c=y_test, s=4,
-                     linewidths=0, edgecolors='none',
-                     cmap=plt.cm.binary)
-    im.set_clim(-0.5, 1)
-    ax1.set_xlim(-0.5, 3.0)
-    ax1.set_ylim(-0.3, 1.4)
-    ax1.set_xlabel('g - r')
-    ax1.set_ylabel('r - i')
-
-    labels = dict(GaussianNB='GNB',
-              LinearDiscriminantAnalysis='LDA',
-              QuadraticDiscriminantAnalysis='QDA',
-              KNeighborsClassifier='KNN',
-              DecisionTreeClassifier='DT',
-              GMMBayes='GMMB',
-              LogisticRegression='LR')
-
-
-    # Second axis shows the ROC curves
-    ax2 = fig.add_subplot(122)
-    for name, y_prob in zip(names, probs):
-        fpr, tpr, thresholds = roc_curve(y_test, y_prob)
-        
-        fpr = np.concatenate([[0], fpr])
-        tpr = np.concatenate([[0], tpr])
-        
-        ax2.plot(fpr, tpr, label=labels[name])
-
-
-    ax2.legend(loc=4)
-    ax2.set_xlabel('false positive rate')
-    ax2.set_ylabel('true positive rate')
-    ax2.set_xlim(0, 0.15)
-    ax2.set_ylim(0.6, 1.01)
-    ax2.xaxis.set_major_locator(plt.MaxNLocator(5))
-
-
-    """
-    y_pred = predictions[4]
-    fig, ax3 = plt.subplots()
-    im = ax3.scatter(X_test[:, 0], X_test[:, 1], c=y_pred, s=4,
-                     linewidths=0, edgecolors='none',
-                     cmap=plt.cm.binary)
-    im.set_clim(-0.5, 1)
-    ax3.set_xlim(-0.5, 3.0)
-    ax3.set_ylim(-0.3, 1.4)
-    ax3.set_xlabel('g - r')
-    ax3.set_ylabel('r - i')
-    from astroML.utils import completeness_contamination
-    completeness, contamination = completeness_contamination(y_pred, y_test)
-    ax3.set_title('completeness : {}'.format( completeness) )
-
-    """
-
-    plt.show()
-
-    
-
-
-    def compute_kNN( k_neighbors_max = k_neighbors_max ):
-        classifiers = []
-        predictions = []
-        kvals = np.arange(1,k_neighbors_max)
-        purity = []
-
-        for k in kvals:
-            classifiers.append([])
-            predictions.append([])
-        
-            clf = KNeighborsClassifier(n_neighbors=k)
-            clf.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
-            pur = np.sum(y_pred * y_test) *1./np.sum(y_pred)
-            purity.append(pur)
-            classifiers[-1].append(clf)
-            predictions[-1].append(y_pred)
-
-        completeness, contamination = completeness_contamination(predictions, y_test)
-        print '\ncompleteness:', np.array(completeness).ravel()
-        #print 'contamination:', np.array(contamination).ravel()
-        print 'purity:', np.array(purity).ravel()
-        return np.array(completeness).ravel(), np.array(purity).ravel()
-
-    def compute_GMMB():
-       
-        classifiers = []
-        predictions = []
-        Ncomp = np.arange(1,10,2)
-        purity = []
-
-        for nc in Ncomp:
-            classifiers.append([])
-            predictions.append([])
-            clf = GMMBayes(nc, min_covar=1E-5, covariance_type='full')
-            clf.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
-            pur = np.sum(y_pred * y_test) *1./np.sum(y_pred)
-            purity.append(pur)
-            classifiers[-1].append(clf)
-            predictions[-1].append(y_pred)
-
-        completeness, contamination = completeness_contamination(predictions, y_test)
-        print '\ncompleteness:', np.array(completeness).ravel()
-        print 'purity:', np.array(purity).ravel()
-        return np.array(completeness).ravel(), np.array(purity).ravel()
-
-    #completeness, purity = compute_kNN(k_neighbors_max = k_neighbors_max)
-    completeness, purity = compute_GMMB()
-    return  completeness, purity
 
 
 def check_random_state(seed):
@@ -559,6 +283,158 @@ def AddingReddening(cat):
     return cat
 
 
+
+def mixing_color(data):
+    
+    des_g = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
+    des_r = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
+    des_i = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
+    des_z = data['MAG_DETMODEL_Z'] - data['XCORR_SFD98_Z']
+    des_ci = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
+    des_cr = data['MAG_MODEL_R'] - data['XCORR_SFD98_R']
+    flux_g = data['FLUX_MODEL_G']
+    flux_r = data['FLUX_MODEL_R']
+    flux_i = data['FLUX_MODEL_I']
+    flux_z = data['FLUX_MODEL_Z']
+    
+    #X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z]).T
+    X = np.vstack([des_ci, des_g, des_r, des_i]).T
+    Xerr = np.vstack([#data['MAGERR_MODEL_R'] ,
+                      data['MAGERR_MODEL_I'],
+                      data['MAGERR_DETMODEL_G'],
+                      data['MAGERR_DETMODEL_R'],
+                      data['MAGERR_DETMODEL_I'],
+                      #data['MAGERR_DETMODEL_Z']
+                      ]).T
+
+    # mixing matrix
+    
+    W = np.array([[1, 0, 0, 0 ],    # i cmag
+                  [0, 1, -1, 0],   # g-r
+                  [0, 0, 1, -1]])  # r-i
+
+    """
+    
+    # mixing matrix
+    W = np.array([[1, 0, 0, 0, 0, 0],    # r cmag
+                [0, 1, 0, 0, 0, 0],    # i cmag
+                [0, 0, 1, -1, 0, 0],   # g-r
+                [0, 0, 0, 1, -1, 0],   # r-i
+                [0, 0, 0, 0, 1, -1]])  # i-z
+                
+    """
+    
+    X = np.dot(X, W.T)
+    Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
+    Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
+    Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
+    
+    return X, Xcov
+
+
+
+
+def MachineLearningClassifier( cmass, lowz,  train = None, test = None):
+    
+    from sklearn.neighbors import KNeighborsClassifier
+    from astroML.classification import GMMBayes
+    import esutil
+
+    train, _ = priorCut(train)
+    test, _ = priorCut(test)
+    
+    # making cmass and lowz mask
+    h = esutil.htm.HTM(10)
+    matchDist = 1/3600. # match distance (degrees) -- default to 1 arcsec
+    m_des, m_sdss, d12 = h.match(train['RA'],train['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
+    true_cmass = np.zeros( train.size, dtype = int)
+    true_cmass[m_des] = 1
+    cmass_mask = true_cmass == 1
+    
+    m_des, m_sdss, d12 = h.match(test['RA'],test['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
+    true_cmass = np.zeros( test.size, dtype = int)
+    true_cmass[m_des] = 1
+    cmass_mask_test = true_cmass == 1
+    
+    print 'num of cmass/lowz', np.sum(cmass_mask)
+    
+    
+    data = np.hstack(( train, test ))
+    
+    # stack DES data
+    X, Xcov = align_catalogs_for_xdc(data)
+        
+    X_train = X[ :len(train), :]
+    X_test = X[-len(test):, :]
+    
+    y_train = np.zeros( train.size, dtype=int)
+    y_train[cmass_mask] = 1
+    y_test = np.zeros( test.size, dtype=int)
+    y_test[cmass_mask_test] = 1
+
+
+    def compute_kNN( k_neighbors_max = 10 ):
+        classifiers = []
+        predictions = []
+        kvals = np.arange(1,k_neighbors_max)
+        
+        print 'kNN'
+        
+        for k in kvals:
+            classifiers.append([])
+            predictions.append([])
+            
+            clf = KNeighborsClassifier(n_neighbors=k)
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            pur = np.sum(y_pred * y_test) *1./np.sum(y_pred)
+            com = np.sum(y_pred * y_test) *1./np.sum(y_test)
+            print 'n_neighbor, com/pur', k, com, pur
+            classifiers[-1].append(clf)
+            predictions[-1].append(y_pred)
+        
+        return classifiers, prediction
+    def compute_GMMB():
+        
+        print 'GMMB'
+        classifiers = []
+        predictions = []
+        Ncomp = np.arange(1,20,2)
+
+        for nc in Ncomp:
+            classifiers.append([])
+            predictions.append([])
+            clf = GMMBayes(nc, min_covar=1E-5, covariance_type='full')
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            pur = np.sum(y_pred * y_test) *1./np.sum(y_pred)
+            com = np.sum(y_pred * y_test) *1./np.sum(y_test)
+            print 'Ncomp, com/pur', nc, com, pur
+            classifiers[-1].append(clf)
+            predictions[-1].append(y_pred)
+        
+        return classifiers, predictions
+
+    #_, predictions_kNN = compute_kNN(k_neighbors_max = 10)
+    #_, predictions_GMMB = compute_GMMB()
+
+
+    clf_kNN = KNeighborsClassifier(n_neighbors= 7)
+    clf_kNN.fit(X_train, y_train)
+    y_pred_kNN = clf_kNN.predict(X_test)
+    
+    print 'kNN  pur/com', np.sum(y_pred_kNN * y_test) *1./np.sum(y_pred_kNN), np.sum(y_pred_kNN * y_test) *1./np.sum(y_test)
+
+    clf_GMMB = GMMBayes(11, min_covar=1E-5, covariance_type='full')
+    clf_GMMB.fit(X_train, y_train)
+    y_pred_GMMB = clf_GMMB.predict(X_test)
+
+    print 'GMMB pur/com', np.sum(y_pred_GMMB * y_test) *1./np.sum(y_pred_GMMB), np.sum(y_pred_GMMB * y_test) *1./np.sum(y_test)
+
+    return test[y_pred_kNN == 1], test[y_pred_GMMB == 1]
+
+
+
 def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testSt82=None):
     """
     cmass = clean_cmass_data.copy()
@@ -569,14 +445,10 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     import esutil
     train, _ = priorCut(train)
     test, _ = priorCut(test)
-
-    pdb.set_trace()
     
     # making cmass and lowz mask
-    
-
     h = esutil.htm.HTM(10)
-    matchDist = 2/3600. # match distance (degrees) -- default to 1 arcsec
+    matchDist = 1/3600. # match distance (degrees) -- default to 1 arcsec
     m_des, m_sdss, d12 = h.match(train['RA'],train['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
     true_cmass = np.zeros( train.size, dtype = int)
     true_cmass[m_des] = 1
@@ -587,120 +459,57 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     true_lowz[m_des] = 1
     lowz_mask = true_lowz == 1
     
-    
-    
     print 'num of cmass/lowz', np.sum(cmass_mask), np.sum(lowz_mask)
 
 
     data = np.hstack(( train, test ))
+    
     # stack DES data
-    des_g = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
-    des_r = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
-    des_i = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
-    des_z = data['MAG_DETMODEL_Z'] - data['XCORR_SFD98_Z']
-    des_ci = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
-    des_cr = data['MAG_MODEL_R'] - data['XCORR_SFD98_R']
-
-
-    X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z]).T
-    Xerr = np.vstack([ data['MAGERR_MODEL_R'] , data['MAGERR_MODEL_I'], data['MAGERR_DETMODEL_G'], data['MAGERR_DETMODEL_R'],data['MAGERR_DETMODEL_I'],data['MAGERR_DETMODEL_Z']]).T
-
+    X, Xcov = mixing_color(data)
     
-    # mixing matrix
-    W = np.array([[1, 0, 0, 0, 0, 0],    # r cmag
-                  [0, 1, 0, 0, 0, 0],    # i cmag
-                  [0, 0, 1, -1, 0, 0],   # g-r
-                  [0, 0, 0, 1, -1, 0],   # r-i
-                  [0, 0, 0, 0, 1, -1]])  # i-z
-
-    X = np.dot(X, W.T)
-    Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
-    Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
-    
-    # each covariance C = WCW^T
-    # best way to do this is with a tensor dot-product
-    Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
-
     y_train = np.zeros(( train.size, 2 ), dtype=int)
-    # ycov = np.zeros(sdss.size, dtype=int)
     y_train[:,0][cmass_mask] = 1
     y_train[:,1][lowz_mask] = 1
 
-    # mask for train/test sample
-    #(trainInd, testInd), (_, _) = split_samples(X, X, [0.9,0.1], random_state=0)
     X_train = X[ :len(train), :]
     X_test = X[-len(test):, :]
     Xcov_train = Xcov[ :len(train), :]
     Xcov_test = Xcov[-len(test):, :]
 
-    print 'train/test', len(X_train), len( X_test ) 
+    print 'train/test', len(X_train), len( X_test )
+    
+    
+    
+    
     # train sample XD convolution
   
-    """
-    @pickle_results("XD_train_all_cluster10.pkl")
-    def compute_XD(n_clusters=10, n_iter=500, verbose=True):
-        clf= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        
-        sample = np.arange( len(X_train) )
-        rows = np.random.choice( sample, size= 20 * len(X_train[cmass_mask]), replace = False)
-        rows_mask = np.zeros( len(X_train), dtype=bool)
-        rows_mask[rows] = 1
-        
-        clf.fit(X_train[rows_mask], Xcov_train[rows_mask])
+    def XDDFitting( X_train, Xcov_train, filename = None, n_cluster = 10 ):
+        clf = None
+        @pickle_results(filename, verbose = True)
+        def compute_XD(n_clusters=10, n_iter=500, verbose=True):
+            clf= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
+            clf.fit(X_train, Xcov_train)
+            return clf
+        clf = compute_XD()
         return clf
-    
-    clf = compute_XD()
-    #X_all = clf.sample(500 * X.shape[0])
-    """
-    
-    # cmass extreme deconvolution compute
-    @pickle_results("XD_dmass_cluster10.pkl")
-    def compute_XD(n_clusters=10, n_iter=500, verbose=True):
-        clf_cmass= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        clf_cmass.fit(X_train[cmass_mask], Xcov_train[cmass_mask])
-        return clf_cmass
-    clf_cmass = compute_XD()
-    
-    
-    @pickle_results("XD_dmass_no_cluster20.pkl")
-    def compute_XD(n_clusters=20, n_iter=200, verbose=True):
-        clf_nocmass= XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        
-        sample = np.arange( len(X_train[~cmass_mask]) )
-        rows = np.random.choice( sample, size= len(X_train[cmass_mask]) * 10, replace = False)
-        rows_mask = np.zeros( len(X_train[~cmass_mask]), dtype=bool)
-        rows_mask[rows] = 1
-        
-        clf_nocmass.fit(X_train[~cmass_mask][rows_mask], Xcov_train[~cmass_mask][rows_mask])
-        return clf_nocmass
-    clf_nocmass = compute_XD()
-    
-    """
-    
-    @pickle_results("XD_lowz_train20.pkl")
-    def compute_XD(n_clusters=10, n_iter=200, verbose=True):
-        clf_lowz = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        clf_lowz.fit(X_train[lowz_mask], Xcov_train[lowz_mask])
-        return clf_lowz
-    clf_lowz = compute_XD()
-    
-    
-    @pickle_results("XD_lowz_no_cluster10.pkl")
-    def compute_XD(n_clusters=10, n_iter=10, verbose=True):
-        clf_nolowz = XDGMM(n_clusters, n_iter=n_iter, tol=1E-5, verbose=verbose)
-        
-        sample = np.arange( len(X_train[~lowz_mask]) )
-        rows = np.random.choice( sample, size= len(X_train[lowz_mask]) * 20, replace = False)
-        rows_mask = np.zeros( len(X_train[~lowz_mask]), dtype=bool)
-        rows_mask[rows] = 1
-        
-        clf_nolowz.fit(X_train[~lowz_mask][rows_mask], Xcov_train[~lowz_mask][rows_mask])
-        return clf_nolowz
-    clf_nolowz = compute_XD()
-    
-    """
 
-    pdb.set_trace()
+    sample = np.arange( len(X_train) )
+    rows = np.random.choice( sample, size= 20 * len(X_train[cmass_mask]), replace = False)
+    rows_mask = np.zeros( len(X_train), dtype=bool)
+    rows_mask[rows] = 1
+
+    clf = XDDFitting( X_train[rows_mask], Xcov_train[rows_mask], filename= 'XD_train_all_cluster10_3d.pkl', n_cluster=10)
+    clf_cmass = XDDFitting( X_train[cmass_mask], Xcov_train[cmass_mask], filename= 'XD_dmass_cluster20_3d.pkl', n_cluster=20)
+
+    sample = np.arange( len(X_train[~cmass_mask]) )
+    rows = np.random.choice( sample, size= len(X_train[cmass_mask]) * 10, replace = False)
+    rows_mask = np.zeros( len(X_train[~cmass_mask]), dtype=bool)
+    rows_mask[rows] = 1
+
+    clf_nocmass = XDDFitting( X_train[~cmass_mask][rows_mask], Xcov_train[~cmass_mask][rows_mask], filename= 'XD_dmass_no_cluster20_3d.pkl', n_cluster=20)
+
+
+    #clf_lowz = XDDFitting( X_train[lowz_mask], Xcov_train[lowz_mask], filename= 'XD_lowz_cluster20_3d.pkl', n_cluster=20)
 
 
     # logprob_a ------------------------------------------
@@ -708,16 +517,16 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     print "calculate loglikelihood gaussian"
     logprob_a = clf_cmass.logprob_a( X_test, Xcov_test )
     cmass_logprob_a = logsumexp(logprob_a, axis = 1)
-    logprob_a = clf_nocmass.logprob_a( X_test, Xcov_test )
-    nocmass_logprob_a = logsumexp(logprob_a, axis = 1)
+    #logprob_a = clf_nocmass.logprob_a( X_test, Xcov_test )
+    #nocmass_logprob_a = logsumexp(logprob_a, axis = 1)
     #logprob_a = clf_lowz.logprob_a( X_test, Xcov_test )
     #lowz_logprob_a = logsumexp(logprob_a, axis = 1)
-    #logprob_a = clf.logprob_a( X_test, Xcov_test)
-    #all_logprob_a = logsumexp(logprob_a, axis = 1)
+    logprob_a = clf.logprob_a( X_test, Xcov_test)
+    all_logprob_a = logsumexp(logprob_a, axis = 1)
     
     numerator =  np.exp(cmass_logprob_a) * np.sum(y_train[:,0]) * 1.
-    #denominator = np.exp(all_logprob_a) * len(X_train)
-    denominator = numerator + np.exp(nocmass_logprob_a) * (len(X_train) - np.sum(y_train[:,0]))
+    denominator = np.exp(all_logprob_a) * len(X_train)
+    #denominator = numerator + np.exp(nocmass_logprob_a) * (len(X_train) - np.sum(y_train[:,0]))
 
     denominator_zero = denominator == 0
     EachProb_CMASS = np.zeros( numerator.shape )
@@ -795,7 +604,7 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     EachProb_LOWZ = np.array([modelProb_LOWZ[ind] for ind in inds_LOWZ ])
     """
     # ---------------------------------------------------------
-    pdb.set_trace()
+
 
     # Getting galaxies higher than threshold
     GetCMASS_mask = EachProb_CMASS > p_threshold
@@ -824,22 +633,27 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     
     # 1d histogram
     
-    bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 101, retstep=True) # cmodel r
-    bin1, step1 = np.linspace(X[:,1].min(), X[:,1].max(), 101, retstep=True) # cmodel i
-    bin2, step2 = np.linspace(X[:,2].min(), X[:,2].max(), 101, retstep=True) # gr
-    bin3, step3 = np.linspace(X[:,3].min(), X[:,3].max(), 101, retstep=True) # ri
-    bin0 = np.append( bin0, bin0[-1]+step0)
+    #bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 101, retstep=True) # cmodel r
+    bin1, step1 = np.linspace(X[:,0].min(), X[:,0].max(), 101, retstep=True) # cmodel i
+    bin2, step2 = np.linspace(X[:,1].min(), X[:,1].max(), 101, retstep=True) # gr
+    bin3, step3 = np.linspace(X[:,2].min(), X[:,2].max(), 101, retstep=True) # ri
+    #bin0 = np.append( bin0, bin0[-1]+step0)
     bin1 = np.append( bin1, bin1[-1]+step1)
     bin2 = np.append( bin2, bin2[-1]+step2)
     bin3 = np.append( bin3, bin3[-1]+step3)
     
-    N_DMASS, edges = np.histogramdd(X_pred_cmass[:,1:4], bins = [bin1, bin2, bin3])
+    
+    """
+    #N_DMASS, edges = np.histogramdd(X_pred_cmass[:,1:4], bins = [bin1, bin2, bin3])
+    N_DMASS, edges = np.histogramdd(X_pred_cmass, bins = [bin1, bin2, bin3])
     N_DMASS1 = np.sum(np.sum(N_DMASS, axis = 1), axis = 1)
     N_DMASS2 = np.sum(np.sum(N_DMASS, axis = 0), axis = 1)
     N_DMASS3 = np.sum(np.sum(N_DMASS, axis = 0), axis = 0)
     
-    N_CMASS, edges = np.histogramdd(X_sample_cmass[:,1:4], bins = [bin1, bin2, bin3])
-    N_noCMASS, edges = np.histogramdd(X_sample_no[:,1:4], bins = [bin1, bin2, bin3])
+    #N_CMASS, edges = np.histogramdd(X_sample_cmass[:,1:4], bins = [bin1, bin2, bin3])
+    #N_noCMASS, edges = np.histogramdd(X_sample_no[:,1:4], bins = [bin1, bin2, bin3])
+    N_CMASS, edges = np.histogramdd(X_sample_cmass, bins = [bin1, bin2, bin3])
+    N_noCMASS, edges = np.histogramdd(X_sample_no, bins = [bin1, bin2, bin3])
     N_CMASS1 = np.sum(np.sum(N_CMASS, axis = 1), axis = 1)
     N_CMASS2 = np.sum(np.sum(N_CMASS, axis = 0), axis = 1)
     N_CMASS3 = np.sum(np.sum(N_CMASS, axis = 0), axis = 0)
@@ -862,18 +676,18 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     ax3.legend(loc='best')
     fig.savefig('AmassHistogram')
     print 'figsave : AmassHistogram.png'
-    
+    """
     # 2dhist
-    
+    """
     dperpbin = np.linspace(0, 1.5, 101)
     fig2, ((ax, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize = (10, 10))
-    ax.hist2d(X_train[cmass_mask][:, 2], X_train[cmass_mask][:,3], bins = [bin2, bin3] )
-    ax2.hist2d(X_train[cmass_mask][:, 1], X_train[cmass_mask][:,3] - X_train[cmass_mask][:,2]/8.0, bins = [bin1, dperpbin])
+    ax.hist2d(X_train[cmass_mask][:, 1], X_train[cmass_mask][:,2], bins = [bin2, bin3] )
+    ax2.hist2d(X_train[cmass_mask][:, 0], X_train[cmass_mask][:,2] - X_train[cmass_mask][:,1]/8.0, bins = [bin1, dperpbin])
     #ax3.hist2d(X_pred_cmass[:, 2], X_pred_cmass[:,3], bins = [bin2, bin3] )
     #ax4.hist2d(X_pred_cmass[:, 1], X_pred_cmass[:,3] - X_pred_cmass[:,2]/8.0, bins = [bin1, dperpbin])
     X_nocmass = X_train[~cmass_mask]
-    ax3.hist2d(X_nocmass[:, 2], X_nocmass[:,3], bins = [bin2, bin3] )
-    ax4.hist2d(X_nocmass[:, 1], X_nocmass[:,3] - X_nocmass[:,2]/8.0, bins = [bin1, dperpbin])
+    ax3.hist2d(X_nocmass[:, 1], X_nocmass[:,2], bins = [bin2, bin3] )
+    ax4.hist2d(X_nocmass[:, 0], X_nocmass[:,2] - X_nocmass[:,1]/8.0, bins = [bin1, dperpbin])
     
     #X_cont = X_test[GetCMASS_mask * np.logical_not(y_test[:,0])]
     #ax3.scatter(X_cont[:, 2], X_cont[:,3], color='black', marker = '*', s = 30 )
@@ -894,19 +708,17 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     
     fig2.savefig('AmassHistogram2d')
     print 'figsave : AmassHistogram2d.png'
-    
+    """
     
     # 2d scatter with resampled sample
     
+    """
     fig3, ((ax, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize = (10, 10))
-    h1, _, _, _ = ax.hist2d(X_sample_cmass[:, 2], X_sample_cmass[:,3], bins = [bin2, bin3])
-    h2, _, _, _ = ax2.hist2d(X_sample_cmass[:, 1], X_sample_cmass[:,3] - X_sample_cmass[:,2]/8.0, bins = [bin1, dperpbin])
-    h3, _, _, _ = ax3.hist2d(X_sample_no[:, 2], X_sample_no[:,3], bins = [bin2, bin3] )
-    h4, _, _, _ = ax4.hist2d(X_sample_no[:, 1], X_sample_no[:,3] - X_sample_no[:,2]/8.0, bins = [bin1, dperpbin])
-    #fig3.colorbar(h1, ax = ax)
-    #fig3.colorbar(h2, ax = ax2)
-    #fig3.colorbar(h3, ax = ax3)
-    #fig3.colorbar(h4, ax = ax4)
+    h1, _, _, _ = ax.hist2d(X_sample_cmass[:, 1], X_sample_cmass[:,2], bins = [bin2, bin3])
+    h2, _, _, _ = ax2.hist2d(X_sample_cmass[:, 0], X_sample_cmass[:,2] - X_sample_cmass[:,1]/8.0, bins = [bin1, dperpbin])
+    h3, _, _, _ = ax3.hist2d(X_sample_no[:, 1], X_sample_no[:,2], bins = [bin2, bin3] )
+    h4, _, _, _ = ax4.hist2d(X_sample_no[:, 0], X_sample_no[:,2] - X_sample_no[:,1]/8.0, bins = [bin1, dperpbin])
+    
     #X_cont = X_test[GetCMASS_mask * np.logical_not(y_test[:,0])]
     #ax3.scatter(X_cont[:, 2], X_cont[:,3], color='black', marker = '*', s = 30 )
     #ax4.scatter(X_cont[:, 1], X_cont[:,3] - X_cont[:,2]/8.0, color='black', marker = '*', s = 30)
@@ -926,9 +738,7 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     
     fig3.savefig('AmassHistogram2d_2')
     print 'figsave : AmassHistogram2d_2.png'
-    
-
-    pdb.set_trace()
+    """
     # purity vs p_thresh check -----------------------------
 
     p = np.linspace(0.0, .99, 20)
@@ -942,12 +752,12 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     for pp in p:
         
         # Getting galaxies higher than threshold
-        GetCMASS_mask = EachProb_CMASS > pp
+        GetCMASS_mask_loop = EachProb_CMASS > pp
         #GetLOWZ_mask = EachProb_LOWZ > pp
         # completeness and purity
-        completeness_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0 / np.sum(y_test[:,0])
-        purity_cmass = np.sum( GetCMASS_mask * y_test[:,0] )* 1.0 /np.sum(GetCMASS_mask)
-        contaminant_cmass = np.sum( GetCMASS_mask * np.logical_not(y_test[:,0]) )
+        completeness_cmass = np.sum( GetCMASS_mask_loop * y_test[:,0] )* 1.0 / np.sum(y_test[:,0])
+        purity_cmass = np.sum( GetCMASS_mask_loop * y_test[:,0] )* 1.0 /np.sum(GetCMASS_mask_loop)
+        contaminant_cmass = np.sum( GetCMASS_mask_loop * np.logical_not(y_test[:,0]) )
         """
         completeness_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0 / np.sum(y_test[:,1])
         purity_lowz = np.sum( GetLOWZ_mask * y_test[:,1] )* 1.0 /np.sum(GetLOWZ_mask)
@@ -960,7 +770,9 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
         
         pps.append(pp)
         print pp, completeness_cmass, purity_cmass
+    
 
+    """
 
     fig, (ax, ax2) = plt.subplots(1,2, figsize=(14,7))
     ax.plot( pps, coms, 'r.', label = 'completeness')
@@ -977,9 +789,15 @@ def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, testS
     #ax2.set_ylim(0.0, 1.1)
     fig.savefig('com_pur_check')
     print 'save fig: com_pur_check.png'
+    """
     
-    return 0 # train[cmass_mask], train[lowz_mask], test[GetCMASS_mask], test[GetLOWZ_mask]
-
+    
+    # contaminant test
+    
+    
+    
+    #return train[cmass_mask], train[lowz_mask], test[GetCMASS_mask], test[GetLOWZ_mask]
+    return train[cmass_mask], test[GetCMASS_mask], test[GetCMASS_mask * y_test[:,0]]
 
 
 def completeness_purity(testC, testL, des_train, des_test, clean_cmass_data, clean_lowz_data ):
@@ -1003,7 +821,7 @@ def main():
 
     dec = -1.0
     dec2 = 1.0
-    ra = 355.0
+    ra = 350.0
     ra2 = 360.
 
 
@@ -1043,18 +861,65 @@ def main():
     des_test = des[testInd]
     
     # putting sample in classifier
-    pdb.set_trace()
-    
+
+    #pdb.set_traceback()
     trainC, trainL, testC, testL = XDGMM_model(clean_cmass_data, clean_lowz_data, train=des_train, test=des_test, p_threshold = 0.5 )
     
+    trainC, testC, contC = XDGMM_model(clean_cmass_data, clean_lowz_data, train=des_train, test=des_test, p_threshold = 0.5 )
+    
+    dmass_kNN, dmass_GMMB = MachineLearningClassifier( clean_cmass_data, clean_lowz_data,  train = des_train, test = des_test)
+    
+    
+    
+    
+    
+    import fitsio
+    fitsio.write('truecat.fits' ,trainC)
+    fitsio.write('dmasscat.fits' ,testC)
+    fitsio.write('contcat.fits' ,contC)
+    fitsio.write('dmass_kNN.fits', dmass_kNN)
+    fitsio.write('dmass_GMMB.fits', dmass_GMMB)
+    
+    
+    # hist fibmag
+    
+    
+    trainC = fitsio.read('truecat.fits')
+    testC = fitsio.read('dmasscat.fits')
+    contC = fitsio.read('contcat.fits')
+    
+    dmass_kNN = fitsio.read('dmass_kNN.fits')
+    dmass_GMMB = fitsio.read('dmass_GMMB.fits')
+    
+    tags = ['MAG_APER_4_I', 'MAG_APER_5_I', 'MAG_MODEL_I']
+    fig, axs = plt.subplots(2,2, figsize = (14, 14))
+    axs = axs.ravel()
+    
+    for a, tag in zip(axs, tags):
+        
+        bins, dd = np.linspace( testC[tag].min() - 0.5, testC[tag].max() + 0.5, 100, retstep = True)
+        n_trainC, _ = np.histogram( trainC[tag], bins = bins, density=True )
+        n_testC, _ = np.histogram( testC[tag], bins = bins, density=True )
+        n_dmass_kNN, _ = np.histogram( dmass_kNN[tag], bins = bins, density=True )
+        n_dmass_GMMB, _ = np.histogram( dmass_GMMB[tag], bins = bins, density=True )
+        
+        a.plot(bins[:-1], n_trainC, 'k--', label='true')
+        a.plot(bins[:-1], n_testC, '.', label='test')
+        a.plot(bins[:-1], n_dmass_kNN, '.', label='kNN')
+        a.plot(bins[:-1], n_dmass_GMMB, '.', label='GMMB')
+        
+        #n = a.hist( contC[tag], bins, histtype='step', label='contaminant' )
+        a.legend(loc='best')
+        a.set_title(tag)
+
+    fig.savefig('fib2hist')
     stop
-    
-    
+
     # completeness and purity
     completeness_purity(testC, testL, des_train, des_test, clean_cmass_data, clean_lowz_data )
 
 
-    
+
 if __name__ == "__main__":
     import pdb, traceback, sys
     try:
