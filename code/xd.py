@@ -231,6 +231,7 @@ class XDGMM(object):
 
 
 
+
 def SDSS_cmass_criteria(sdss, prior=None):
     
     modelmag_r = sdss['MODELMAG_R'] - sdss['EXTINCTION_R']
@@ -835,6 +836,169 @@ def initialize_deconvolve(data, covars, n_components = 50):
     return amp_init, mean_init, covars_init
 
 
+
+
+def doVisualization(model_data, real_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
+    if labels == None:
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
+        stop
+    else:
+        ndim = len(labels)
+    
+    if ranges == None:
+        # try to figure out the correct axis ranges.
+        print "Using central 98% to set range."
+        ranges = []
+        for i in xrange(ndim):
+            ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
+
+    fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
+    
+    for i in xrange(ndim):
+        for j in xrange(ndim):
+            if i == j:
+                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
+                axes[i][i].hist(real_data[:,i],bins=xbins,normed=True,label='real')
+                axes[i][i].set_xlabel(labels[i])
+                axes[i][i].hist(model_data[:,i],bins=xbins,normed=True,alpha=0.5,label='model')
+                axes[i][i].legend(loc='best')
+            else:
+                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
+                ybins = np.linspace(ranges[j][0],ranges[j][1],100)
+                axes[i][j].hist2d(real_data[:,i], real_data[:,j], bins = [xbins,ybins], normed=True)
+                axes[i][j].set_xlabel(labels[i])
+                axes[i][j].set_ylabel(labels[j])
+                axes[i][j].set_title('real')
+                axes[j][i].hist2d(model_data[:,i], model_data[:,j], bins = [xbins,ybins], normed=True)
+                axes[j][i].set_xlabel(labels[i])
+                axes[j][i].set_ylabel(labels[j])
+                axes[j][i].set_title('model')
+
+    filename = prefix+"diagnostic_histograms.png"
+    print "writing output plot to: "+filename
+    fig.savefig(filename)
+
+
+def doVisualization2(true_data, test_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
+    if labels == None:
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
+        stop
+    else:
+        ndim = len(labels)
+    
+    if ranges == None:
+        # try to figure out the correct axis ranges.
+        print "Using central 98% to set range."
+        ranges = []
+        for i in xrange(ndim):
+            ranges.append( np.percentile(test_data[:,i],[1.,99.]) )
+
+    fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
+    
+    for i in xrange(ndim):
+        for j in xrange(ndim):
+            if i == j:
+                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
+                axes[i][i].hist(test_data[ labels[i] ],bins=xbins,normed=True,label='real')
+                axes[i][i].set_xlabel(labels[i])
+                axes[i][i].hist(true_data[ labels[i] ],bins=xbins,normed=True,alpha=0.5,label='true')
+                axes[i][i].legend(loc='best')
+            else:
+                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
+                ybins = np.linspace(ranges[j][0],ranges[j][1],100)
+                axes[i][j].hist2d(test_data[labels[i]], test_data[labels[j]], bins = [xbins,ybins], normed=True)
+                axes[i][j].set_xlabel(labels[i])
+                axes[i][j].set_ylabel(labels[j])
+                axes[i][j].set_title('test')
+                axes[j][i].hist2d(true_data[labels[i]], true_data[labels[j]], bins = [xbins,ybins], normed=True)
+                axes[j][i].set_xlabel(labels[i])
+                axes[j][i].set_ylabel(labels[j])
+                axes[j][i].set_title('true')
+
+    filename = prefix+"diagnostic_histograms2.png"
+    print "writing output plot to: "+filename
+    fig.savefig(filename)
+
+def Cut_test(contS, sdss):
+    
+    
+    contSX, _ = mixing_color(contS, sdss = contS)
+    
+    dperp_passed_mask =  (contSX[:, 2] - contSX[:, 1]/8.0) > 0.55
+    icut_passed_mask = ((contSX[:,0]-19.86 )/1.6 + 0.8 < (contSX[:, 2] - contSX[:, 1]/8.0)) & ( contSX[:,0] < 19.9 ) & ( contSX[:,0] > 17.5 )
+    
+    SDSS_reject = contS[dperp_passed_mask * icut_passed_mask]
+    
+    # cutting check : SDSS rejected
+    
+    starcuts = (((SDSS_reject['PSFMAG_I'] - SDSS_reject['EXPMAG_I']) > (0.2 + 0.2*(20.0 - SDSS_reject['EXPMAG_I']))) &
+                ((SDSS_reject['PSFMAG_Z'] - SDSS_reject['EXPMAG_Z']) > (9.125 - 0.46 * SDSS_reject['EXPMAG_Z'])))
+        
+    # quality cut ( Reid et al. 2016 Section 2.2 )
+    exclude = 2**1 + 2**5 + 2**7 + 2**11 + 2**19 # BRIGHT, PEAK CENTER, NO PROFILE, DEBLENDED_TOO_MANY_PEAKS, NOT_CHECKED
+    # blended object
+    blended = 2**3
+    nodeblend = 2**6
+    # obejct not to be saturated
+    saturated = 2**18
+    saturated_center = 2**(32+11)
+    
+    
+    use =  (
+            (SDSS_reject['CLEAN'] == 1 ) & (SDSS_reject['FIBER2MAG_I'] < 22.5) &
+            (SDSS_reject['TYPE'] == 3) &
+            ( ( SDSS_reject['FLAGS'] & exclude) == 0) &
+            ( ((SDSS_reject['FLAGS'] & saturated) == 0) | (((SDSS_reject['FLAGS'] & saturated) >0) & ((SDSS_reject['FLAGS'] & saturated_center) == 0)) ) &
+            ( ((SDSS_reject['FLAGS'] & blended) ==0 ) | ((SDSS_reject['FLAGS'] & nodeblend) ==0) ) )
+    
+    
+    print 'total', len(contS)
+    print 'd cut', np.sum(dperp_passed_mask)
+    print 'icut', np.sum(icut_passed_mask)
+    print 'd, icut', len(SDSS_reject)
+    print 's-g sepa', np.sum(starcuts)
+    print 'clean, fib, type', np.sum(SDSS_reject['CLEAN'] == 1), np.sum((SDSS_reject['FIBER2MAG_I'] < 22.5) ), np.sum((SDSS_reject['TYPE'] == 3) )
+    print 'excluded', np.sum(( SDSS_reject['FLAGS'] & exclude) == 0 )
+    print 'saturated', np.sum(  ( ((SDSS_reject['FLAGS'] & saturated) == 0) | (((SDSS_reject['FLAGS'] & saturated) >0) & ((SDSS_reject['FLAGS'] & saturated_center) == 0)) ) )
+    print 'blended', np.sum(( ((SDSS_reject['FLAGS'] & blended) ==0 ) | ((SDSS_reject['FLAGS'] & nodeblend) ==0) ))
+    print 'all', np.sum(use & starcuts)
+    # Here stop
+    
+    DAT = np.column_stack(( SDSS_reject[use & starcuts]['RA'], SDSS_reject[use & starcuts]['DEC'] ))
+    np.savetxt( 'SDSS_rejectedObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
+    
+    DAT = np.column_stack(( C['RA'], C['DEC'] ))
+    np.savetxt( 'MatchedPlausible_cmassObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
+    
+    
+    sdss_cmass, _ = SDSS_cmass_criteria(sdss)
+    plausible_cmass, _ = DES_to_SDSS.match( SDSS_reject[use & starcuts], sdss_cmass )
+    DAT = np.column_stack(( plausible_cmass['RA'], plausible_cmass['DEC'] ))
+    np.savetxt( 'plausible_cmassObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
+    
+    return 0
+    
+    #sdss_match, cmass_match = DES_to_SDSS.match(sdss, clean_cmass_data)
+    #C, _, _ = h.match(sdss_cmass['RA'],testC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'],1./3600,maxmatch=1)
+    #Indmask = np.in1d(clean_cmass_data['OBJID'], clean_cmass_data['OBJID'] )
+    
+    
+    
+    trueCMASS, _, _ = h.match(testC['RA'], testC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'], 1./3600, maxmatch = 1 )
+    trueCMASSInd, _, _ = h.match(clean_cmass_data['RA'], clean_cmass_data['DEC'], testC['RA'], testC['DEC'], 1./3600, maxmatch = 1 )
+    
+    trueCMASSmask = np.zeros( clean_cmass_data.size, dtype=bool)
+    trueCMASSmask[trueCMASSInd] = 1
+    missingCMASS = clean_cmass_data[~trueCMASSmask]
+
+                
+                
+
+
+
+
+
+
 def XDGMM_model(cmass, lowz, p_threshold = 0.9, train = None, test = None, reverse=None, pickleFileName = [ 'XD_all_default.pkl', 'XD_cmass_default.pkl', 'XD_nocmass_default.pkl' ] ):
 
     import esutil
@@ -1350,13 +1514,7 @@ def main():
     
     prefix = 'big_'
     pickleFileName = [prefix +'XD_all.pkl', prefix+'XD_dmass.pkl', prefix+'XD_no.pkl']
-
-    #prefix = ''
-    #pickleFileName = [prefix +'XD_all_cluster25_5d.pkl', prefix+'XD_dmass_cluster25_5d.pkl', prefix+'XD_no_cluster25_5d.pkl']
     trainC, testC, contC, testAll, testno, modelX, modelAllX = XDGMM_model(clean_cmass_data, clean_cmass_data, train=des_train, test=des_test, p_threshold = 0.9, pickleFileName=pickleFileName )
-    pp, coms, purs = com_pur_arbi(cat = prefix+'testcat.fits', prefix = prefix)
-    
-    
     
     fitsio.write(prefix+'truecat.fits' ,trainC)
     fitsio.write(prefix+'dmasscat.fits' ,testC)
@@ -1368,66 +1526,11 @@ def main():
     #fitsio.write(prefix+'modelnoX.fits' ,modelnoX)
 
 
-
-
-    # SDSS subset ----------------------------------------------
-    
-    (trainInd, testInd), (sdsstrainInd,sdsstestInd) = split_samples(clean_cmass_data, clean_cmass_data, [0.5,0.5], random_state=0)
-    sdss_train = clean_cmass_data[trainInd]
-    sdss_test = clean_cmass_data[testInd]
+    stop
     
     
-    testC = fitsio.read(prefix+'dmasscat.fits')
-    dmass = testC.copy()
-    
-    prefix = 'sub_'
-    pickleFileName = [prefix +'XD_all.pkl', prefix+'XD_dmass.pkl', prefix+'XD_no.pkl']
-    trainC, testC, contC, testAll, testno, modelX, modelAllX  = XDGMM_model(dmass, dmass, train=sdss_train, test=sdss_test, p_threshold = 0.9, pickleFileName=pickleFileName, reverse=True )
-    
-    pp, coms, purs = com_pur_arbi(subset = dmass, prefix = prefix)
     
     
-
-    # repeat multiple times to get average --------------------------------------------
-    """
-    import fitsio
-    for i in range(10):
-        
-        prefix = 'test_'+str(i)+'_'
-        pickleFileName = [prefix + 'XD_all_cluster25.pkl', prefix+'XD_dmass_cluster25_5d.pkl', prefix+'XD_no_cluster25_5d.pkl']
-        testAll = XDGMM_model(clean_cmass_data, clean_lowz_data, train=des_train, test=des_test, p_threshold = 0.5, pickleFileName = pickleFileName )
-        fitsio.write(prefix+'testcat.fits' ,testAll)
-    
-    
-    m_pp = np.zeros( (10,50 ), dtype=float )
-    m_coms = np.zeros( (10,50 ), dtype=float )
-    m_purs = np.zeros( (10,50 ), dtype=float )
-    for i in range(m_coms.shape[0]):
-        pp, coms, purs = com_pur_arbi(clean_cmass_data, prefix = 'test_'+str(i)+'_')
-        m_pp[i,:]= np.array(pp)
-        m_coms[i,:] = coms
-        m_purs[i,:] = purs
-    
-    mean_coms = np.mean(m_coms, axis = 0)
-    mean_purs = np.mean(m_purs, axis = 0)
-
-    fig, ax = plt.subplots()
-    ax.plot(m_pp.T, m_coms.T, color='grey', alpha = 0.5 )
-    ax.plot(m_pp.T, m_purs.T, color='grey', alpha = 0.5 )
-    ax.plot(pp, mean_coms, color='red')
-    ax.plot(pp, mean_purs, color='red')
-    fig.savefig('com_pur_results/total_com_pur.png')
-
-
-    p_threshold = 0.5
-    GetCMASS_mask = testAll['EachProb_CMASS'] > p_threshold
-    dmass = testAll[GetCMASS_mask]
-
-    """
-    # ----------------------------------------------------------------
-
-
-
     # calling catalog -------------------------------------------------
     trainC = fitsio.read(prefix+'truecat.fits')
     testC = fitsio.read(prefix+'dmasscat.fits')
@@ -1446,16 +1549,17 @@ def main():
     
     # plotting
     
+    pp, coms, purs = com_pur_arbi(cat = prefix+'testcat.fits', prefix = prefix)
+    
+    
     labels = ['MAG_MODEL_R', 'MAG_MODEL_I', 'g-r', 'r-i', 'i-z']
     ranges = [[15,22], [15,22],[-1,2], [-1,2], [-1,2]]
     doVisualization(modelX, trainX, labels = labels, ranges = ranges, nbins=100, prefix= prefix+'cmass_')
     doVisualization(modelAllX, testAllX, labels = labels, ranges = ranges, nbins=100, prefix= prefix+'all_')
     #doVisualization(modelnoX, testnoX, labels = labels, ranges = ranges, nbins=100, prefix= 'no_')
-
+    
     doVisualization(trainX, contX, labels = labels, ranges = ranges, nbins=100, prefix= prefix+'cont_true_')
     doVisualization(modelX, contX, labels = labels, ranges = ranges, nbins=100, prefix= prefix+'cont_model_')
-    
-    
     
     
     
@@ -1470,594 +1574,31 @@ def main():
                [1704.7964, 24215.969],
                [5882.5488, 36152.707],
                [1150.884, 52163.207]]
-    doVisualization2(trainC, testC, labels = labels2, ranges = ranges2, nbins=100, prefix= prefix+'true_test_flux_')
-    doVisualization2(trainC, contC, labels = labels2, ranges = ranges2, nbins=100, prefix= prefix+'true_cont_flux_')
-
-
+               doVisualization2(trainC, testC, labels = labels2, ranges = ranges2, nbins=100, prefix= prefix+'true_test_flux_')
+               doVisualization2(trainC, contC, labels = labels2, ranges = ranges2, nbins=100, prefix= prefix+'true_cont_flux_')
+               
+               
+               
     stop
+
+    # SDSS subset ----------------------------------------------
     
-
-    contSX, _ = mixing_color(contS, sdss = contS)
-    dperp_passed_mask =  (contSX[:, 2] - contSX[:, 1]/8.0) > 0.55
-    icut_passed_mask = ((contSX[:,0]-19.86 )/1.6 + 0.8 < (contSX[:, 2] - contSX[:, 1]/8.0)) & ( contSX[:,0] < 19.9 ) & ( contSX[:,0] > 17.5 )
-
-
-    cont_dperp = eachprobcol[~dperp_passed_mask]
-    cont_icut = eachprobcol[~icut_passed_mask]
+    (trainInd, testInd), (sdsstrainInd,sdsstestInd) = split_samples(clean_cmass_data, clean_cmass_data, [0.5,0.5], random_state=0)
+    sdss_train = clean_cmass_data[trainInd]
+    sdss_test = clean_cmass_data[testInd]
     
-    fig, ax = plt.subplots(1,2, figsize = (14, 5))
-    ax = ax.ravel()
-    pbin = np.linspace(0,1.0, 50)
-    ax[0].hist( cont_dperp['EachProb_CMASS'],  bins = pbin )
-    #ax[1].hist( 1 - cont_dperp['EachProb_CMASS'],  bins = pbin )
-    ax[1].hist( cont_icut['EachProb_CMASS'],  bins = pbin, color= 'red' )
-    #ax[3].hist( 1 - cont_icut['EachProb_CMASS'],  bins = pbin, color = 'red' )
-    for a in ax:
-        a.set_ylabel('N')
-        a.set_xlabel('probability')
-    ax[0].set_title('dperp non passed')
-    ax[1].set_title('icut non passed')
-    fig.savefig('cont_prob')
     
-
+    testC = fitsio.read(prefix+'dmasscat.fits')
+    dmass = testC.copy()
+    
+    prefix = 'sub_'
+    pickleFileName = [prefix +'XD_all.pkl', prefix+'XD_dmass.pkl', prefix+'XD_no.pkl']
+    trainC, testC, contC, testAll, testno, modelX, modelAllX  = XDGMM_model(dmass, dmass, train=sdss_train, test=sdss_test, p_threshold = 0.9, pickleFileName=pickleFileName, reverse=True )
+    
+    pp, coms, purs = com_pur_arbi(subset = dmass, prefix = prefix)
+    
 
     #dmass_kNN, dmass_GMMB = MachineLearningClassifier( clean_cmass_data, clean_lowz_data,  train = des_train, test = des_test)
-
-
-
-
-    
-def histogramDiagnosticSDSS( clean_cmass_data, sdss  ):
-
-
-    import fitsio
-    import esutil
-    h = esutil.htm.HTM(10)
-    
-    # data from SDSS XD ------------------------
-    trainSDSS = fitsio.read('truecat_Matchedsdss.fits')
-    testSDSS = fitsio.read('dmasscat_Matchedsdss.fits')
-    contSDSS = fitsio.read('contcat_Matchedsdss.fits')
-
-    trainSDSSX, _ = mixing_color(trainSDSS, sdss = True)
-    testSDSSX, _ = mixing_color(testSDSS, sdss = True)
-    contSDSSX, _ = mixing_color(contSDSS, sdss = True)
-    
-    # data from DES XD ------------------------
-    trainC = fitsio.read('truecat_Matched.fits')
-    testC = fitsio.read('dmasscat_Matched.fits')
-    contC = fitsio.read('contcat_Matched.fits')
-    #testAll = fitsio.read('testcat_masked.fits')
-
-
-
-    trainX, _ = mixing_color(trainC)
-    testX, _ = mixing_color(testC)
-    contX, _ = mixing_color(contC)
-    
-    _, trainS = DES_to_SDSS.match(trainC, clean_cmass_data )
-    _, contS = DES_to_SDSS.match(contC, sdss )
-    _, testS = DES_to_SDSS.match(testC, sdss )
-    
-    trainSX, _ = mixing_color(trainS, cmass = trainS)
-    testSX, _ = mixing_color(testS, sdss = testS)
-    contSX, _ = mixing_color(contS, sdss = contS)
-    
-    
-    dperp_passed_mask_sdss =  ((contSDSSX[:, 2] - contSDSSX[:, 1]/8.0) > 0.55 )
-    icut_passed_mask_sdss = (((contSDSSX[:,0]-19.86 )/1.6 + 0.8 < (contSDSSX[:, 2] - contSDSSX[:, 1]/8.0)) & ( contSDSSX[:,0] < 19.9 ) & ( contSDSSX[:,0] > 17.5 ))
-    
-    dperp_passed_mask =  (contSX[:, 2] - contSX[:, 1]/8.0) > 0.55
-    icut_passed_mask = ((contSX[:,0]-19.86 )/1.6 + 0.8 < (contSX[:, 2] - contSX[:, 1]/8.0)) & ( contSX[:,0] < 19.9 ) & ( contSX[:,0] > 17.5 )
-    
-    dperp_passed_sdss = contSDSSX[dperp_passed_mask_sdss]
-    dperp_nonpassed_sdss = contSDSSX[~dperp_passed_mask_sdss]
-    icut_passed_sdss = contSDSSX[icut_passed_mask_sdss]
-    icut_nonpassed_sdss = contSDSSX[~icut_passed_mask_sdss]
-    SDSS_reject_sdss = contSDSS[dperp_passed_mask_sdss * icut_passed_mask_sdss]
-        
-    dperp_passed = contSX[dperp_passed_mask]
-    dperp_nonpassed = contSX[~dperp_passed_mask]
-    icut_passed = contSX[icut_passed_mask]
-    icut_nonpassed = contSX[~icut_passed_mask]
-    SDSS_reject = contS[dperp_passed_mask * icut_passed_mask]
-    
-
-    _, dperp_passed_indes_Inds, _ = h.match(contSDSS[dperp_passed_mask_sdss]['RA'], contSDSS[dperp_passed_mask_sdss]['DEC'], testS['RA'], testS['DEC'], 1./3600, maxmatch = 1 )
-    _, dperp_nonpassed_indes_Inds, _ = h.match(contSDSS[~dperp_passed_mask_sdss]['RA'], contSDSS[~dperp_passed_mask_sdss]['DEC'], testS['RA'], testS['DEC'], 1./3600, maxmatch = 1 )
-    
-    _, dperp_passed_insdss_Inds, _ = h.match(contS[dperp_passed_mask]['RA'], contS[dperp_passed_mask]['DEC'], testSDSS['RA'], testSDSS['DEC'], 1./3600, maxmatch = 1 )
-    _, dperp_nonpassed_insdss_Inds, _ = h.match(contS[~dperp_passed_mask]['RA'], contS[~dperp_passed_mask]['DEC'], testSDSS['RA'], testSDSS['DEC'], 1./3600, maxmatch = 1 )
-    
-    dperp_passed_indes = testSX[dperp_passed_indes_Inds]
-    dperp_nonpassed_indes = testSX[dperp_nonpassed_indes_Inds]
-    dperp_passed_insdss = testSDSSX[dperp_passed_insdss_Inds]
-    dperp_nonpassed_insdss = testSDSSX[dperp_nonpassed_insdss_Inds]
-    
-    
-    dperpbin = np.linspace(0, 1.5, 101)
-    fig, axs = plt.subplots(2,4, figsize = (20, 10))
-    axs = axs.ravel()
-    cats = [dperp_passed_sdss, dperp_nonpassed_sdss, dperp_passed, dperp_nonpassed, dperp_passed_indes, dperp_nonpassed_indes, dperp_passed_insdss, dperp_nonpassed_insdss]
-    
-    
-    # gri plane
-    xx = np.linspace(0.0, 100, 100)
-    yy = 0.55 + xx/8.
-    for a, cat in zip(axs, cats):
-        a.scatter( cat[:,1], cat[:,2], s = 10, marker = '.' )
-        a.plot( xx, yy, linestyle = '--', color='red')
-        a.set_xlabel('g-r')
-        a.set_ylabel('r-i')
-        a.set_xlim(0,4)
-        a.set_ylim(0,2)
-    
-    fig.savefig('cont_diagnostic_dperp.png')
-    
-    
-    # icut plane --------------------------
-    
-    _, icut_passed_indes_Inds, _ = h.match(contSDSS[icut_passed_mask_sdss]['RA'], contSDSS[icut_passed_mask_sdss]['DEC'], testS['RA'], testS['DEC'], 1./3600, maxmatch = 1 )
-    _, icut_nonpassed_indes_Inds, _ = h.match(contSDSS[~icut_passed_mask_sdss]['RA'], contSDSS[~icut_passed_mask_sdss]['DEC'], testS['RA'], testS['DEC'], 1./3600, maxmatch = 1 )
-    _, icut_passed_insdss_Inds, _ = h.match(contS[icut_passed_mask]['RA'], contS[icut_passed_mask]['DEC'], testSDSS['RA'], testSDSS['DEC'], 1./3600, maxmatch = 1 )
-    _, icut_nonpassed_insdss_Inds, _ = h.match(contS[~icut_passed_mask]['RA'], contS[~icut_passed_mask]['DEC'], testSDSS['RA'], testSDSS['DEC'], 1./3600, maxmatch = 1 )
-
-    
-    icut_passed_indes = testSX[icut_passed_indes_Inds]
-    icut_nonpassed_indes = testSX[icut_nonpassed_indes_Inds]
-    icut_passed_insdss = testSDSSX[icut_passed_insdss_Inds]
-    icut_nonpassed_insdss = testSDSSX[icut_nonpassed_insdss_Inds]
-    
-
-    fig2, axs = plt.subplots(2,4, figsize = (20, 10))
-    axs = axs.ravel()
-
-    cats = [icut_passed_sdss, icut_nonpassed_sdss, icut_passed, icut_nonpassed, icut_passed_indes, icut_nonpassed_indes, icut_passed_insdss, icut_nonpassed_insdss]
-    
-
-    xx = np.linspace(0.0, 100, 100)
-    for a, cat in zip(axs, cats):
-        a.scatter( cat[:, 0], cat[:,2] - cat[:,1]/8.0,  s = 10, marker = '.' )
-        a.axhline( y = 0.55, linestyle = '--', color = 'red')
-        a.plot( xx, (xx-19.86)/1.6 + 0.8, linestyle='--', color='grey')
-        a.axvline( x = 19.9, linestyle = '--', color = 'grey')
-        a.set_xlabel('cmodel_i')
-        a.set_ylabel('dperp')
-        a.set_xlim(18,21.5)
-        a.set_ylim(0,1.5)
-
-    fig2.savefig('cont_diagnostic_icut.png')
-
-
-
-
-def histogramsDiagostic():
-    # hist fibmag
-    
-    import fitsio
-    trainC = fitsio.read('truecat.fits')
-    testC = fitsio.read('dmasscat.fits')
-    contC = fitsio.read('contcat.fits')
-    
-    trainX, _ = mixing_color(trainC)
-    testX, _ = mixing_color(testC)
-    contX, _ = mixing_color(contC)
-
-    _, trainS = DES_to_SDSS.match(trainC, clean_cmass_data )
-    _, contS = DES_to_SDSS.match(contC, sdss )
-    _, testS = DES_to_SDSS.match(testC, sdss )
-
-    trainSX = mixing_color(trainS, cmass = trainS)
-    testSX = mixing_color(testS, sdss = testS)
-    contSX = mixing_color(contS, sdss = contS)
-
-    dperp_passed_mask =  (contSX[:, 2] - contSX[:, 1]/8.0) > 0.55
-    icut_passed_mask = ((contSX[:,0]-19.86 )/1.6 + 0.8 < (contSX[:, 2] - contSX[:, 1]/8.0)) & ( contSX[:,0] < 19.9 ) & ( contSX[:,0] > 17.5 )
-    
-    
-
-    import esutil
-    h = esutil.htm.HTM(10)
-    
-    sdss_cmass, _  = SDSS_cmass_criteria(sdss)
-    C, _, _ = h.match(contC['RA'],contC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'],1./3600,maxmatch=1)
-    L, _, _ = h.match(contC['RA'],contC['DEC'], clean_lowz_data['RA'], clean_lowz_data['DEC'],1./3600,maxmatch=1)
-    C, _, _ = h.match(testC['RA'],testC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'],1./3600,maxmatch=1)
-    
-    #dmass_kNN = fitsio.read('dmass_kNN.fits')
-    #dmass_GMMB = fitsio.read('dmass_GMMB.fits')
-    
-    tags = ['MAG_APER_4_I', 'MAG_MODEL_G', 'MAG_MODEL_R','MAG_MODEL_I']
-    fig, axs = plt.subplots(2,2, figsize = (14, 14))
-    axs = axs.ravel()
-    
-    for a, tag in zip(axs, tags):
-        
-        bins, dd = np.linspace( testC[tag].min() - 0.5, testC[tag].max() + 0.5, 100, retstep = True)
-        n_trainC, _ = np.histogram( trainC[tag], bins = bins, density=True )
-        n_testC, _ = np.histogram( testC[tag], bins = bins, density=True )
-        #n_dmass_kNN, _ = np.histogram( dmass_kNN[tag], bins = bins, density=True )
-        n_dmass_cont, _ = np.histogram( contC[tag], bins = bins, density=True )
-        
-        a.plot(bins[:-1], n_trainC, 'k--', label='true')
-        a.plot(bins[:-1], n_testC, '.', label='test')
-        #a.plot(bins[:-1], n_dmass_kNN, '.', label='kNN')
-        a.plot(bins[:-1], n_dmass_cont, 'r.', label='cont')
-        
-        #n = a.hist( contC[tag], bins, histtype='step', label='contaminant' )
-        a.legend(loc='best')
-        a.set_title(tag)
-
-    fig.savefig('cont_diagonistic')
-
-
-    fig, axs = plt.subplots(2,2, figsize = (14, 14))
-    axs = axs.ravel()
-
-
-
-    tags = ['CMODELMAG_I', 'GR', 'RI']
-    for (i,a), tag in zip(enumerate(axs), tags):
-        bins, dd = np.linspace( testX[:,i].min() - 0.5, testX[:,i].max() + 0.5, 50, retstep = True)
-        n_trainC, _ = np.histogram( trainX[:,i], bins = bins, density=True )
-        n_testC, _ = np.histogram( testX[:,i], bins = bins, density=True )
-        n_dmass_cont, _ = np.histogram( contX[:,i], bins = bins, density=True )
-
-        a.plot(bins[:-1], n_trainC, 'k--', label='true')
-        a.plot(bins[:-1], n_testC, '.', label='test')
-        a.plot(bins[:-1], n_dmass_cont, 'r.', label='cont')
-        a.legend(loc='best')
-        a.set_title(tag)
-    fig.savefig('cont_diagonistic2')
-
-
-    # contaminant in sloan photometry
-
-    fig, axs = plt.subplots(2,2, figsize = (14, 14))
-    axs = axs.ravel()
-    tags = ['CMODELMAG_I', 'GR', 'RI']
-
-    for (i,a), tag in zip(enumerate(axs), tags):
-        bins, dd = np.linspace( testSX[:,i].min() - 0.5, testSX[:,i].max() + 0.5, 30, retstep = True)
-        n_trainC, _ = np.histogram( trainSX[:,i], bins = bins, density=True )
-        n_testC, _ = np.histogram( testSX[:,i], bins = bins, density=True )
-        n_dmass_cont, _ = np.histogram( contSX[:,i], bins = bins, density=True )
-        
-        a.plot(bins[:-1], n_trainC, 'k--', label='true')
-        a.plot(bins[:-1], n_testC, '.', label='test')
-        a.plot(bins[:-1], n_dmass_cont, 'r.', label='cont')
-        a.legend(loc='best')
-        a.set_xlabel(tag)
-    
-    bins, dd = np.linspace( 0.2, 1.5, 30, retstep = True)
-    n_trainC, _ = np.histogram( trainSX[:,2]-trainSX[:,1]/8.0, bins = bins, density=True )
-    n_testC, _ = np.histogram( testSX[:,2]-testSX[:,1]/8.0, bins = bins, density=True )
-    n_dmass_cont, _ = np.histogram( contSX[:,2] - contSX[:,1]/8.0, bins = bins, density=True )
-
-    axs[-1].plot(bins[:-1], n_trainC, 'k--', label='true')
-    axs[-1].plot(bins[:-1], n_testC, '.', label='test')
-    axs[-1].plot(bins[:-1], n_dmass_cont, 'r.', label='cont')
-    axs[-1].legend(loc='best')
-    axs[-1].set_xlabel('DPERP')
-
-    fig.savefig('cont_diagonistic_sdssphoto_dot')
-
-
-
-    
-
-    #  bin0, step0 = np.linspace(X[:,0].min(), X[:,0].max(), 101, retstep=True) # cmodel r
-    bin1, step1 = np.linspace(testSX[:,0].min() - 0.5, testSX[:,0].max() +0.5, 101, retstep=True) # cmodel i
-    bin2, step2 = np.linspace(testSX[:,1].min() - 0.5, testSX[:,1].max()+0.5, 101, retstep=True) # gr
-    bin3, step3 = np.linspace(testSX[:,2].min() - 0.5, testSX[:,2].max()+0.5, 101, retstep=True) # ri
-    #bin0 = np.append( bin0, bin0[-1]+step0)
-    #bin1 = np.append( bin1, bin1[-1]+step1)
-    #bin2 = np.append( bin2, bin2[-1]+step2)
-    #bin3 = np.append( bin3, bin3[-1]+step3)
-
-
-
-    
-    dperpbin = np.linspace(0, 1.5, 101)
-    fig2, axs = plt.subplots(2,2, figsize = (10, 10))
-
-    axs = axs.ravel()
-    #axs[0].hist2d(trainX[:, 1], trainX[:,2], bins = [bin2, bin3] )
-    #axs[0].hist2d( dperp_passed[:,1],  dperp_passed[:,2], bins = [bin2, bin3])
-    #axs[0].hist2d( icut_passed[:,1],  icut_passed[:,2], bins = [bin2, bin3])
-    axs[0].scatter( icut_passed[:,1],  icut_passed[:,2], s = 10, color = 'red')
-    xx = np.linspace(0.0, 100, 100)
-    yy = 0.55 + xx/8.
-    axs[0].plot( xx, yy, linestyle = '--', color='red')
-    axs[0].set_xlabel('g-r')
-    axs[0].set_ylabel('r-i')
-    axs[0].set_xlim(0,4)
-    axs[0].set_ylim(0,2)
-    #axs[1].hist2d(trainX[:, 0], trainX[:,2] - trainX[:,1]/8.0, bins = [bin1, dperpbin])
-    #axs[1].hist2d( dperp_passed[:,0],  dperp_passed[:,2] - dperp_passed[:,1]/8.0, bins = [bin1, dperpbin])
-    axs[1].scatter( dperp_passed[:,0],  dperp_passed[:,2] - dperp_passed[:,1]/8.0, s = 10, color = 'blue')
-    axs[1].plot( xx, (xx-19.86)/1.6 + 0.8, linestyle='--', color='grey')
-    axs[1].axhline( y = 0.55, linestyle = '--', color = 'red')
-    axs[1].axvline( x = 20.0, ymin=dperpbin[0], ymax = dperpbin[-1], linestyle = '--', color = 'grey')
-    axs[1].set_xlim(18,21.5)
-    axs[1].set_ylim(0,1.5)
-
-    axs[1].set_xlabel('cmodel_i')
-    axs[1].set_ylabel('dperp')
-    axs[2].hist2d(contX[:, 1], contX[:,2], bins = [bin2, bin3] )
-    axs[2].scatter( dperp_passed[:,1],  dperp_passed[:,2], s = 10, color = 'blue')
-    axs[2].plot( xx, yy, linestyle = '--', color='red')
-    axs[2].set_xlabel('g-r')
-    axs[2].set_ylabel('r-i')
-    axs[3].hist2d(contX[:, 0], contX[:,2] - contX[:,1]/8.0, bins = [bin1, dperpbin])
-    axs[3].scatter( icut_passed[:,0],  icut_passed[:,2]- icut_passed[:,1]/8.0 , s = 10, color = 'red')
-    axs[3].plot( xx, (xx-19.86)/1.6 + 0.8, linestyle='--', color='grey')
-    axs[3].axhline( y = 0.55, linestyle = '--', color = 'red')
-    axs[3].axvline( x = 20.0, ymin=dperpbin[0], ymax = dperpbin[-1], linestyle = '--', color = 'grey')
-    axs[3].set_xlabel('cmodel_i')
-    axs[3].set_ylabel('dperp')
-
-    fig2.savefig('cont_diagonostic_2dhist_sdss.png')
-
-
-
-
-    fig, axs = plt.subplots(2,2, figsize = (14, 14))
-    axs = axs.ravel()
-    tags = ['FIBER2MAG_I']
-
-
-    
-    for (i,a), tag in zip(enumerate(axs), tags):
-        bins, dd = np.linspace( testS[tag].min() - 0.5, testS[tag].max() + 0.5, 30, retstep = True)
-        n_trainC, _ = np.histogram( trainS[tag], bins = bins, density=True )
-        n_SDSS_reject, _ = np.histogram( SDSS_reject[tag], bins = bins, density=True )
-        
-        a.plot(bins[:-1], n_trainC, 'k--', label='true')
-        a.plot(bins[:-1], n_SDSS_reject, 'r.', label='cont')
-        a.legend(loc='best')
-        a.set_xlabel(tag)
-        a.set_title('Objects rejected by Sloan')
-    fig.savefig('cont_diagonostic_1dhist')
-
-
-def sloan_vetomask( des, ra = 350, ra2 = 360, dec = -1.0, dec2 = 1.0 ):
-    
-    import os
-    import fitsio
-    
-    path = '/n/des/lee.5922/data/sdss_veto_mask/'
-    
-    
-    vetoed = []
-    for i in os.listdir(path):
-        if os.path.isfile(os.path.join(path,i)) and 'vetoe_des' in i:
-            print 'vetoed catalog exists : {}'.format(i)
-            vetoed.append(i)
-            des = fitsio.read(path +i)
-
-    if len(vetoed) is 0:
-
-        print 'start masking des catalog with sdss veto mask'
-        import esutil
-        h = esutil.htm.HTM(10)
-        #read maps
-        tables = []
-        for i in os.listdir(path):
-            if os.path.isfile(os.path.join(path,i)) and 'fits' in i and not 'boss_survey' in i and not 'boss_geometry' in i and not 'vetoed' in i:
-                tables.append(path+i)
-                print i
-
-        for m in tables:
-            #map = np.loadtxt(m)
-            map = fitsio.read(m)
-            print 'cutting'
-            cutmap = map[ (ra < map['RA']) &  (ra2 > map['RA']) &  (dec < map['DEC']) & (dec2 > map['DEC']) ]
-            print 'matching'
-            desInd, vetoInd, _ = h.match(des['RA'],des['RA'], cutmap['DEC'], cutmap['DEC'], 1./3600,maxmatch=1)
-            des = des[desInd]
-            veto = cutmap[vetoInd]
-            vetomask = veto['MASK'] == 0
-            des = des[vetomask]
-
-        fitsio.write('vetoed_des_{}_{}.fits'.format(ra, ra2) ,des)
-
-    return des
-
-
-def text_to_fits( tables ):
-
-    import os
-    import fitsio
-    
-    path = '/n/des/lee.5922/data/sdss_veto_mask/'
-
-    for m in tables:
-        fitsfile = np.zeros((len(map), ), dtype=[('RA','f8'),('DEC','f8'), ('MASK', 'f8')] )
-        print 'fitsfile shape', fitsfile.shape
-        fitsfile['RA'] = map[:,0]
-        fitsfile['DEC'] = map[:,1]
-        fitsfile['MASK'] = map[:,2]
-        fitsio.write(path+m+'.fits', fitsfile)
-
-
-
-
-def doVisualization(model_data, real_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
-    if labels == None:
-        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
-        stop
-    else:
-        ndim = len(labels)
-
-    if ranges == None:
-        # try to figure out the correct axis ranges.
-        print "Using central 98% to set range."
-        ranges = []
-        for i in xrange(ndim):
-            ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
-
-    fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
-    
-    for i in xrange(ndim):
-        for j in xrange(ndim):
-            if i == j:
-                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-                axes[i][i].hist(real_data[:,i],bins=xbins,normed=True,label='real')
-                axes[i][i].set_xlabel(labels[i])
-                axes[i][i].hist(model_data[:,i],bins=xbins,normed=True,alpha=0.5,label='model')
-                axes[i][i].legend(loc='best')
-            else:
-                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-                ybins = np.linspace(ranges[j][0],ranges[j][1],100)
-                axes[i][j].hist2d(real_data[:,i], real_data[:,j], bins = [xbins,ybins], normed=True)
-                axes[i][j].set_xlabel(labels[i])
-                axes[i][j].set_ylabel(labels[j])
-                axes[i][j].set_title('real')
-                axes[j][i].hist2d(model_data[:,i], model_data[:,j], bins = [xbins,ybins], normed=True)
-                axes[j][i].set_xlabel(labels[i])
-                axes[j][i].set_ylabel(labels[j])
-                axes[j][i].set_title('model')
-
-    filename = prefix+"diagnostic_histograms.png"
-    print "writing output plot to: "+filename
-    fig.savefig(filename)
-
-def doVisualization2(true_data, test_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
-    if labels == None:
-        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
-        stop
-    else:
-        ndim = len(labels)
-    
-    if ranges == None:
-        # try to figure out the correct axis ranges.
-        print "Using central 98% to set range."
-        ranges = []
-        for i in xrange(ndim):
-            ranges.append( np.percentile(test_data[:,i],[1.,99.]) )
-
-    fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
-    
-    for i in xrange(ndim):
-        for j in xrange(ndim):
-            if i == j:
-                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-                axes[i][i].hist(test_data[ labels[i] ],bins=xbins,normed=True,label='real')
-                axes[i][i].set_xlabel(labels[i])
-                axes[i][i].hist(true_data[ labels[i] ],bins=xbins,normed=True,alpha=0.5,label='true')
-                axes[i][i].legend(loc='best')
-            else:
-                xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-                ybins = np.linspace(ranges[j][0],ranges[j][1],100)
-                axes[i][j].hist2d(test_data[labels[i]], test_data[labels[j]], bins = [xbins,ybins], normed=True)
-                axes[i][j].set_xlabel(labels[i])
-                axes[i][j].set_ylabel(labels[j])
-                axes[i][j].set_title('test')
-                axes[j][i].hist2d(true_data[labels[i]], true_data[labels[j]], bins = [xbins,ybins], normed=True)
-                axes[j][i].set_xlabel(labels[i])
-                axes[j][i].set_ylabel(labels[j])
-                axes[j][i].set_title('true')
-
-    filename = prefix+"diagnostic_histograms2.png"
-    print "writing output plot to: "+filename
-    fig.savefig(filename)
-
-
-
-def keepSDSSgoodregion( data ):
-
-    Tags = ['bad_field_mask', 'unphot_mask', 'bright_star_mask', 'rykoff_bright_star_mask','collision_mask', 'centerpost_mask']
-
-    mask = np.ones( data.size, dtype = bool )
-    
-    for tag in Tags:
-        print tag
-        mask = mask * (data[tag] == 0)
-    
-    print 'masked objects ', mask.size - np.sum(mask)
-    return data[mask]
-
-
-def Cut_test(contS, sdss):
-    
-
-    contSX, _ = mixing_color(contS, sdss = contS)
-    
-    dperp_passed_mask =  (contSX[:, 2] - contSX[:, 1]/8.0) > 0.55
-    icut_passed_mask = ((contSX[:,0]-19.86 )/1.6 + 0.8 < (contSX[:, 2] - contSX[:, 1]/8.0)) & ( contSX[:,0] < 19.9 ) & ( contSX[:,0] > 17.5 )
-    
-    SDSS_reject = contS[dperp_passed_mask * icut_passed_mask]
-
-    # cutting check : SDSS rejected
-
-    starcuts = (((SDSS_reject['PSFMAG_I'] - SDSS_reject['EXPMAG_I']) > (0.2 + 0.2*(20.0 - SDSS_reject['EXPMAG_I']))) &
-          ((SDSS_reject['PSFMAG_Z'] - SDSS_reject['EXPMAG_Z']) > (9.125 - 0.46 * SDSS_reject['EXPMAG_Z'])))
-
-    # quality cut ( Reid et al. 2016 Section 2.2 )
-    exclude = 2**1 + 2**5 + 2**7 + 2**11 + 2**19 # BRIGHT, PEAK CENTER, NO PROFILE, DEBLENDED_TOO_MANY_PEAKS, NOT_CHECKED
-    # blended object
-    blended = 2**3
-    nodeblend = 2**6
-    # obejct not to be saturated
-    saturated = 2**18
-    saturated_center = 2**(32+11)
-    
-    
-    use =  (
-            (SDSS_reject['CLEAN'] == 1 ) & (SDSS_reject['FIBER2MAG_I'] < 22.5) &
-            (SDSS_reject['TYPE'] == 3) &
-            ( ( SDSS_reject['FLAGS'] & exclude) == 0) &
-            ( ((SDSS_reject['FLAGS'] & saturated) == 0) | (((SDSS_reject['FLAGS'] & saturated) >0) & ((SDSS_reject['FLAGS'] & saturated_center) == 0)) ) &
-            ( ((SDSS_reject['FLAGS'] & blended) ==0 ) | ((SDSS_reject['FLAGS'] & nodeblend) ==0) ) )
-
-
-    print 'total', len(contS)
-    print 'd cut', np.sum(dperp_passed_mask)
-    print 'icut', np.sum(icut_passed_mask)
-    print 'd, icut', len(SDSS_reject)
-    print 's-g sepa', np.sum(starcuts)
-    print 'clean, fib, type', np.sum(SDSS_reject['CLEAN'] == 1), np.sum((SDSS_reject['FIBER2MAG_I'] < 22.5) ), np.sum((SDSS_reject['TYPE'] == 3) )
-    print 'excluded', np.sum(( SDSS_reject['FLAGS'] & exclude) == 0 )
-    print 'saturated', np.sum(  ( ((SDSS_reject['FLAGS'] & saturated) == 0) | (((SDSS_reject['FLAGS'] & saturated) >0) & ((SDSS_reject['FLAGS'] & saturated_center) == 0)) ) )
-    print 'blended', np.sum(( ((SDSS_reject['FLAGS'] & blended) ==0 ) | ((SDSS_reject['FLAGS'] & nodeblend) ==0) ))
-    print 'all', np.sum(use & starcuts)
-    # Here stop
-    
-    DAT = np.column_stack(( SDSS_reject[use & starcuts]['RA'], SDSS_reject[use & starcuts]['DEC'] ))
-    np.savetxt( 'SDSS_rejectedObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
-
-    DAT = np.column_stack(( C['RA'], C['DEC'] ))
-    np.savetxt( 'MatchedPlausible_cmassObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
-    
-    
-    sdss_cmass, _ = SDSS_cmass_criteria(sdss)
-    plausible_cmass, _ = DES_to_SDSS.match( SDSS_reject[use & starcuts], sdss_cmass )
-    DAT = np.column_stack(( plausible_cmass['RA'], plausible_cmass['DEC'] ))
-    np.savetxt( 'plausible_cmassObj.txt', DAT, delimiter = ' ', header = ' ra, dec' )
-
-    return 0
-
-    #sdss_match, cmass_match = DES_to_SDSS.match(sdss, clean_cmass_data)
-    #C, _, _ = h.match(sdss_cmass['RA'],testC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'],1./3600,maxmatch=1)
-    #Indmask = np.in1d(clean_cmass_data['OBJID'], clean_cmass_data['OBJID'] )
-  
-
-
-    trueCMASS, _, _ = h.match(testC['RA'], testC['DEC'], clean_cmass_data['RA'], clean_cmass_data['DEC'], 1./3600, maxmatch = 1 )
-    trueCMASSInd, _, _ = h.match(clean_cmass_data['RA'], clean_cmass_data['DEC'], testC['RA'], testC['DEC'], 1./3600, maxmatch = 1 )
-
-    trueCMASSmask = np.zeros( clean_cmass_data.size, dtype=bool)
-    trueCMASSmask[trueCMASSInd] = 1
-    missingCMASS = clean_cmass_data[~trueCMASSmask]
-
-
-
-
-
-    stop
-
-
 
 
 
@@ -2071,72 +1612,6 @@ if __name__ == "__main__":
         thingtype, value, tb = sys.exc_info()
         traceback.print_exc()
         pdb.post_mortem(tb)
-
-
-
-
-    # -------------------------------------
-    
-    
-    
- 
-
-def misc():
-    
-    # testing dmass with angular correlation function ------------------------------------------------
-    dmass = DMASSALL.copy()
-    #rand_catD = Balrog_DMASS.copy()
-    import fitsio
-    cmass_cat_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South.fits.gz')
-    rand_cat_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/random0_DR12v5_CMASS_South.fits.gz')
-    
-    cmass_catS = Cuts.SpatialCuts(cmass_cat_SGC, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    rand_catS = Cuts.SpatialCuts(rand_cat_SGC, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    
-    dmass_cat = Cuts.SpatialCuts(dmass, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    rand_catD = rand_catS.copy()
-    
-    weight_rand_SGC = rand_cat_SGC['WEIGHT_FKP']
-    weight_data_SGC = cmass_cat_SGC['WEIGHT_FKP'] * cmass_cat_SGC['WEIGHT_STAR'] * ( cmass_cat_SGC['WEIGHT_CP']+cmass_cat_SGC['WEIGHT_NOZ'] -1. )
-    weight_randS = rand_catS['WEIGHT_FKP']
-    weight_dataS = cmass_catS['WEIGHT_FKP'] * cmass_catS['WEIGHT_STAR'] * ( cmass_catS['WEIGHT_CP']+cmass_catS['WEIGHT_NOZ'] -1. )
-    theta_SGC, w_SGC, _ = angular_correlation(cmass_cat_SGC, rand_cat_SGC, weight = [weight_data_SGC, weight_rand_SGC])
-    thetaS, wS, werrS = angular_correlation(cmass_catS, rand_catS, weight = [weight_dataS, weight_randS])
-    thetaD, wD, werrD = angular_correlation(dmass, rand_catD)
-
-    # jk errors
-
-    from astroML.plotting import setup_text_plots
-    setup_text_plots(fontsize=20, usetex=True)
-
-    njack = 10
-    raTag = 'RA'
-    decTag = 'DEC'
-    _, jkerr_SGC = jk_error( cmass_cat_SGC, njack = njack , target = angular_correlation, jkargs=[cmass_cat_SGC, rand_cat_SGC], jkargsby=[[raTag, decTag],[raTag, decTag]], raTag = raTag, decTag = decTag )
-    _, Sjkerr = jk_error( cmass_catS, njack = njack , target = angular_correlation, jkargs=[cmass_catS, rand_catS], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    _, Djkerr = jk_error( dmass, njack = njack , target = angular_correlation, jkargs=[dmass, rand_catD], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-
-    #    DAT = np.column_stack(( theta_NGC, w_NGC, jkerr_NGC, theta_SGC, w_SGC, jkerr_SGC, thetaS, wS, Sjkerr  ))
-    #np.savetxt( 'cmass_acf.txt', DAT, delimiter = ' ', header = ' theta_NGC  w_NGC  jkerr_NGC  theta_SGC  w_SGC   jkerr_SGC   thetaS  wS  Sjkerr ' )
-
-    fig, ax = plt.subplots(1,1, figsize = (7, 7))
-
-    #ax.errorbar( theta_SGC*0.95, w_SGC, yerr = jkerr_SGC, fmt = '.', label = 'SGC')
-    ax.errorbar( thetaS* 1.05, wS, yerr = Sjkerr, fmt = '.', label = 'CMASS')
-    ax.errorbar( thetaD, wD, yerr = Djkerr, fmt = '.', label = 'DMASS')
-
-    ax.set_xlim(1e-2, 10)
-    ax.set_ylim(1e-4, 10)
-    ax.set_xlabel(r'$\theta(deg)$')
-    ax.set_ylabel(r'${w(\theta)}$')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.legend(loc = 'best')
-    ax.set_title(' angular correlation ')
-
-
-
-
 
 
 
