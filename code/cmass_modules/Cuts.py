@@ -5,8 +5,6 @@ import os
 #import healpy as hp
 import numpy as np
 import pandas as pd
-import matplotlib as mpl
-mpl.use('Agg')
 #import matplotlib.pyplot as plt
 import numpy.lib.recfunctions as rf
 #import seaborn as sns
@@ -47,9 +45,9 @@ def modestify(data):
     neither = -(galcut | starcut)
     modest[neither] = 5
     
-    data = rf.append_fields(data, 'MODETYPE', modest)
+    #data = rf.append_fields(data, 'MODETYPE', modest)
     print np.sum(galcut), np.sum(starcut), np.sum(neither)
-    return data
+    return modest
 
 
 def keepGoodRegion(des, balrog=None):
@@ -122,7 +120,6 @@ def doBasicCuts(des, balrog=None, object = 'galaxy'):
         theta = ( 90.0 - des['DELTAWIN_J2000_DET'] ) * np.pi/180.0
     
     else:
-    
         phi = des['RA'] * np.pi / 180.0
         theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
     
@@ -130,15 +127,15 @@ def doBasicCuts(des, balrog=None, object = 'galaxy'):
     keep = np.in1d(hpInd,ind_good_ring)
     des = des[keep]
     
-    des = modestify(des)
+    modtype = modestify(des)
     
     use = ((des['FLAGS_G'] < 3) &
            (des['FLAGS_R'] < 3) &
            (des['FLAGS_I'] < 3) &
-           (des['FLAGS_Z'] < 3))  #& (des['MODETYPE'] == 1)
+           (des['FLAGS_Z'] < 3))
 
-    if object is 'galaxy': use = use & (des['MODETYPE'] == 1)
-    elif object is 'star'  : use = use & (des['MODETYPE'] == 3)
+    if object is 'galaxy': use = use & (modtype == 1)
+    elif object is 'star'  : use = use & (modtype == 3)
     elif object is None : print 'no object selected. retrieve star + galaxy both'
     
     taglist = ['MAG_MODEL'] #, 'MAG_DETMODEL','MAG_AUTO', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
@@ -163,31 +160,47 @@ def doBasicCuts(des, balrog=None, object = 'galaxy'):
 
 
 def doBasicSDSSCuts(sdss):
-    exclude = 2**1 + 2**11 + 2**5 + 2**19 + 2**5 + 2**19 + 2**7
-    blended = 3 # 2**3
-    nodeblend = 6 #2**6
-    saturated = 18 #2**18
+    # (Reid 2016 Section 2.2)
+    # photometric quality flags
+    import healpy as hp
+    # bad region mask (DES footprint)
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
+    badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    # Note that the masks here in in equatorial, ring format.
+    gdmask = hp.read_map(goodmask)
+    bdmask = hp.read_map(badmask)
+
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) )
+    # healpixify the catalog.
+    nside=4096
+    # Convert silly ra/dec to silly HP angular coordinates.
+    phi = sdss['RA'] * np.pi / 180.0
+    theta = ( 90.0 - sdss['DEC'] ) * np.pi/180.0
+
+
+    hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+    keep = np.in1d(hpInd,ind_good_ring)
+    sdss  = sdss[keep]
+
+    # quality cut ( Reid et al. 2016 Section 2.2 )
+    exclude = 2**1 + 2**5 + 2**7 + 2**11 + 2**19 # BRIGHT, PEAK CENTER, NO PROFILE, DEBLENDED_TOO_MANY_PEAKS, NOT_CHECKED
+    # blended object
+    blended = 2**3
+    nodeblend = 2**6
+    # obejct not to be saturated
+    saturated = 2**18
     saturated_center = 2**(32+11)
-    use = ( (sdss['CLEAN'] == 1 ) & (sdss['FIBER2MAG_I'] < 25) &
-           (sdss['TYPE'] == 3) &
+
+    use =  ( 
+	    (sdss['CLEAN'] == 1 ) & (sdss['FIBER2MAG_I'] < 22.5) &
+            (sdss['TYPE'] == 3) &
            ( ( sdss['FLAGS'] & exclude) == 0) &
            ( ((sdss['FLAGS'] & saturated) == 0) | (((sdss['FLAGS'] & saturated) >0) & ((sdss['FLAGS'] & saturated_center) == 0)) ) &
            ( ((sdss['FLAGS'] & blended) ==0 ) | ((sdss['FLAGS'] & nodeblend) ==0) ) )
            
-    """
-    # Covey et al. 2007 Clear SDSS photometry
-    deblended_as_moving =2**(32+0)
-    primary = 2**0
-    edge = 2**2
-    psf_flux_interp = 2**(32+15)
-    interp_center = 2**(32+12)
-    
-    clear = ((sdss['FLAGS'] & deblended_as_moving == 0) & (sdss['FLAGS'] & edge == 0) &
-             (sdss['FLAGS'] & psf_flux_interp == 0) & (sdss['FLAGS'] & interp_center == 0) &
-             (sdss['RESOLVESTATUS'] & primary == 1) )
-    
-    """
     return sdss[use] # & clear] # & completness95]
+
 
 def SpatialCuts(  data, ra = 350.0, ra2=355.0 , dec= 0.0 , dec2=1.0 ):
     
@@ -196,7 +209,7 @@ def SpatialCuts(  data, ra = 350.0, ra2=355.0 , dec= 0.0 , dec2=1.0 ):
         decli = data['DEC']
 
     except (ValueError, NameError) :
-        print "Can't RA and DEC column. Try with 'ALPHAWIN_J2000_DET' column"
+        print "Can't RA and DEC column. Try with 'ALPHAWIN_J2000_DET' and 'DELTAWIN_J2000_DET' column"
         ascen = data['ALPHAWIN_J2000_DET']
         decli = data['DELTAWIN_J2000_DET']
         

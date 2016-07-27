@@ -257,7 +257,7 @@ def scikitfitting( sdss, des, filter = 'G', Scolorkind = 'MODELMAG'):
     sdss_exp = sdss[expcut]
     sdss_dev = sdss[devcut]
 
-    tags = ['MAG_DETMODEL', 'MAG_MODEL', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
+    tags = ['MAG_DETMODEL', 'MAG_MODEL', 'MAG_PETRO', 'MAG_PSF']
     filters = ['G', 'R', 'I', 'Z']
     magnitudes = [  tag+'_'+thisfilter+colorCorrection for tag, thisfilter in zip(tags, filters)]
     X_exp = np.array([ des_exp[ mag ] for mag in magnitudes ]).T
@@ -439,11 +439,12 @@ def ColorTransform(data):
     
     from pandas import DataFrame, concat
 
-    magTaglist = ['MAG_DETMODEL', 'MAG_MODEL', 'MAG_PETRO', 'MAG_HYBRID', 'MAG_PSF','MAG_APER_2',
-                  'MAG_APER_3', 'MAG_APER_4','MAG_APER_5','MAG_APER_6','MAG_APER_7','MAG_APER_8','MAG_APER_9', 'MAG_APER_10', 'MAG_AUTO']
+    #magTaglist = ['MAG_DETMODEL', 'MAG_MODEL', 'MAG_PETRO', 'MAG_HYBRID', 'MAG_PSF','MAG_AUTO',
+    #              'MAG_APER_2', 'MAG_APER_3', 'MAG_APER_4','MAG_APER_5' ] #,'MAG_APER_6','MAG_APER_7','MAG_APER_8','MAG_APER_9', 'MAG_APER_10']
     
+    magTaglist = ['MAG_MODEL', 'MAG_AUTO', 'MAG_APER_3', 'MAG_APER_4','MAG_APER_5','MAG_APER_6' ]
+    combine = add_SDSS_colors(data, magTag_template = 'MAG_DETMODEL')
     
-    combine = add_SDSS_colors(data, magTag_template = 'MAG_APER_11')
     for magTag in magTaglist:
     
         strip = add_SDSS_colors(data, magTag_template = magTag)
@@ -451,7 +452,7 @@ def ColorTransform(data):
 
     data = DataFrame(data.data)
     data = concat([data, combine], axis=1)
-    del data['index']
+    #del data['index']
     matched_arr = data.to_records()
     return matched_arr
 
