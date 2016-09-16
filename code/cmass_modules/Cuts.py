@@ -50,7 +50,7 @@ def modestify(data):
     return modest
 
 
-def keepGoodRegion(des, balrog=None):
+def keepGoodRegion(des, hpInd = False, balrog=None):
     import healpy as hp
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
@@ -87,10 +87,13 @@ def keepGoodRegion(des, balrog=None):
     hpInd = hp.ang2pix(nside,theta,phi,nest=False)
     keep = np.in1d(hpInd,ind_good_ring)
     des = des[keep]
-    return des
+    if hpInd is True:
+        return ind_good_ring
+    else:
+        return des
 
 
-def doBasicCuts(des, balrog=None, object = 'galaxy'):
+def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy'):
     import healpy as hp
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
@@ -120,8 +123,8 @@ def doBasicCuts(des, balrog=None, object = 'galaxy'):
         theta = ( 90.0 - des['DELTAWIN_J2000_DET'] ) * np.pi/180.0
     
     else:
-        phi = des['RA'] * np.pi / 180.0
-        theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
+        phi = des[raTag] * np.pi / 180.0
+        theta = ( 90.0 - des[decTag] ) * np.pi/180.0
     
     hpInd = hp.ang2pix(nside,theta,phi,nest=False)
     keep = np.in1d(hpInd,ind_good_ring)
@@ -183,6 +186,7 @@ def doBasicSDSSCuts(sdss):
     keep = np.in1d(hpInd,ind_good_ring)
     sdss  = sdss[keep]
 
+
     # quality cut ( Reid et al. 2016 Section 2.2 )
     exclude = 2**1 + 2**5 + 2**7 + 2**11 + 2**19 # BRIGHT, PEAK CENTER, NO PROFILE, DEBLENDED_TOO_MANY_PEAKS, NOT_CHECKED
     # blended object
@@ -191,15 +195,68 @@ def doBasicSDSSCuts(sdss):
     # obejct not to be saturated
     saturated = 2**18
     saturated_center = 2**(32+11)
-
+    
     use =  ( 
-	    (sdss['CLEAN'] == 1 ) & (sdss['FIBER2MAG_I'] < 22.5) &
+            (sdss['CLEAN'] == 1 ) &
+            #(sdss['FIBER2MAG_I'] < 22.5) &
             (sdss['TYPE'] == 3) &
            ( ( sdss['FLAGS'] & exclude) == 0) &
-           ( ((sdss['FLAGS'] & saturated) == 0) | (((sdss['FLAGS'] & saturated) >0) & ((sdss['FLAGS'] & saturated_center) == 0)) ) &
-           ( ((sdss['FLAGS'] & blended) ==0 ) | ((sdss['FLAGS'] & nodeblend) ==0) ) )
-           
+           ( ((sdss['FLAGS'] & saturated) == 0) | (((sdss['FLAGS'] & saturated) > 0) & ((sdss['FLAGS'] & saturated_center) == 0) ) )&
+           ( ((sdss['FLAGS'] & blended) == 0 ) | ((sdss['FLAGS'] & nodeblend) ==0) ) )
+    
+    """
+    
+    # Cuts Ashley used
+    binned = 1879048192
+    blending = 8
+    bright =2
+    edge = 4
+    saturated = 2**18
+    
+    use = (
+              #  ((sdss['FLAGS'] & binned) > 0) |
+           ((sdss['FLAGS'] & blending) < 8) &
+           ((sdss['FLAGS'] & bright) == 0) &
+           ((sdss['FLAGS'] & edge) == 0) &
+           ((sdss['FLAGS'] & saturated) == 0)
+              )
+    """
     return sdss[use] # & clear] # & completness95]
+
+def CMASSQaulityCut( sdss ):
+
+    # quality cut ( Reid et al. 2016 Section 2.2 )
+    exclude = 2**1 + 2**5 + 2**7 + 2**11 + 2**19 # BRIGHT, PEAK CENTER, NO PROFILE, DEBLENDED_TOO_MANY_PEAKS, NOT_CHECKED
+    # blended object
+    blended = 2**3
+    nodeblend = 2**6
+    edge = 2**2
+    # obejct not to be saturated
+    saturated = 2**18
+    saturated_center = 2**(32+11)
+    
+    # Ashley
+    use1 = (
+           (sdss['CLEAN'] == 1 ) &
+           #(sdss['TYPE'] == 3) &
+           ((sdss['FLAGS'] & edge ) == 0) &
+           (~((sdss['FLAGS'] & 88 ) == 8)) &
+           ((sdss['FLAGS'] & 2 ) == 0) &
+           ((sdss['FLAGS'] & edge ) == 0) &
+           ((sdss['FLAGS'] & saturated ) == 0) &
+           (~((sdss['FLAGS'] & 1879048192 ) == 0))
+           )
+    # Reid
+    use =  (
+            (sdss['CLEAN'] == 1 ) &
+            #(sdss['FIBER2MAG_I'] < 21.5) &
+            (sdss['TYPE'] == 3) & ((sdss['FLAGS'] & edge ) == 0) &
+            ( ( sdss['FLAGS'] & exclude) == 0) &
+            ( ((sdss['FLAGS'] & saturated) == 0) | (((sdss['FLAGS'] & saturated) > 0) & ((sdss['FLAGS'] & saturated_center) == 0) ) )&
+            ( ((sdss['FLAGS'] & blended) == 0 ) | ((sdss['FLAGS'] & nodeblend) ==0) ) )
+
+    print np.sum(~use), " objects excluded"
+    return sdss[use]
 
 
 def SpatialCuts(  data, ra = 350.0, ra2=355.0 , dec= 0.0 , dec2=1.0 ):

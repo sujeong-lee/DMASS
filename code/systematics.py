@@ -44,13 +44,47 @@ def excludeBadRegions(des, balrogObs, balrogTruthMatched, balrogTruth, band=None
     return des, balrogObs, balrogTruthMatched, balrogTruth
 
 
+def callingEliGoldMask():
+    
+    # calling gold mask ----------------------------------------------------------------
+    import healpy as hp
+    import numpy as np
+    from systematics import hpHEALPixelToRaDec
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+    
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
+    badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    # Note that the masks here in in equatorial, ring format.
+    gdmask = hp.read_map(goodmask)
+    bdmask = hp.read_map(badmask)
+    fraction = hp.read_map(path+'Y1A1_WIDE_frac_combined_griz_o.4096_t.32768_EQU.fits')
+    
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0))[0]
+    # healpixify the catalog.
+    nside=4096
+    GoldMask = np.zeros((ind_good_ring.size, ), dtype=[('PIXEL', 'i4'), ('FRAC', 'f8'), ('RA', 'f8'), ('DEC', 'f8')])
+    GoldMask['PIXEL'] = ind_good_ring
+    GoldMask['FRAC'] = fraction[ind_good_ring]
+    sys_ra, sys_dec = hpHEALPixelToRaDec(ind_good_ring, nside = nside)
+    GoldMask['RA'] = sys_ra
+    GoldMask['DEC'] = sys_dec
+    
+    """ should consider cut-off ?? """
+    # ----------------------------------------------------------------
+    return GoldMask
+
+
 def loadSystematicMaps(  property ='AIRMASS', filter='g', nside = 1024, filename = None, kind = 'STRIPE82' ):
 
     import healpy as hp
+        
     path = '/n/des/lee.5922/data/systematic_maps/'
     
     if kind is 'SPT' : path = '/n/des/lee.5922/data/systematic_maps/Y1A1NEW_COADD_SPT/nside4096_oversamp4/'
     if kind is 'Y1A1': path = '/n/des/lee.5922/data/systematic_maps/Y1A1_SPT_and_S82_IMAGE_SRC/nside4096_oversamp4/'
+    
     
     if filename is not None:
         try:
@@ -89,36 +123,11 @@ def loadSystematicMaps(  property ='AIRMASS', filter='g', nside = 1024, filename
     return sysMap
 
 
-def GalaxyDensity_Systematics( catalog, sysMap, nside = 256, raTag = 'RA', decTag='DEC', property = 'NSTARS'):
+def GalaxyDensity_Systematics( catalog, sysMap, rand = None, weight = None, nside = 4096, raTag = 'RA', decTag='DEC', property = 'NSTARS', filter='g'):
     #property ='AIRMASS', filter='g', nside = 128, raTag = 'RA', decTag='DEC'):
     import healpy as hp
     
-    """
-    path = '/n/des/lee.5922/data/systematic_maps/'
-    for i in os.listdir(path):
-        if os.path.isfile(os.path.join(path,i)) and property.upper()+'__mean' in i and 'band_'+filter.lower() in i:
-            print i
-            sysMap_hp = hp.read_map( path+i, nest=False)
-            #sysMap = fitsio.read(path+i)
-            sysMap_ud = hp.ud_grade(sysMap_hp, nside_out = nside )
-
-
-    nside = hp.get_nside(sysMap_ud)
-    goodmask = hp.mask_good(sysMap_ud)
-    maskIndices = np.arange(sysMap_ud.size)
-    goodIndices = maskIndices[goodmask]
-    clean_map = sysMap_ud[goodmask]
-    
-    sysMap = np.zeros((clean_map.size, ), dtype=[('PIXEL', 'i4'), ('SIGNAL', 'f8')])
-    sysMap['PIXEL'] = goodIndices
-    sysMap['SIGNAL'] = clean_map
-    """
-    
-    
-    #masked_catalog = es.hp.ApplyMask(mask=sysMap, cat=catalog, ra='RA', dec='DEC', val=1, cond='>=')
-
-    
-    
+    if weight is None: weight = 1.0 * np.ones(catalog.size)
     
     # gal number density vs survey property
     catHpInd = hpRaDecToHEALPixel(catalog[raTag], catalog[decTag], nside=nside, nest= False)
@@ -130,17 +139,43 @@ def GalaxyDensity_Systematics( catalog, sysMap, nside = 256, raTag = 'RA', decTa
     FullArea = hp.nside2pixarea(nside, degrees = True) * N_validPixel
 
     # total number of galaxies in the input catalog
-    Ngal_total = HpIdxInSys.size
+    Ngal_total = np.sum(weight[HpIdxInSys_mask]) # HpIdxInSys.size
 
     P = 1e+4
     n_bar = 1e-4
     
-    
     bin_num = 15
-    if property == 'NSTARS': bin_num = bin_num * 2
-    #if property == 'SKYSIGMA': bin_num = bin_num * 2
-    bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = np.min(sysMap['SIGNAL']), max = np.max(sysMap['SIGNAL']), bin_num = bin_num )
+    min = np.min(sysMap['SIGNAL'])
+    max = np.max(sysMap['SIGNAL'])
     
+    
+    if property == 'NSTARS': bin_num = bin_num * 2
+    if property == 'AIRMASS':
+        if filter == 'z' : min = 1.0
+    if property == 'FWHM' :
+        #bin_num = bin_num * 2
+        if filter == 'i' : max = 5.0
+        if filter == 'z' : max = 5.0
+    if property == 'SKYBRITE' :
+        #bin_num = bin_num * 2
+        if filter == 'g' : max = 150
+        if filter == 'r' : max = 380
+        if filter == 'i' : max = 1200
+    if property == 'SKYSIGMA' :
+        #bin_num = bin_num * 2
+        if filter == 'g' : max = 6.5
+        if filter == 'r' : max = 9.5
+        if filter == 'i' : max = 18
+        if filter == 'z' : max = 26
+
+    print 'max', max
+    bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = min, max = max, bin_num = bin_num )
+
+    if rand is not None:
+        randHpInd = hpRaDecToHEALPixel(rand[raTag], rand[decTag], nside=nside, nest= False)
+        randHpIdxInSys_mask = np.in1d(randHpInd, sysMap['PIXEL'])
+        randHpIdxInSys = randHpInd[randHpIdxInSys_mask]
+        Nrand_total = randHpIdxInSys.size
     
     """
     z_bin, step = np.linspace(0.0, 1.0, 20, retstep = True)
@@ -153,29 +188,30 @@ def GalaxyDensity_Systematics( catalog, sysMap, nside = 256, raTag = 'RA', decTa
     w_FKP = 1./( 1 + n_bar * P )
     galaxy_density_list = []
     err = []
-    for sys_i in binned_cat:
+    f_area = []
+    for i, sys_i in enumerate(binned_cat):
         
         HpIdxInsys_i_mask = np.in1d(catHpInd, sys_i['PIXEL'])
         HpIdxInsys_i = catHpInd[HpIdxInsys_i_mask]
-        #sNpix = len(set(HpIdxInsys_i))
+        #Npix = len(set(HpIdxInsys_i))
         Npix = len(sys_i)
-        Ngal = HpIdxInsys_i.size
+        Ngal = np.sum(weight[HpIdxInsys_i_mask])  #HpIdxInsys_i.size
+        area_i = hp.nside2pixarea(nside, degrees = True) * Npix
+        f_area.append(area_i * 1./FullArea)
         
-        #Npix = len(sys_i)
-        #Ngal = np.sum(np.in1d(hpInd, sys_i['PIXEL']))
         
-        #keephpInd = sysMap[k]['PIXEL']
-        #keep = np.in1d(hpInd, keephpInd)
-        #Npix = len(set(hpInd[keep])) * 1.0
-        
-        #PixelArea = hp.nside2pixarea(nside, degrees = True) * Npix
-        #galaxy_density = np.sum(keep)/PixelArea
-        #norm_galaxy_density = galaxy_density /n_total
-        
-        #N_gal = len(catalog[keep]) * 1.0
-        
+        if rand is not None:
+            randHpIdxInsys_i_mask = np.in1d(randHpInd, sys_i['PIXEL'])
+            randHpIdxInsys_i = randHpInd[randHpIdxInsys_i_mask]
+            #Npix = len(set(HpIdxInsys_i))
+            Npix = len(sys_i)
+            Nrand = randHpIdxInsys_i.size
+    
         try:
-            norm_galaxy_density = (Ngal * 1./Npix) * ( N_validPixel * 1./Ngal_total )
+            if rand is not None : norm_galaxy_density = (Ngal * 1./Nrand) * ( Nrand_total/Ngal_total )
+            else : norm_galaxy_density = (Ngal * 1./Npix) * ( N_validPixel * 1./Ngal_total )
+            
+            
             #print 'N_gal/Npix, N_tot/Npix,tot :', Ngal *1./Npix, Ngal_total*1./N_validPixel, norm_galaxy_density
         
         except ZeroDivisionError : norm_galaxy_density = float('nan')
@@ -189,7 +225,8 @@ def GalaxyDensity_Systematics( catalog, sysMap, nside = 256, raTag = 'RA', decTa
             err.append( 1./np.sqrt(Ngal * w_FKP) * norm_galaxy_density)
             galaxy_density_list.append(norm_galaxy_density)
 
-    return np.array(bin_center), np.array(galaxy_density_list), np.array(err)
+        #print 'bin :', bin_center[i], ' Ngal :', Ngal, ' Ngal_tot :', Ngal_total, ' ngal : ',norm_galaxy_density
+    return np.array(bin_center), np.array(galaxy_density_list), np.array(err), np.array(f_area)
 
 
 
@@ -208,22 +245,22 @@ def GetCov(full_j, it_j, njack):
     cov = norm * cov
     return cov
 
-
-
-def jksampling(catalog, sysMap, nside = 256, njack = 10, raTag = 'RA', decTag = 'DEC' ):
+def jksampling(catalog, sysMap, property = 'NSTARS', nside = 256, njack = 10, raTag = 'RA', decTag = 'DEC' ):
     import os
     
     # jk error
     jkfile = './jkregion.txt'
     njack = njack
     jk.GenerateJKRegions( catalog[raTag], catalog[decTag], njack, jkfile)
-    jktest = jk.SphericalJK( target = GalaxyDensity_Systematics, jkargs=catalog, jkargsby=[raTag, decTag], jkargspos=None, nojkargs=[sysMap], nojkargspos=1, nojkkwargs={ 'nside':nside, 'raTag':raTag, 'decTag':decTag}, regions = jkfile)
+    jktest = jk.SphericalJK( target = GalaxyDensity_Systematics, jkargs=catalog, jkargsby=[raTag, decTag], jkargspos=None, nojkargs=[sysMap], nojkargspos=1, nojkkwargs={ 'nside':nside, 'raTag':raTag, 'decTag':decTag, 'property':property }, regions = jkfile)
     jktest.DoJK( regions = jkfile)
     jkresults = jktest.GetResults(jk=True, full = True)
 
     full_j = jkresults['full'][1]
     it_j = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
 
+    print full_j.size
+    print len(it_j)
 
     njack = len(it_j) #redefine njack
     norm = 1. * (njack-1)/njack
@@ -233,7 +270,7 @@ def jksampling(catalog, sysMap, nside = 256, njack = 10, raTag = 'RA', decTag = 
         cov +=  (it_j[k] - full_j)**2 # * (it_j[k][matrix2]- full_j[matrix2] )
     
     cov = norm * cov
-    os.remove(jkfile)
+    #os.remove(jkfile)
 
     return np.sqrt(cov)
 
@@ -445,6 +482,7 @@ def hpHEALPixelToRaDec( hpPixel, nside = 256 ):
     ra, dec = GetRaDec(phi,theta)
     return [ra, dec]
 
+
 def HealPixifyCatalogs(catalog=None, healConfig=None, ratag='ra', dectag = 'dec'):
     HealInds = hpRaDecToHEALPixel( catalog[ratag],catalog[dectag], nside= healConfig['out_nside'], nest= False)
     if 'HEALIndex' in catalog.dtype.fields:
@@ -465,7 +503,24 @@ def getHealConfig(map_nside = 4096, out_nside = 128,
     HealConfig['nest'] = True
     return HealConfig
 
-                                  
+
+def MatchHPArea(cat=None, sysMap=None, origin_cat=None, nside=512):
+
+    origin_HealInds = hpRaDecToHEALPixel( origin_cat['RA'],origin_cat['DEC'], nside= nside, nest= False)
+
+    if cat is not None:
+        HealInds = hpRaDecToHEALPixel( cat['RA'],cat['DEC'], nside= nside, nest= False)
+        HPmask = np.in1d( HealInds, origin_HealInds )
+        maskedcat = cat[HPmask]
+        return maskedcat
+
+    elif sysMap is not None:
+
+        HpPixnum_mask = np.in1d( sysMap['PIXEL'], origin_HealInds )
+        return sysMap[HpPixnum_mask]
+
+
+
 
 def getGoodRegionIndices(catalog=None, badHPInds=None, nside=4096,band=None, raTag = 'ra', decTag = 'dec'):
     hpInd = hpRaDecToHEALPixel(catalog[raTag], catalog[decTag], nside=nside, nest= True)
@@ -496,10 +551,10 @@ def chisquare_dof( bin, galaxy_density, err ):
     err = err[zeromask]
     bin = bin[zeromask]
     chisquare = np.sum( (galaxy_density - 1.0 * np.ones(galaxy_density.size))**2/err**2 )
-    return chisquare, chisquare/len(bin)
+    return chisquare, chisquare/np.sum(zeromask)
                        
-
-def angular_correlation(data, rand, weight = None):
+"""
+def _acf(data, rand, weight = None):
     # cmass and balrog : all systematic correction except obscuration should be applied before passing here
     
     import treecorr
@@ -511,12 +566,12 @@ def angular_correlation(data, rand, weight = None):
         weight_data = weight[0]
         weight_rand = weight[1]
 
-    cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w_col = weight_data, ra_units='deg', dec_units='deg')
-    cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w_col = weight_rand, ra_units='deg', dec_units='deg')
+    cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w = weight_data, ra_units='deg', dec_units='deg')
+    cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w = weight_rand, ra_units='deg', dec_units='deg')
 
     nbins = 20
     bin_size = 0.5
-    min_sep = .001
+    min_sep = .01
     sep_units = 'degree'
     dd = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
     dr = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
@@ -529,22 +584,59 @@ def angular_correlation(data, rand, weight = None):
 
     return dd.meanr, xi, varxi
 
+def angular_correlation(data = None, rand = None, weight = None, suffix = ''):
+    # jk sampling
+    import os
+    from suchyta_utils import jk
+    print 'calculate angular correlation function'
+    #r, xi, xierr = _acf( data, rand, weight = weight )
+    
+    jkfile = './jkregion.txt'
+    njack = 30
+    raTag, decTag = 'RA', 'DEC'
+    jk.GenerateJKRegions( data[raTag], data[decTag], njack, jkfile )
+    jktest = jk.SphericalJK( target = _acf, jkargs=[ data, rand ], jkargsby=[[raTag, decTag],[raTag, decTag]], regions = jkfile, nojkkwargs = {'weight':weight})
+    jktest.DoJK( regions = jkfile )
+    jkresults = jktest.GetResults(jk=True, full = True)
+    os.remove(jkfile)
+    r, xi, varxi = jkresults['full']
+    
+    # getting jk err
+    xi_i = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
+    
+    norm = 1. * (njack-1)/njack
+    xi_cov = 0
+    for k in range(njack):
+        xi_cov +=  (xi_i[k] - xi)**2 # * (it_j[k][matrix2]- full_j[matrix2] )
+    xijkerr = np.sqrt(norm * xi_cov)
+
+    filename = 'data_txt/acf_comparison'+suffix+'.txt'
+    header = 'r, xi, jkerr'
+    DAT = np.column_stack((r, xi, xijkerr ))
+    np.savetxt( filename, DAT, delimiter=' ', header=header )
+    print "saving data file to : ",filename
+    #return r, xi, jkerr
 
 def _cross_acf(data, data2, rand, rand2, weight = None):
     
     import treecorr
     
-    weight_data = None
-    weight_rand = None
+    weight_data1 = None
+    weight_data2 = None
+    weight_rand1 = None
+    weight_rand2 = None
     
     if weight is not None:
-        weight_data = weight[0]
-        weight_rand = weight[1]
+        weight_data1 = weight[0]
+        weight_rand1 = weight[1]
+        weight_data2 = weight[2]
+        weight_rand2 = weight[3]
+
     
-    cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w_col = weight_data, ra_units='deg', dec_units='deg')
-    cat2 = treecorr.Catalog(ra=data2['RA'], dec=data2['DEC'], w_col = weight_data, ra_units='deg', dec_units='deg')
-    cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w_col = weight_rand, ra_units='deg', dec_units='deg')
-    cat_rand2 = treecorr.Catalog(ra=rand2['RA'], dec=rand2['DEC'], is_rand=True, w_col = weight_rand, ra_units='deg', dec_units='deg')
+    cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w = weight_data1, ra_units='deg', dec_units='deg')
+    cat2 = treecorr.Catalog(ra=data2['RA'], dec=data2['DEC'], w= weight_data2, ra_units='deg', dec_units='deg')
+    cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w = weight_rand1, ra_units='deg', dec_units='deg')
+    cat_rand2 = treecorr.Catalog(ra=rand2['RA'], dec=rand2['DEC'], is_rand=True, w = weight_rand2, ra_units='deg', dec_units='deg')
 
     #nbins = 30
     #bin_size = 0.2
@@ -570,7 +662,7 @@ def _cross_acf(data, data2, rand, rand2, weight = None):
     return dd.meanr, xi, varxi
 
 
-def cross_angular_correlation(data = None, data2 = None, rand = None, rand2= None, suffix = ''):
+def cross_angular_correlation(data = None, data2 = None, rand = None, rand2= None, weight = None, suffix = ''):
     # jk sampling
     import os
     from suchyta_utils import jk
@@ -579,11 +671,13 @@ def cross_angular_correlation(data = None, data2 = None, rand = None, rand2= Non
     njack = 10
     raTag, decTag = 'RA', 'DEC'
     jk.GenerateJKRegions( data[raTag], data[decTag], njack, jkfile )
-    jktest = jk.SphericalJK( target = _cross_acf, jkargs=[data, data2, rand, rand2], jkargsby=[[raTag, decTag],[raTag, decTag],[raTag, decTag],[raTag, decTag]], jkargspos=None, regions = jkfile)
+    jktest = jk.SphericalJK( target = _cross_acf, jkargs=[data, data2, rand, rand2], jkargsby=[[raTag, decTag],[raTag, decTag],[raTag, decTag],[raTag, decTag]], nojkkwargs = {'weight':weight}, jkargspos=None, regions = jkfile)
     jktest.DoJK( regions = jkfile )
     jkresults = jktest.GetResults(jk=True, full = True)
     os.remove(jkfile)
-    r, xi, varxi = jkresults['full']
+    #r, xi, varxi = jkresults['full']
+    
+    r, xi, varxi = _cross_acf(data, data2, rand, rand2, weight = weight )
     
     # getting jk err
     xi_i = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
@@ -601,8 +695,7 @@ def cross_angular_correlation(data = None, data2 = None, rand = None, rand2= Non
     print "saving data file to : ",filename
     #return r, xi, jkerr
 
-
-
+"""
 def CMASSclassifier(sdss_data, des_data, train_sample = None ):
 
     from cmass_stripe82 import cmass_criteria, classifier3
@@ -781,23 +874,25 @@ def SystematicMask( catalog, nside = 1024, raTag = 'RA', decTag = 'DEC' ):
     return CleanCatalogMask
 
 
+"""
+def _LS(lense, source, rand, weight = None, Boost = False):
 
-def _LS(lense, source, rand):
-    """
-        Calculate Lensing Signal deltaSigma, Boost Factor, Corrected deltaSigma
+
+    #Calculate Lensing Signal deltaSigma, Boost Factor, Corrected deltaSigma
+    
+    #parameter
+    #---------
+    #lense : lense catalog
+    #source : source catalog (shear catalog that contains e1, e2)
+    #rand : random catalog
+    
         
-        parameter
-        ---------
-        lense : lense catalog 
-        source : source catalog (shear catalog that contains e1, e2)
-        rand : random catalog
-        
-    """
-
-    #lense = cmass_catalog.copy()
-    # source = i3des_data.copy()
-    #rand = cmass_rand.copy()
-
+    
+    
+    import treecorr
+    
+    weight_lense, weight_source, weight_rand = weight
+    
     z_s_min = 0.7
     z_s_max = 1.0
     
@@ -834,8 +929,9 @@ def _LS(lense, source, rand):
     Sigma_critical = c**2 / (4 * np.pi * G) * dA_s_matrix/(dA_l_matrix * dA_ls)
     
     
-    import treecorr
-    
+  
+  
+
     min_sep_1 = 0.001
     bin_size = 0.4
     nbins = 30
@@ -843,47 +939,53 @@ def _LS(lense, source, rand):
     theta = [min_sep_1 * np.exp(bin_size * i) for i in range(nbins) ]
     r_p_bins = theta * dA_l[0]
 
-    n_SL = []
-    n_SR = []
-    N_SL = []
-    N_SR = []
-    
-    weight = 1./(Sigma_critical)**2
-    weight = np.ones(Sigma_critical.shape)
-    for i, S in enumerate(source_binned_cat):
-        source_cat = treecorr.Catalog(ra=S['RA'], dec=S['DEC'], ra_units='deg', dec_units='deg')
-        for (j, dA), L, R in zip( enumerate(dA_l), lense_binned_cat, rand_binned_cat ):
-            min_sep = theta[0] * dA_l[0]/dA
-            lense_cat = treecorr.Catalog(ra=L['RA'], dec=L['DEC'], ra_units='deg', dec_units='deg')
-            rand_cat = treecorr.Catalog(ra=R['RA'], dec=R['DEC'], ra_units='deg', dec_units='deg')
-            SL = treecorr.NNCorrelation(min_sep=min_sep, bin_size=bin_size, nbins = nbins, sep_units='degree')
-            SR = treecorr.NNCorrelation(min_sep=min_sep, bin_size=bin_size, nbins = nbins, sep_units='degree')
-            SL.process(lense_cat, source_cat)
-            SR.process(rand_cat, source_cat)
-            w = 1./weight[j,i]**2
-            n_SL.append(w * SL.npairs/np.sum(SL.npairs))
-            n_SR.append(w * SR.npairs/np.sum(SR.npairs))
-            N_SL.append(SL.npairs)
-            N_SR.append(SR.npairs)
-    
-        N_SL_list = np.sum( N_SL, axis = 0)
-        N_SR_list = np.sum( N_SR, axis = 0)
-        n_SL_list = np.sum( n_SL, axis = 0)
-        n_SR_list = np.sum( n_SR, axis = 0)
 
-    BoostFactor = n_SL_list/n_SR_list
+    if Boost is True:
+        n_SL = []
+        n_SR = []
+        N_SL = []
+        N_SR = []
+        
+        weight = 1./(Sigma_critical)**2
+        weight = np.ones(Sigma_critical.shape)
+        
+        print " **  To do : add Boost codes Weight "
+        
+        for i, S in enumerate(source_binned_cat):
+            source_cat = treecorr.Catalog(ra=S['RA'], dec=S['DEC'], ra_units='deg', dec_units='deg')
+            for (j, dA), L, R in zip( enumerate(dA_l), lense_binned_cat, rand_binned_cat ):
+                min_sep = theta[0] * dA_l[0]/dA
+                lense_cat = treecorr.Catalog(ra=L['RA'], dec=L['DEC'], ra_units='deg', dec_units='deg')
+                rand_cat = treecorr.Catalog(ra=R['RA'], dec=R['DEC'], ra_units='deg', dec_units='deg')
+                SL = treecorr.NNCorrelation(min_sep=min_sep, bin_size=bin_size, nbins = nbins, sep_units='degree')
+                SR = treecorr.NNCorrelation(min_sep=min_sep, bin_size=bin_size, nbins = nbins, sep_units='degree')
+                SL.process(lense_cat, source_cat)
+                SR.process(rand_cat, source_cat)
+                w = 1./weight[j,i]**2
+                n_SL.append(w * SL.npairs/np.sum(SL.npairs))
+                n_SR.append(w * SR.npairs/np.sum(SR.npairs))
+                N_SL.append(SL.npairs)
+                N_SR.append(SR.npairs)
+        
+            N_SL_list = np.sum( N_SL, axis = 0)
+            N_SR_list = np.sum( N_SR, axis = 0)
+            n_SL_list = np.sum( n_SL, axis = 0)
+            n_SR_list = np.sum( n_SR, axis = 0)
 
-    nbar = 1e-4
-    P = 1e+4
-    w_FKP = 1./(nbar*P + 1)
-    err = 1./ np.sqrt(w_FKP) / np.sqrt(N_SL_list) * BoostFactor
-    #err = 1./ np.sqrt(n_SL) * BoostFactor
+            BoostFactor = n_SL_list/n_SR_list
+
+            nbar = 1e-4
+            P = 1e+4
+            w_FKP = 1./(nbar*P + 1)
+            err = 1./ np.sqrt(w_FKP) / np.sqrt(N_SL_list) * BoostFactor
+            #err = 1./ np.sqrt(n_SL) * BoostFactor
 
 
 
 
     # Test Boost
-    """
+"""
+"""
     rand2 = cmass_rand[ (cmass_rand['Z'] > z_s_min) & (cmass_rand['Z'] < z_s_max) ]
     rand2_cat = treecorr.Catalog(ra=rand2['RA'], dec=rand2['DEC'], ra_units='deg', dec_units='deg',is_rand =True )
     #z_r_bincenter, rand2_binned_cat,_ = divide_bins( rand2, Tag = 'Z', min = 0.7, max = 1.0, bin_num = num_source_bin)
@@ -909,16 +1011,18 @@ def _LS(lense, source, rand):
         err_varxi.append(varxi)
     cross_rp = np.sum(cross_ang, axis = 0)
     err_varxi = np.sum(err_varxi, axis = 0)
-    """
+"""
+"""
 
 
     # lensing Signal
     
-    lense_cat_tot = treecorr.Catalog(ra=lense['RA'], dec=lense['DEC'], ra_units='deg', dec_units='deg')
-    source_cat_tot = treecorr.Catalog(ra=source['RA'], dec=source['DEC'], g1=source['E1'], g2 = source['E2'], ra_units='deg', dec_units='deg')
+    lense_cat_tot = treecorr.Catalog(ra=lense['RA'], dec=lense['DEC'], w = weight_lense, ra_units='deg', dec_units='deg')
+    source_cat_tot = treecorr.Catalog(ra=source['RA'], dec=source['DEC'], w = weight_source, g1=source['E1'], g2 = source['E2'], ra_units='deg', dec_units='deg')
     
     gamma_matrix = []
     varxi_matrix = []
+
     for dA in dA_l:
         min_sep = theta[0] * dA_l[0]/dA
         ng = treecorr.NGCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units='arcmin')
@@ -946,15 +1050,20 @@ def _LS(lense, source, rand):
         summed_sigma_crit.append(sc.value)
 
     delta_sigma = np.array(delta_sigma)/(len(z_l_bins) * len(z_s_bins))
-    Corrected_delta_sigma = np.array(BoostFactor) * delta_sigma
-    #delta_sigma_1bin = np.array(delta_sigma_1bin)/len(z_s_bins)
-    #summed_sigma_crit = np.array(summed_sigma_crit)/(len(z_l_bins) * len(z_s_bins))
-    #error_tot = np.sqrt(summed_sigma_crit**2 * varxi)
+
+    if Boost is True :
+        Corrected_delta_sigma = np.array(BoostFactor) * delta_sigma
+        return r_p_bins, np.array(BoostFactor), delta_sigma, Corrected_delta_sigma
+
+    else :
+        #delta_sigma_1bin = np.array(delta_sigma_1bin)/len(z_s_bins)
+        #summed_sigma_crit = np.array(summed_sigma_crit)/(len(z_l_bins) * len(z_s_bins))
+        #error_tot = np.sqrt(summed_sigma_crit**2 * varxi)
     
-    return r_p_bins, np.array(BoostFactor), delta_sigma, Corrected_delta_sigma
+        return r_p_bins, delta_sigma
 
 
-def LensingSignal(lense = None, source = None, rand = None, prefix = ''):
+def LensingSignal(lense = None, source = None, rand = None, weight = None, suffix = ''):
     
     # jk sampling
     import os
@@ -964,35 +1073,266 @@ def LensingSignal(lense = None, source = None, rand = None, prefix = ''):
     njack = 10
     raTag, decTag = 'RA', 'DEC'
     jk.GenerateJKRegions( lense[raTag], lense[decTag], njack, jkfile )
-    jktest = jk.SphericalJK( target = _LS, jkargs=[lense, source, rand], jkargsby=[[raTag, decTag],[raTag, decTag],[raTag, decTag]], jkargspos=None, regions = jkfile)
+    jktest = jk.SphericalJK( target = _LS, jkargs=[lense, source, rand], jkargsby=[[raTag, decTag],[raTag, decTag],[raTag, decTag]], nojkkwargs={'weight':weight}, regions = jkfile)
     jktest.DoJK( regions = jkfile )
     jkresults = jktest.GetResults(jk=True, full = True)
     os.remove(jkfile)
-    r_p_bins, BoostFactor, LensSignal, correctedLensSignal = jkresults['full']
+    r_p_bins, LensSignal = jkresults['full']
     
     # getting jk err
-    LensSignal_i = np.array( [jkresults['jk'][i][2] for i in range(njack)] )
-    correctedLensSignal_i = np.array( [jkresults['jk'][i][2] for i in range(njack)] )
-    Boost_i = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
+    LensSignal_i = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
+    #correctedLensSignal_i = np.array( [jkresults['jk'][i][2] for i in range(njack)] )
+    #Boost_i = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
     
     norm = 1. * (njack-1)/njack
-    Boost_cov, LensSignal_cov, correctedLensSignal_cov = 0, 0, 0
+    #Boost_cov, LensSignal_cov, correctedLensSignal_cov = 0, 0, 0
+    LensSignal_cov = 0
     for k in range(njack):
-        Boost_cov +=  (Boost_i[k] - BoostFactor)**2 # * (it_j[k][matrix2]- full_j[matrix2] )
+        #Boost_cov +=  (Boost_i[k] - BoostFactor)**2 # * (it_j[k][matrix2]- full_j[matrix2] )
         LensSignal_cov +=  (LensSignal_i[k] - LensSignal)**2
-        correctedLensSignal_cov +=  (correctedLensSignal_i[k] - correctedLensSignal)**2
+        #correctedLensSignal_cov +=  (correctedLensSignal_i[k] - correctedLensSignal)**2
 
-    Boostjkerr = np.sqrt(norm * Boost_cov)
+    #Boostjkerr = np.sqrt(norm * Boost_cov)
     LSjkerr = np.sqrt(norm * LensSignal_cov)
-    CLSjkerr = np.sqrt(norm * correctedLensSignal_cov)
+    #CLSjkerr = np.sqrt(norm * correctedLensSignal_cov)
 
-    filename = 'data_txt/'+prefix+'lensing.txt'
-    header = 'r_p_bins, LensSignal, LSjkerr, correctedLensSignal, CLSjkerr, BoostFactor, Boostjkerr'
-    DAT = np.column_stack((r_p_bins, LensSignal, LSjkerr, correctedLensSignal, CLSjkerr, BoostFactor, Boostjkerr ))
+    filename = 'data_txt/lensing_'+suffix+'.txt'
+    header = 'r_p_bins, LensSignal, LSjkerr'
+    DAT = np.column_stack((r_p_bins, LensSignal, LSjkerr ))
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     print "saving data file to : ",filename
+"""
 
 
+
+def ReciprocalWeights( catalog = None, sysMap = None, property = None, filter = None, nside = 4096, kind = None ):
+
+    if sysMap is None:
+        if property == 'NSTARS':
+            nside = 1024
+            filename = 'y1a1_gold_1.0.2_stars_nside1024.fits'
+            sysMap_o = loadSystematicMaps( filename = filename, nside = nside )
+                
+            if kind is 'STRIPE82' :sysMap = sysMap_o[sysMap_o['DEC'] > -3.0]
+            if kind is 'SPT' :sysMap = sysMap_o[sysMap_o['DEC'] < -3.0]
+            if kind is 'Y1A1':sysMap = sysMap_o
+        
+        else :
+            sysMap = loadSystematicMaps( property = property, filter = filter, nside = nside , kind = kind)
+
+    else : pass
+
+    filename = 'data_txt/systematic_'+property+'_'+filter+'_'+kind+'_masked.txt'
+    data = np.loadtxt(filename)
+    bins, density, error = data[:,0], data[:,4], data[:,5]
+    weights = np.ma.fix_invalid(1./density, fill_value = 0.0).data
+
+    catHpInd = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=nside, nest = False)
+    
+    bin_num = bins.size
+    step = (bins[2] - bins[1])
+    bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = bins.min() - step/2., max = bins.max() + step/2., bin_num = bin_num )
+    
+    wg = np.zeros( catalog.size, dtype=float)
+    for i, sysMap_i in enumerate(binned_cat):
+        HpIdxInSys_mask = np.in1d(catHpInd, sysMap_i['PIXEL'])
+        wg[HpIdxInSys_mask] = weights[i]
+        #print i, bin_center[i], weights[i], np.sum(HpIdxInSys_mask)
+
+    return wg
+
+
+
+def SysMapBadRegionMask(catalog, sysMap, nside = 512, cond = None, val = None):
+    """
+    get badregion pixel num from sysMap
+    get matched HpInx from catalog
+    make mask
+    return mask
+    """
+    
+    if cond=='=':
+        use = (sysMap['SIGNAL']==val)
+    elif cond=='<':
+        use = (sysMap['SIGNAL'] < val)
+    elif cond=='<=':
+        use = (sysMap['SIGNAL'] <= val)
+    elif cond=='>':
+        use = (sysMap['SIGNAL'] > val)
+    elif cond=='>=':
+        use = (sysMap['SIGNAL'] >= val)
+
+    MaskedSysMap = sysMap[use]
+
+    catHpInd = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=nside, nest= False)
+    HpIdxInSys_mask = np.in1d(catHpInd, MaskedSysMap['PIXEL'])
+    #HpIdxInSys = catHpInd[HpIdxInSys_mask]
+    
+    return MaskedSysMap, HpIdxInSys_mask
+
+
+
+def ForegroundStarCorrelation( dmass = None, star = None, rand = None, weight = [None, None, None]):
+    
+    """
+    Counts number of galaxies around bright stars and calculates the normalized number density as a function of theta(arcseconds).
+    """
+    
+    import treecorr
+    
+    w_dmass, w_star, w_rand = weight
+    
+    dmasscat = treecorr.Catalog(ra=dmass['RA'], dec=dmass['DEC'], w=w_dmass, ra_units='deg', dec_units='deg')
+    starcat = treecorr.Catalog(ra=star['RA'], dec=star['DEC'], w=w_star, ra_units='deg', dec_units='deg')
+    randcat = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], w=w_rand, is_rand=True, ra_units='deg', dec_units='deg')
+    
+    bin_size = 0.1
+    min_sep = 0.0002
+    max_sep = 0.05
+    sep_units = 'degrees'
+    
+    ds = treecorr.NNCorrelation( bin_size = bin_size, min_sep= min_sep, max_sep = max_sep, sep_units=sep_units, verbose=1)
+    rs = treecorr.NNCorrelation( bin_size = bin_size, min_sep= min_sep, max_sep = max_sep, sep_units=sep_units, verbose=1)
+    ds.process(dmasscat, starcat)
+    rs.process(randcat, starcat)
+    
+    import suchyta_utils
+    from suchyta_utils import hp
+    
+    A = suchyta_utils.hp.GetArea(cat=dmass, ra='RA', dec='DEC', nside=4096)
+    A_rand = suchyta_utils.hp.GetArea(cat=rand, ra='RA', dec='DEC', nside=4096)
+    
+    theta = ds.meanr
+    
+    n = ds.npairs * 1./ds.tot # A
+    n_rand = rs.npairs * 1./rs.tot #A_rand
+    
+    averaged_n = n/n_rand
+    
+    
+    P = 1e+4
+    n_bar = 1e-4
+    w_FKP = 1./( 1 + n_bar * P )
+    err =  1./np.sqrt(ds.npairs * w_FKP) * averaged_n
+    
+    
+    return theta, averaged_n, err
+
+
+
+def BCCDESfootprintMasking():
+
+    import os
+    import esutil
+    import healpy as hp
+    # for loop
+    # load small portions of bcc map
+    # remain bcc map pixels in sysMap
+    # save map
+
+
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
+    badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    # Note that the masks here in in equatorial, ring format.
+    gdmask = hp.read_map(goodmask)
+    bdmask = hp.read_map(badmask)
+    
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) )
+    # healpixify the catalog.
+    nside=4096
+
+
+    catpath = '/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/obs/'
+    for j in range(40):
+        tables = []
+        keyword = 'rotated.{:02d}'.format(j)
+        
+        
+        for i in os.listdir(catpath):
+            if os.path.isfile(os.path.join(catpath,i)) and keyword in i:
+                tables.append(catpath+i)
+                print i
+
+        if len(tables)==0: pass
+        else :
+            bcc = esutil.io.read( tables, combine=True )
+            #bcc = fitsio.read('/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/obs/Aardvark_v1.0c_des_rotated.{}.fit')
+            phi = bcc['RA'] * np.pi / 180.0
+            theta = ( 90.0 - bcc['DEC'] ) * np.pi/180.0
+
+            hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+            keep = np.in1d(hpInd,ind_good_ring)
+            bcc = bcc[keep]
+            filename = 'Aardvark_v1.0c_des_rotated.{:02d}.fit'.format(j)
+            fitsio.write('/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'+filename, bcc)
+            print "save fits file to ",'/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'+filename
+    return 0
+
+
+
+
+def CutDESStripe82(keyword = 'Y1A1'):
+    
+    import os
+    import esutil
+    #catpath = '/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'
+    catpath = '/n/des/lee.5922/data/y1a1_coadd/'
+    tables = []
+    
+    for j in range(10, 40):
+        keyword = 'Y1A1_COADD_OBJECTS_{:05d}'.format(j)
+        cat = io.getDESY1A1catalogs(keyword = keyword, sdssmask=False)
+        cat_SPT = MatchHPArea(cat, balrog_SPT)
+        if len(cat_SPT) == 0: pass
+        else :
+            tables.append(cat_SPT)
+            #fitsio.write(catpath+'SSPT_COADD_OBJECTS_{:05d}.fits'.format(j), cat_SPT)
+            print 'SSPT_COADD_OBJECTS_{:05d}.fits'.format(j)
+
+    tables = np.hstack(tables)
+    tables = Cuts.doBasicCuts(tables, object='star')
+    fitsio.write('result_cat/SSPT_star.fits')
+        
+        
+        
+        
+    #except IOError : pass
+
+    #tables = np.hstack(tables)
+    #fitsio.write(catpath+'SSPT_COADD_OBJECTS.fits', tables)
+    return 0
+    
+
+
+def mergeCatalogsUsingPandas(des=None, gold=None, how = 'right', key='COADD_OBJECTS_ID', suffixes = ['','_GOLD']):
+    import pandas as pd
+
+    try :
+        desData = pd.DataFrame(des)
+        goldData = pd.DataFrame(gold)
+        matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes)
+
+    except ValueError :
+        print "Big-endian buffer not supported on little-endian compiler"
+        print "Doing byte swapping"
+        
+        des = np.array(des).byteswap().newbyteorder()
+        gold = np.array(gold).byteswap().newbyteorder()
+        desData = pd.DataFrame(des)
+        goldData = pd.DataFrame(gold)
+        matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes)
+
+    matched_arr = matched.to_records(index=False)
+    # This last step is necessary because Pandas converts strings to Objects when eating structured arrays.
+    # And np.recfunctions flips out when it has one.
+    oldDtype = matched_arr.dtype.descr
+    newDtype = oldDtype
+    for thisOldType,i in zip(oldDtype, xrange(len(oldDtype) )):
+        if 'O' in thisOldType[1]:
+            newDtype[i] = (thisOldType[0], 'S12')
+    matched_arr = np.array(matched_arr,dtype=newDtype)
+    return matched_arr
 
 
 
@@ -1457,46 +1797,6 @@ def main():
     ax2.legend(loc = 'best')
     ax2.set_title('des_cmass, resampled_balrog, des_star, balrog_star')
 
-
-
-    # compare BMASS, DMASS hitograms  --------------------------------------------------
-
-    BMASS = balrog_cmass.copy()
-    DMASS = des_cmass.copy()
-    CMASS = cmass_photo.copy()
-
-    bins = np.linspace(18.5, 20.5, 50)
-
-    filter = 'I'
-
-    N1, _ = np.histogram(BMASS['MAG_MODEL_'+filter], bins = bins )
-    N2, _ = np.histogram(DMASS['MAG_MODEL_'+filter], bins = bins )
-    N3, _ = np.histogram(CMASS['MODELMAG'][:,2], bins = bins )
-    
-
-    fig,(ax, ax2) = plt.subplots(1,2, figsize=(14,7))
-    #ax2.plot( (bins[0:-1] + bins[1:])/2., N3/float(N3.max()), 'b-', label = 'CMASS')
-    ax2.plot( (bins[0:-1] + bins[1:])/2., N1/float(N1.max()), 'g-', label = 'BMASS')
-    ax2.plot( (bins[0:-1] + bins[1:])/2., N2/float(N2.max()), 'r-', label = 'DMASS')
-
-    #ax.plot( (bins[0:-1] + bins[1:])/2., N3, 'b-',  label = 'CMASS, {}'.format(len(CMASS)))
-    ax.plot( (bins[0:-1] + bins[1:])/2., N1, 'g-', label = 'BMASS, {}'.format(len(BMASS)))
-    ax.plot( (bins[0:-1] + bins[1:])/2., N2, 'r-', label = 'DMASS, {}'.format(len(DMASS)))
-    
-    ax.set_title('Histogram')
-    ax.legend(loc='best')
-    ax.set_xlabel('modelmag_i')
-    ax.set_ylabel('N')
-
-    ax2.set_title('Normalized Histogram')
-    ax2.legend(loc='best')
-    ax2.set_xlabel('modelmag_i')
-    ax2.set_ylabel('N/N.max')
-    ax2.set_ylim(0, 1.1)
-
-    fig.savefig('../figure/bmass_dmass')
-
-    ax.set_xlim(18.5, 20.5)
 
 
 

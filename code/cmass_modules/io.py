@@ -68,6 +68,37 @@ def getDEScatalogs( file = '/n/des/huff.791/Projects/CMASS/Data/DES_Y1_S82.fits'
     return data
 
 
+def getSGCCMASSphotoObjcat():
+    
+    import esutil
+    import numpy as np
+    
+    path = '/n/des/lee.5922/data/cmass_cat/'
+    """
+    cmass_photo = esutil.io.read(path+'bosstile-final-collated-boss2-boss38.fits.gz', upper=True)
+    cmass_specprimary = esutil.io.read(path+'bosstile-final-collated-boss2-boss38-specObj.fits.gz', upper=True)
+    cmass_zwarning_noqso = esutil.io.read(path+'bosstile-final-collated-boss2-boss38-photoObj-specObj.fits.gz')
+    
+    use2 = (( (cmass_photo['BOSS_TARGET1'] & 2) != 0 )
+           #(cmass_specprimary['SPECPRIMARY'] == 1) &
+           #(cmass_zwarning_noqso['ZWARNING_NOQSO'] == 0 )
+           )
+    """
+    cmass = esutil.io.read(path+'boss_target_selection.fits', upper=True)
+    use = (( cmass['BOSS_TARGET1'] & 2 != 0 ) &
+           ((cmass['CHUNK'] != 'boss1' ) & (cmass['CHUNK'] != 'boss2')) &
+           ((cmass['FIBER2MAG_I'] - cmass['EXTINCTION_I']) < 21.5 )
+            )
+           
+    cmass = cmass[use]
+    
+    print "Applying Healpix BOSS SGC footprint mask"
+    HPboss = esutil.io.read('/n/des/lee.5922/data/cmass_cat/healpix_boss_footprint_SGC_1024.fits')
+    from systematics import hpRaDecToHEALPixel
+    HealInds = hpRaDecToHEALPixel( cmass['RA'],cmass['DEC'], nside= 1024, nest= False)
+    BOSSHealInds = np.in1d( HealInds, HPboss )
+    return cmass[BOSSHealInds]
+
 
 def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_emhuff.fit', bigSample = False):
     
@@ -105,12 +136,14 @@ def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_em
     return sdss_data
 
 
-def getDESY1A1catalogs(keyword = 'Y1A1', size = None, sdssmask=True, im3shape=None):
+def getDESY1A1catalogs(keyword = 'Y1A1', gold = False, size = None, sdssmask=True, im3shape=None):
     
     import time
     import os
     
     colortags = ['FLUX_MODEL', 'FLUX_DETMODEL', 'FLUXERR_MODEL', 'FLUXERR_DETMODEL', 'FLAGS', 'MAG_MODEL', 'MAG_DETMODEL', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'XCORR_SFD98', 'MAGERR_DETMODEL', 'MAG_AUTO', 'MAG_PETRO', 'MAG_PSF' ]
+    #colortags = ['FLAGS', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'MAG_AUTO', 'MAG_PETRO', 'XCORR_SFD98']
+    
     filters = ['G', 'R', 'I', 'Z']
     colortags = [ colortag + '_'+filter for colortag in colortags for filter in filters ]
 
@@ -119,7 +152,9 @@ def getDESY1A1catalogs(keyword = 'Y1A1', size = None, sdssmask=True, im3shape=No
     if sdssmask is False : sdssmasktags=[]
     
     tags = ['RA', 'DEC', 'COADD_OBJECTS_ID', 'SPREAD_MODEL_I', 'SPREADERR_MODEL_I' ,'CLASS_STAR_I', 'MAGERR_MODEL_I', 'MAGERR_MODEL_R'] + colortags + sdssmasktags
+    #tags = ['COADD_OBJECTS_ID'] + colortags + sdssmasktags
     path = '/n/des/lee.5922/data/y1a1_coadd/'
+    if gold is True : path = '/n/des/lee.5922/data/gold_cat/'
     #path = '/n/des/huff.791/Projects/CMASS/Data/Stripe82/' # path for sdss veto masked cat
     tables = []
     for i in os.listdir(path):
@@ -131,6 +166,8 @@ def getDESY1A1catalogs(keyword = 'Y1A1', size = None, sdssmask=True, im3shape=No
     if size is not None:
         sample = np.arange(152160)
         rows = np.random.choice( sample, size=size , replace = False)
+
+    if gold is True: tags = None
 
     des_data = esutil.io.read( tables, combine=True, columns = tags, rows = rows)
     
@@ -163,6 +200,21 @@ def LoadBalrog(user = 'JELENA', truth = None):
             tables.append(path+i)
 
     balrog_data = esutil.io.read( tables, combine=True, columns = tags)
+
+    print "no RA and DEC columns. Use ALPHAWIN_J2000 and DELTAWIN_J2000"
+    ra = balrog_data['ALPHAWIN_J2000_DET']
+    dec = balrog_data['DELTAWIN_J2000_DET']
+    cut = ra < 0
+    ra1 = ra[cut] + 360
+    ra[cut] = ra1
+
+    print "alphaJ2000, deltaJ2000  -->  ra, dec"
+    balrogname = list( balrog_data.dtype.names)
+    alphaInd = balrogname.index('ALPHAWIN_J2000_DET')
+    deltaInd = balrogname.index('DELTAWIN_J2000_DET')
+    balrogname[alphaInd], balrogname[deltaInd] = 'RA', 'DEC'
+    balrog_data.dtype.names = tuple(balrogname)
+
     """
     print "alphaJ2000, deltaJ2000  -->  ra, dec"
     balrogname = list( balrog_data.dtype.names)

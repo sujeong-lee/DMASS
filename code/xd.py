@@ -107,9 +107,6 @@ class XDGMM(object):
         return self
 
 
-    
-    
-    
     def logprob_a(self, X, Xerr):
         """
         Evaluate the probability for a set of points
@@ -228,6 +225,7 @@ class XDGMM(object):
                           for i in range(len(self.alpha))])
 
         return draw.reshape(shape)
+
 
 def classifier_test(sdss_data, des_data, suffixTag = '_dev'):
     
@@ -351,6 +349,7 @@ def SDSS_cmass_criteria(sdss, prior=None):
 
 
 def SDSS_LOWZ_criteria(sdss):
+    
     modelmag_r = sdss['MODELMAG_R'] - sdss['EXTINCTION_R']
     modelmag_i = sdss['MODELMAG_I'] - sdss['EXTINCTION_I']
     modelmag_g = sdss['MODELMAG_G'] - sdss['EXTINCTION_G']
@@ -372,12 +371,21 @@ def SDSS_LOWZ_criteria(sdss):
 
 
 
-def priorCut(data, sdss=None):
-    modelmag_g_des = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
-    modelmag_r_des = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
-    modelmag_i_des = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
-    cmodelmag_i_des = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
-    fib2mag_des = data['MAG_APER_4_I']
+def priorCut(data, reddening = 'SFD98'):
+    
+    reddeningtag = 'XCORR_SFD98'
+    if reddening == None :
+        fac = 0.0
+    elif reddening == 'SLR':
+        fac = -1.0
+        reddeningtag = 'SLR_SHIFT'
+    
+
+    modelmag_g_des = data['MAG_DETMODEL_G'] - fac * data[reddeningtag+'_G']
+    modelmag_r_des = data['MAG_DETMODEL_R'] - fac * data[reddeningtag+'_R']
+    modelmag_i_des = data['MAG_DETMODEL_I'] - fac * data[reddeningtag+'_I']
+    cmodelmag_i_des = data['MAG_MODEL_I'] - fac * data[reddeningtag+'_I']
+    fib2mag_des = data['MAG_APER_4_I'] - fac * data[reddeningtag+'_I']
     dperp = modelmag_r_des - modelmag_i_des - (modelmag_g_des - modelmag_r_des)/8.0
 
     cut = ((cmodelmag_i_des > 17) &
@@ -386,10 +394,11 @@ def priorCut(data, sdss=None):
            ((modelmag_r_des - modelmag_i_des ) > 0.0 ) &
            ((modelmag_g_des - modelmag_r_des ) > 0.5 ) &
             ((modelmag_g_des - modelmag_r_des ) < 2.5 ) &
-           (fib2mag_des < 21.0 )# &
+           (fib2mag_des < 22.0 )# &
            #(dperp > 0.4)
            #(data['MAG_APER_4_I'] < 24.0 )
              )
+                 
     print 'prior cut ',np.sum(cut)
     return data[cut], cut
 
@@ -404,6 +413,10 @@ def divide_bins( cat, Tag = 'Z', min = 0.2, max = 1.2, bin_num = 5, TagIndex = N
     column = cat[Tag]
     if TagIndex is not None: column = cat[Tag][:,TagIndex]
     
+    bin = (column < values[0])
+    binned_cat.append( cat[bin] )
+    binkeep.append(bin)
+
     for i in range(len(values)-1) :
         bin = (column >= values[i]) & (column < values[i+1])
         binned_cat.append( cat[bin] )
@@ -454,27 +467,53 @@ def im3shape_galprof_mask( im3shape, fulldes ):
 
 
 
-def spatialcheck(data, convert = None):
+
+def spatialcheck(data, label = None, convert = None, suffix = ''):
     
-    if convert is True:
-        ra = data['ALPHAWIN_J2000_DET'] + 360
-        dec = data['DELTAWIN_J2000_DET']
-        
-        cut = ra < 180
-        ra1 = ra[cut] + 360
-        ra[cut] = ra1
-    
-    if convert is None :
-        ra = data['RA']
-        dec = data['DEC']
     
     fig, ax = plt.subplots(1,1,figsize = (7,7))
-    ax.plot(ra, dec, 'b.', alpha = 0.5 )
-    #ax.plot(data2['RA'], data2['DEC'], 'r.', alpha = 0.5 )
+    if len(data) > 20 :
+            print "Warning : Be careful when you put more than 20 data"
+            data = [data]
+
+    if label is None: label = ['data_'+str(i+1) for i in range(0,len(data))]
+    for d, l in zip(data, label):
+        
+        #rows = np.random.choice(np.arange(d.size), size = 500 )
+        #d = d[rows]
+        
+        try:
+            ra = d['RA']
+            dec = d['DEC']
+        
+        except ValueError:
+
+            ra = d['ALPHAWIN_J2000_DET']
+            dec = d['DELTAWIN_J2000_DET']
+        """
+        if convert is True:
+            ra = data['ALPHAWIN_J2000_DET'] + 360
+            dec = data['DELTAWIN_J2000_DET']
+            
+            cut = ra < 180
+            ra1 = ra[cut] + 360
+            ra[cut] = ra1
+        
+
+
+        if convert is None :
+            ra = data['RA']
+            dec = data['DEC']
+        """
+        
+        ax.plot(ra, dec, '.', alpha = 0.3, label = l )
+    
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
-    fig.savefig('spatialtest')
-    print 'figsave : spatialtest.png'
+    ax.set_xlim(0,360)
+    ax.legend(loc = 'best')
+    fig.savefig('figure/spatialtest_'+suffix)
+    print 'figsave : figure/spatialtest_'+suffix+'.png'
 
 
 
@@ -661,61 +700,99 @@ def logsumexp(arr, axis=None):
 def AddingReddening(cat):
     import numpy.lib.recfunctions as rf   
     from suchyta_utils.y1a1_slr_shiftmap import SLRShift
-
     zpfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
     slrshift = SLRShift(zpfile, fill_periphery=True, balrogprint=None)
-    offsets_g = slrshift.get_zeropoint_offset('g',cat['RA'],cat['DEC'],interpolate=True) * -1.
-    offsets_r = slrshift.get_zeropoint_offset('r',cat['RA'],cat['DEC'],interpolate=True) * -1.
-    offsets_i = slrshift.get_zeropoint_offset('i',cat['RA'],cat['DEC'],interpolate=True) * -1.
-    offsets_z = slrshift.get_zeropoint_offset('z',cat['RA'],cat['DEC'],interpolate=True) * -1.
+    offsets_g = slrshift.get_zeropoint_offset('g',cat['RA'],cat['DEC'],interpolate=True)
+    offsets_r = slrshift.get_zeropoint_offset('r',cat['RA'],cat['DEC'],interpolate=True)
+    offsets_i = slrshift.get_zeropoint_offset('i',cat['RA'],cat['DEC'],interpolate=True)
+    offsets_z = slrshift.get_zeropoint_offset('z',cat['RA'],cat['DEC'],interpolate=True)
 
-    cat = rf.append_fields(cat, 'XCORR_SFD98_G', offsets_g)    
-    cat = rf.append_fields(cat, 'XCORR_SFD98_R', offsets_r)
-    cat = rf.append_fields(cat, 'XCORR_SFD98_I', offsets_i)
-    cat = rf.append_fields(cat, 'XCORR_SFD98_Z', offsets_z)
-
+    offsets = [ offsets_g, offsets_r, offsets_i, offsets_z  ]
+    from pandas import DataFrame, concat
+    nametag = ['SLR_SHIFT_'+f for f in ['G', 'R', 'I', 'Z'] ]
+    offsetsdf = DataFrame( offsets, index = nametag ).T
+    cat = DataFrame(cat)
+    #del cat['index']
+    print 'concatenate two ndarrays'
+    cat = concat([cat, offsetsdf], axis=1)
+    print 'dataframe to recordarray'
+    cat = cat.to_records()
+    
+    """
+    cat = rf.append_fields(cat, 'SLR_SHIFT_G', offsets_g)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_R', offsets_r)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_I', offsets_i)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_Z', offsets_z)
+    """
     return cat
 
 
 
-def mixing_color(data, sdss = None, cmass = None):
+
+def mixing_color(data, reddening = 'SFD98', sdss = None, cmass = None ):
     
-    if sdss is None and cmass is None:
-        des_g = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
-        des_r = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
-        des_i = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
-        des_z = data['MAG_DETMODEL_Z'] - data['XCORR_SFD98_Z']
-        des_ci = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
-        des_cr = data['MAG_MODEL_R'] - data['XCORR_SFD98_R']
-        #flux_g = data['FLUX_DETMODEL_G']
-        #flux_r = data['FLUX_DETMODEL_R']
-        #flux_i = data['FLUX_DETMODEL_I']
-        #flux_z = data['FLUX_DETMODEL_Z']
-        #fluxmodel_r = data['FLUX_MODEL_R']
-        #fluxmodel_i = data['FLUX_MODEL_I']
+    filter = ['G', 'R', 'I', 'Z']
+    magtag = ['MAG_DETMODEL', 'MAG_MODEL']
+    errtag = ['MAGERR_DETMODEL', 'MAGERR_MODEL']
+    reddeningtag = 'XCORR_SFD98'
+    
+    fac = 1.0 #default for sfd98, cmass, sdss.
+    if reddening is 'SLR' :
+        fac = -1.
+        reddeningtag = 'SLR_SHIFT'
+        print 'reddening correction :', reddeningtag
+    
+    elif reddening is None :
+        fac = 0.0
+        print 'reddening correction : No reddening correction'
+    
+    if sdss is True :
+        magtag = ['MODELMAG', 'CMODELMAG']
+        errtag = ['MODELMAGERR', 'CMODELMAGERR']
+        reddeningtag = 'EXTINCTION'
+        print 'reddening correction :', reddeningtag
+    
+    if reddening is 'SLRtoSFD98' :
+        print 'SLR corrected color to SFD98 corrected color'
+
+    X = []
+    Xerr = []
+    for i in range(len(magtag)):
+        if i == 1 : filter = ['R', 'I']
+        for f in filter:
+            descolor = data[magtag[i]+'_'+f] - fac * data[reddeningtag+'_'+f]
+            if reddening is 'SLRtoSFD98' :
+                descolor = data[magtag[i]+'_'+f] - data['SLR_SHIFT'+'_'+f] - data['XCORR_SFD98'+'_'+f]
+            err = data[errtag[i]+'_'+f]
+            X.append(descolor)
+            Xerr.append(err)
+
+    X = np.vstack(X).T
+    Xerr = np.vstack(Xerr).T
+
+    """
+    
+    if gold is True:
+        des_g = data['MAG_DETMODEL_G'] - data['SLR_SHIFT_G'] - data['XCORR_SFD98_G']
+        des_r = data['MAG_DETMODEL_R'] - data['SLR_SHIFT_R'] - data['XCORR_SFD98_R']
+        des_i = data['MAG_DETMODEL_I'] - data['SLR_SHIFT_I'] - data['XCORR_SFD98_I']
+        des_z = data['MAG_DETMODEL_Z'] - data['SLR_SHIFT_Z'] - data['XCORR_SFD98_Z']
+        des_ci = data['MAG_MODEL_I'] - data['SLR_SHIFT_I'] - data['XCORR_SFD98_I']
+        des_cr = data['MAG_MODEL_R'] - data['SLR_SHIFT_R'] - data['XCORR_SFD98_R']
         
         
         X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z ]).T
-        #X = np.vstack([flux_g, flux_r, flux_i, flux_z]).T
         Xerr = np.vstack([data['MAGERR_MODEL_R'],
                           data['MAGERR_MODEL_I'],
-                          #data['FLUXERR_MODEL_R'],
-                          #data['FLUXERR_MODEL_I'],
                           data['MAGERR_DETMODEL_G'],
                           data['MAGERR_DETMODEL_R'],
                           data['MAGERR_DETMODEL_I'],
                           data['MAGERR_DETMODEL_Z'],
-                          #data['FLUXERR_DETMODEL_G'],
-                          #data['FLUXERR_DETMODEL_R'],
-                          #data['FLUXERR_DETMODEL_I'],
-                          #data['FLUXERR_DETMODEL_Z'],
                           ]).T
 
     # mixing matrix
     
-    
-    
-    elif sdss is not None:
+    elif sdss is True:
     
         des_g = data['MODELMAG_G'] - data['EXTINCTION_G']
         des_r = data['MODELMAG_R'] - data['EXTINCTION_R']
@@ -734,7 +811,7 @@ def mixing_color(data, sdss = None, cmass = None):
                           data['MODELMAGERR_Z']
                           ]).T
     
-    elif cmass is not None:
+    elif cmass is True:
         
         des_g = data['MODELMAG'][:,1] - data['EXTINCTION'][:,1]
         des_r = data['MODELMAG'][:,2] - data['EXTINCTION'][:,2]
@@ -753,6 +830,24 @@ def mixing_color(data, sdss = None, cmass = None):
                           data['MODELMAGERR'][:,4]
                           ]).T
 
+    
+    else:
+        des_g = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
+        des_r = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
+        des_i = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
+        des_z = data['MAG_DETMODEL_Z'] - data['XCORR_SFD98_Z']
+        des_ci = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
+        des_cr = data['MAG_MODEL_R'] - data['XCORR_SFD98_R']
+        
+        X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z ]).T
+        Xerr = np.vstack([data['MAGERR_MODEL_R'],
+                          data['MAGERR_MODEL_I'],
+                          data['MAGERR_DETMODEL_G'],
+                          data['MAGERR_DETMODEL_R'],
+                          data['MAGERR_DETMODEL_I'],
+                          data['MAGERR_DETMODEL_Z'],
+                          ]).T
+    """
     # mixing matrix
     W = np.array([
                   [1, 0, 0, 0, 0, 0],
@@ -761,15 +856,8 @@ def mixing_color(data, sdss = None, cmass = None):
                   [0, 0, 0, 1, -1, 0],   # r-i
                   [0, 0, 0, 0, 1, -1]])  # i-z
 
-
     X = np.dot(X, W.T)
-    """
-    if sdss is not None or cmass is not None:
-        return X, Xcov
-    
-    if sdss is None:
-    
-    """
+
     Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
     Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
     Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
@@ -964,8 +1052,8 @@ def reweight( train = None, test = None):
     # parameter normalization
     X_train, _  = mixing_color(train, cmass=None)
     X_test, _  = mixing_color(test, cmass=None)
-    params = [  X_train[:,1], X_train[:,1], X_train[:,2], X_train[:,3]]# , X_train[:,4]]
-    params_t = [  X_test[:,1], X_test[:,1], X_test[:,2], X_test[:,3]]#, X_test[:,4]]
+    params = [  X_train[:,0], X_train[:,1], X_train[:,2], X_train[:,3] , X_train[:,4]]
+    params_t = [  X_test[:,0], X_test[:,1], X_test[:,2], X_test[:,3], X_test[:,4]]
 
     ms, mts = [ p/p.max() for p in params ], [ p/p.max() for p in params_t ]
     
@@ -1041,7 +1129,7 @@ def reweight( train = None, test = None):
 def makePlotReweight(train = None, test = None, cmass = None ):
 
     weight = train['REWEIGHT']
-    resample = train[ weight > np.median(weight)*3500 ]
+    resample = train[ weight > np.median(weight)*50 ]
     #resample = np.random.choice(train, size=test.size, p = weight)
     print test.size, resample.size
     
@@ -1084,7 +1172,7 @@ def makePlotReweight(train = None, test = None, cmass = None ):
     axes[2].axis([18.0, 20.3, 0.0, 1.6])
     fig.savefig('figure/reweight')
     print 'figure/reweight.png'
-    return 0
+    return resample
 
     
 
@@ -1323,8 +1411,7 @@ def Cut_test(contS, sdss):
 
 
 
-
-def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reverse=None, prefix = ''):
+def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening = 'SFD98', reverse=None, prefix = ''):
 
     import esutil
     import numpy.lib.recfunctions as rf
@@ -1336,8 +1423,8 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reverse=Non
         #test, _ = SDSS_cmass_criteria(test, prior=True)
     
     else:
-        train, _ = priorCut(train)
-        test, _ = priorCut(test)
+        train, _ = priorCut(train, reddening = reddening)
+        test, _ = priorCut(test, reddening = reddening )
 
     # making cmass and lowz mask
     h = esutil.htm.HTM(10)
@@ -1376,9 +1463,9 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reverse=Non
     # stack DES data
 
     #if reverse is True:
-    X_cmass, Xcov_cmass = mixing_color( cmass )
-    X_train, Xcov_train = mixing_color(train, cmass = reverse)
-    X_test, Xcov_test = mixing_color(test, cmass = reverse)
+    X_cmass, Xcov_cmass = mixing_color( cmass, reddening = reddening )
+    X_train, Xcov_train = mixing_color(train, reddening = reddening  )
+    X_test, Xcov_test = mixing_color(test, reddening = reddening)
     X, Xcov = np.vstack((X_train,X_test)), np.vstack((Xcov_train, Xcov_test))
 
 
@@ -1435,7 +1522,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reverse=Non
     #n_cl_all = 25
     # ----------------------------------
   
-    pickleFileName = ['pickle/'+prefix +'XD_all.pkl', 'pickle/'+'small_'+'XD_dmass.pkl', 'pickle/'+prefix+'XD_no.pkl']
+    pickleFileName = ['pickle/'+prefix +'XD_all.pkl', 'pickle/'+prefix+'XD_dmass.pkl', 'pickle/'+prefix+'XD_no.pkl']
     def XDDFitting( X_train, Xcov_train, init_means=None, init_covars = None, init_weights = None, filename = None, n_cluster = 25 ):
         clf = None
         @pickle_results(filename, verbose = True)
@@ -1906,9 +1993,9 @@ def com_pur_arbi(cat = None, true = None, prefix = '', subset = None):
 
 
 
-def angularcorr( dmass = None, subCMASS = None, cmass = None, ra = 340, ra2 = 360, dec=-1.0, dec2 = 1.0, suffix = ''):
+def angularcorr( dmass = None, subCMASS = None, cmass = None, ra = 320, ra2 = 360, dec=-1.0, dec2 = 1.0, weight = [None, None], suffix = ''):
     
-    from systematics import angular_correlation, jk_error
+    from systematics import _acf, jk_error
     # CMASS SGC, CMASS LOCAL, subCMASS, DMASS
     
     # testing dmass with angular correlation function ------------------------------------------------
@@ -1924,25 +2011,24 @@ def angularcorr( dmass = None, subCMASS = None, cmass = None, ra = 340, ra2 = 36
     cmass_catS = Cuts.SpatialCuts(cmass_catS, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
     rand_catS = Cuts.SpatialCuts(rand_cat_SGC, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
     
-    dmass_cat = Cuts.SpatialCuts(dmass, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
+    dmass_cat = dmass.copy() #Cuts.SpatialCuts(dmass, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
     rand_catD = rand_catS.copy()
     subCMASS_cat = Cuts.SpatialCuts(subCMASS, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
     rand_catsub = rand_catS.copy()
-
     
-    weight_rand_SGC = rand_cat_SGC['WEIGHT_FKP']
-    weight_data_SGC = cmass_cat_SGC['WEIGHT_FKP'] * cmass_cat_SGC['WEIGHT_STAR'] * ( cmass_cat_SGC['WEIGHT_CP']+cmass_cat_SGC['WEIGHT_NOZ'] -1. )
-    weight_randS = rand_catS['WEIGHT_FKP']
-    weight_dataS = cmass_catS['WEIGHT_FKP'] * cmass_catS['WEIGHT_STAR'] * ( cmass_catS['WEIGHT_CP']+cmass_catS['WEIGHT_NOZ'] -1. )
+    #weight_rand_SGC = rand_cat_SGC['WEIGHT_FKP']
+    #weight_data_SGC = cmass_cat_SGC['WEIGHT_FKP'] * cmass_cat_SGC['WEIGHT_STAR'] * ( cmass_cat_SGC['WEIGHT_CP']+cmass_cat_SGC['WEIGHT_NOZ'] -1. )
+    #weight_randS = rand_catS['WEIGHT_FKP']
+    #weight_dataS = cmass_catS['WEIGHT_FKP'] * cmass_catS['WEIGHT_STAR'] * ( cmass_catS['WEIGHT_CP']+cmass_catS['WEIGHT_NOZ'] -1. )
     #weight_sub = subCMASS_cat['REWEIGHT']
     #weight_randsub = rand_catsub['WEIGHT_FKP']
     #weight_D = dmass_cat['EachProb_CMASS'] * 1./np.sum(dmass_cat['EachProb_CMASS'])
     #weight_randD = rand_catD['WEIGHT_FKP']
-    
-    theta_SGC, w_SGC, _ = angular_correlation(cmass_cat_SGC, rand_cat_SGC, weight = [weight_data_SGC, weight_rand_SGC])
-    thetaS, wS, werrS = angular_correlation(cmass_catS, rand_catS, weight = [weight_dataS, weight_randS])
-    thetaD, wD, werrD = angular_correlation(dmass_cat, rand_catD ) #, weight = [weight_D, weight_randD])
-    thetasub, wsub, werrsub = angular_correlation(subCMASS_cat, rand_catsub ) #, weight = [weight_sub, weight_randsub ])
+    weight_D, weight_randD = weight
+    #theta_SGC, w_SGC, _ = _acf(cmass_cat_SGC, rand_cat_SGC, weight = [weight_data_SGC, weight_rand_SGC])
+    thetaS, wS, werrS = _acf(cmass_catS, rand_catS )#, weight = [weight_dataS, weight_randS])
+    thetaD, wD, werrD = _acf(dmass_cat, rand_catD, weight = [weight_D, weight_randD])
+    thetasub, wsub, werrsub = _acf(subCMASS_cat, rand_catsub ) #, weight = [weight_sub, weight_randsub ])
     # jk errors
     
     #from astroML.plotting import setup_text_plots
@@ -1951,14 +2037,14 @@ def angularcorr( dmass = None, subCMASS = None, cmass = None, ra = 340, ra2 = 36
     njack = 30
     raTag = 'RA'
     decTag = 'DEC'
-    _, jkerr_SGC = jk_error( cmass_cat_SGC, njack = njack , target = angular_correlation, jkargs=[cmass_cat_SGC, rand_cat_SGC], jkargsby=[[raTag, decTag],[raTag, decTag]], raTag = raTag, decTag = decTag )
-    _, Sjkerr = jk_error( cmass_catS, njack = njack , target = angular_correlation, jkargs=[cmass_catS, rand_catS], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    _, Djkerr = jk_error( dmass_cat, njack = njack , target = angular_correlation, jkargs=[dmass_cat, rand_catD], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    _, subjkerr = jk_error( subCMASS_cat, njack = njack , target = angular_correlation, jkargs=[subCMASS_cat, rand_catsub], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
+    #_, jkerr_SGC = jk_error( cmass_cat_SGC, njack = njack , target = _acf, jkargs=[cmass_cat_SGC, rand_cat_SGC], jkargsby=[[raTag, decTag],[raTag, decTag]], raTag = raTag, decTag = decTag )
+    _, Sjkerr = jk_error( cmass_catS, njack = njack , target = _acf, jkargs=[cmass_catS, rand_catS], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
+    _, Djkerr = jk_error( dmass_cat, njack = njack , target = _acf, jkargs=[dmass_cat, rand_catD], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
+    _, subjkerr = jk_error( subCMASS_cat, njack = njack , target = _acf, jkargs=[subCMASS_cat, rand_catsub], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
     
-    DAT = np.column_stack((thetaS, wS, Sjkerr, thetaD, wD, Djkerr, thetasub, wsub, subjkerr,  theta_SGC, w_SGC, jkerr_SGC,   ))
-    np.savetxt( 'acf_comparison'+suffix+'.txt', DAT, delimiter = ' ', header = 'thetaS  wS  Sjkerr, thetaD, wD, Djkerr, thetasub, wsub, subjkerr  theta_SGC  w_SGC   jkerr_SGC    ' )
-    print 'writing txt to acf_comparison'+suffix+'.txt'
+    DAT = np.column_stack((thetaD, wD, Djkerr, thetaS, wS, Sjkerr, thetasub, wsub, subjkerr ))
+    np.savetxt( 'data_txt/acf_comparison'+suffix+'.txt', DAT, delimiter = ' ', header = ' thetaD, wD, Djkerr, thetaS, wS, Sjkerr,thetasub, wsub, subjkerr  theta_SGC  w_SGC   jkerr_SGC    ' )
+    print 'writing txt to data_txt/acf_comparison'+suffix+'.txt'
     
     
     """
@@ -2017,7 +2103,7 @@ def resampleWithPth( des ):
     pmin = 0.1
     pmax = 0.75
     p1stbin = 0.1
-    pth_bin, step = np.linspace(0.0, 1.0, 200, endpoint = True, retstep = True)
+    pth_bin, step = np.linspace(0.0, 1.0, 300, endpoint = True, retstep = True)
     pcenter = pth_bin + step/2.
     
     # ellipse
@@ -2027,19 +2113,28 @@ def resampleWithPth( des ):
     
     # straight
     pcurve2 = np.zeros(pth_bin.size)
-    pcurve_front = np.linspace(0.0, 1.0, 200, endpoint = True)
+    pcurve_front = np.linspace(0.0, 1.0, 300, endpoint = True)
     pcurve2[:pcurve_front.size] = pcurve_front
     pcurve2[pcurve_front.size:] = pmax
 
     ellipse_dmass = [None for i in range(pth_bin.size)]
     straight_dmass = [None for i in range(pth_bin.size)]
     el_fraction, st_fraction = np.zeros(pth_bin.size),  np.zeros(pth_bin.size)
+    
     for i in range(pth_bin.size-1):
-        mask = (des['EachProb_CMASS'] >= pth_bin[i])&(des['EachProb_CMASS'] < pth_bin[i]+step)
+        mask = (des['EachProb_CMASS'] >= pth_bin[i]) & (des['EachProb_CMASS'] < pth_bin[i]+step)
         cat = des[mask]
-        ellipse_dmass[i] = np.random.choice( cat, size = np.around(pcurve[i] * cat.size) )
-        straight_dmass[i] = np.random.choice( cat, size = np.around(pcurve2[i] * cat.size) )
-        el_fraction[i], st_fraction[i] = ellipse_dmass[i].size * 1./cat.size, straight_dmass[i].size * 1./cat.size
+        
+        try :
+            ellipse_dmass[i] = np.random.choice( cat, size = np.around(pcurve[i] * cat.size) )
+            straight_dmass[i] = np.random.choice( cat, size = np.around(pcurve2[i] * cat.size) )
+            el_fraction[i] = ellipse_dmass[i].size * 1./cat.size
+            st_fraction[i] = straight_dmass[i].size * 1./cat.size
+        except ValueError:
+            ellipse_dmass[i] = np.random.choice( des, size = 0)
+            straight_dmass[i] = np.random.choice( des, size = 0)
+            el_fraction[i] = 0
+            st_fraction[i] = 0
         #fraction.append( np.sum(mask) * 1./des.size )
         #print pth_bin[i], pth_bin[i]+step, pcurve[i], dmass[i].size * 1./cat.size, dmass[i].size
     
@@ -2050,8 +2145,8 @@ def resampleWithPth( des ):
     straight_dmass[i] = np.random.choice( cat, size = int(1.0 * cat.size) )
     #print pth_bin[i], pth_bin[i]+step, 0.75, dmass[i].size * 1./cat.size, dmass[i].size
     
-    ellipse_dmass, straight_dmass = np.hstack(ellipse_dmass), np.hstack(straight_dmass)
-    
+    ellipse_dmass = np.hstack(ellipse_dmass)
+    straight_dmass = np.hstack(straight_dmass)
     
     # plotting selection prob----------
     """
@@ -2081,7 +2176,7 @@ def resampleWithPth( des ):
     return straight_dmass, ellipse_dmass
 
 
-def addphotoz(des, im3shape):
+def addphotoz(des = None, im3shape = None):
     
     import esutil
     h = esutil.htm.HTM(10)
@@ -2089,8 +2184,6 @@ def addphotoz(des, im3shape):
     desdm_zp = np.zeros(des.size, dtype=float)
     desdm_zp[m_re] = im3shape[m_im3]['DESDM_ZP']
     result = rf.append_fields(des, 'DESDM_ZP', desdm_zp)
-    
-    
     return result
 
 def SDSSaddphotoz(cmass):
@@ -2114,19 +2207,24 @@ def EstimateContaminantFraction( dmass = None, cmass = None ):
     true_mask = np.zeros( dmass.size, dtype = bool )
     true_mask[m_dmass] = 1
     
-    cross_data = np.loadtxt('data_txt/acf_cross_Ashley.txt')
+    #cross_data = np.loadtxt('data_txt/acf_cross_noweightcont.txt')
+    #cross_data = np.loadtxt('data_txt/acf_cross_weightedcont_prop.txt')
+    cross_data = np.loadtxt('data_txt/acf_cross_weightedcont.txt')
     r_tc, w_tc, err_tc = cross_data[:,0], cross_data[:,1], cross_data[:,2]
     
-    auto_data = np.loadtxt('data_txt/acf_comparison_Ashley.txt')
-    cont_data = np.loadtxt('data_txt/acf_comparison_Ashley_cont.txt')
-    r, w, err, w_t, err_t,  w_c, err_c = auto_data[:,0], auto_data[:,4],  auto_data[:,5],  auto_data[:,7],  auto_data[:,8], cont_data[:,4], cont_data[:,5]
+    auto_data = np.loadtxt('data_txt/acf_comparison_photo_dmass.txt')
+    true_data = np.loadtxt('data_txt/acf_comparison_photo_true.txt')
+    #cont_data = np.loadtxt('data_txt/acf_comparison_noweightcont.txt')
+    #cont_data = np.loadtxt('data_txt/acf_comparison_weightedcont_prop.txt')
+    cont_data = np.loadtxt('data_txt/acf_comparison_weightedcont.txt')
+    r, w, err, w_t, err_t,  w_c, err_c = auto_data[:,0], auto_data[:,1],  auto_data[:,2],  true_data[:,1],  true_data[:,2], cont_data[:,1], cont_data[:,2]
     
     f_c = np.sum(~true_mask) * 1./dmass.size
     print "current f_c = {:>0.2f} %".format( f_c * 100)
     ang_L = 1. + w - (1. -f_c)**2 * (1. + w_t)
     ang_R = 2. * f_c * (1. -f_c)*(1. + w_tc) + f_c**2 * (1+w_c)
     
-    keep = (r > 0.01) & (r < 1)
+    keep = (r > 0.001) & (r < 10)
     fractionL = 1. - np.sqrt( (1. + w - ang_L) * 1./(1. + w_t) )
     fractionR = (-(1.+w_tc)+np.sqrt((1+w_tc)**2 + (w_c-1.-2*w_tc)* ang_R) ) * 1./(w_c-1.-2* w_tc)
     m_fL, m_fR = np.mean(fractionL), np.mean(fractionR) # current max cont fraction
@@ -2136,8 +2234,8 @@ def EstimateContaminantFraction( dmass = None, cmass = None ):
     # ideal fraction
     eps82 = np.mean(err[keep]/w[keep])/np.sqrt(np.sum(keep))
     eps = eps82  * np.sqrt(100./1000)
-    i_fractionL = np.abs(1. - np.sqrt( (1 + w - eps82) * 1./(1 + w_t) ))
-    i_fractionR = np.abs((-(1+w_tc)+np.sqrt((1+w_tc)**2 + (w_c-1.-2*w_tc)* eps82) ) * 1./(w_c-1.-2* w_tc))
+    i_fractionL = np.abs(1. - np.sqrt( (1 + w - eps) * 1./(1 + w_t) ))
+    i_fractionR = np.abs((-(1+w_tc)+np.sqrt((1+w_tc)**2 + (w_c-1.-2*w_tc)* eps) ) * 1./(w_c-1.-2* w_tc))
     
     """
     # calculate everything for each point, and then remove invalid values (negative or higher
@@ -2166,7 +2264,10 @@ def EstimateContaminantFraction( dmass = None, cmass = None ):
     
     dmass_lensing = np.loadtxt('data_txt/Ashley_lensing.txt')
     true_lensing = np.loadtxt('data_txt/Ashley_true_lensing.txt')
-    cont_lensing = np.loadtxt('data_txt/Ashley_cont_lensing.txt')
+    #cont_lensing = np.loadtxt('data_txt/lensing_noweightcont.txt')
+    cont_lensing = np.loadtxt('data_txt/lensing_weightedcont_prop.txt')
+    #cont_lensing = np.loadtxt('data_txt/lensing_weightedcont.txt')
+
     
     r_p, LS, err_LS, LS_t, err_LS_t, LS_c, err_LS_c = dmass_lensing[:,0], dmass_lensing[:,1], dmass_lensing[:,2], true_lensing[:,1], true_lensing[:,2], cont_lensing[:,1], cont_lensing[:,2]
     
@@ -2205,6 +2306,9 @@ def EstimateContaminantFraction( dmass = None, cmass = None ):
     DAT2 = np.column_stack((r_p, i_fractionL_len, i_fractionR_len, weight_len, i_f_weighted_len, err_LS,err_LS_t, err_LS_c))
     np.savetxt(filename2, DAT2[keep * maskR], delimiter = ' ', header = 'r_p, i_fractionL_len, i_fractionR_len, weight_len, f_weighted_len, err_LS, err_LS_t, err_LS_c')
     print 'data file writing to ', filename2
+    return 0
+    
+    
 
     """
         
@@ -2266,7 +2370,54 @@ def EstimateContaminantFraction( dmass = None, cmass = None ):
 
     """
 
+
+
+
+def RunningXDGMMwithBalrog(des_train, noblend_clean_cmass_data_des):
+
+    import os
+    import esutil
+    #catpath = '/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'
+    catpath = '/n/des/lee.5922/data/balrog_cat/'
+    tables = []
+    
+    
+    for j in range(20):
+        keyword = 'EMHUFF.BALROG_Y1A1_SIM_{:05d}'.format(j)
+        names = []
+        for i in os.listdir(catpath):
+            if os.path.isfile(os.path.join(catpath,i)) and keyword in i:
+                #print i
+                names.append(catpath+i)
+        try:
+            balrog = io.LoadBalrog(user=keyword, truth=None )
+            balrog = AddingReddening(balrog)
+            balrog = Cuts.doBasicCuts(balrog, object = 'galaxy')
+            result = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des_train, test=balrog, prefix = prefix, mock = True )
+            tables.append(result)
+        except IOError: pass
+    
+    tables = np.hstack(tables)
+    fitsio.write('result_cat/result_balrog_y1a1.fit', tables2)
+    return tables
+
+
+
 def main():
+    
+    """
+    Important Catalog
+    ------------------
+    SSPT_star = fitsio.read('result_cat/SSPT_star.fits')
+    full_des_data_st82 = io.getDESY1A1catalogs(keyword = 'STRIPE82', sdssmask=False)
+    full_des_data = io.getDESY1A1catalogs(keyword = 'Y1A1', sdssmask=False)   
+    sdssmaskedFullDesdata =  io.getDESY1A1catalogs(keyword = 'des_st82', sdssmask=True)
+    balrog_st82 = fitsio.read('result_cat/result_balrog_JELENA.fits') # added EachProb_CMASS
+    balrog_y1a1 = fitsio.read('result_cat/result_balrog_EMHUFF.fits') # added EachProb_CMASS
+    result_photo = fitsio.read('result_cat/result_photo.fits') # fitted with photoCMASS
+    result_y1a1 = fitsio.read('/n/des/lee.5922/data/y1a1_coadd/dmass_y1a1.fits')
+    result_smallst82 = fitsio.read('result_cat/result1.fits')
+    """
     
     # load dataset
 
@@ -2279,13 +2430,16 @@ def main():
     des_data_clean = keepSDSSgoodregion(Cuts.doBasicCuts(full_des_data, object = 'galaxy'))
     des = Cuts.SpatialCuts(des_data_clean, ra = ra, ra2=ra2, dec= dec, dec2= dec2  )
     
-    cmass_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-photoObj_z.fits.gz')
-    cmass_photo = io.getSDSScatalogs(file = '/n/des/lee.5922/data/bosstile-final-collated-boss2-boss38-photoObj.fits.gz')
-    #cmass_data_o = io.getSDSScatalogs(file ='/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-combined.fits.gz')
+    #cmass_spec= io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-photoObj_z.fits.gz')
+    #cmass_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/bosstile-final-collated-boss2-boss38-photoObj.fits.gz')
     
+    
+    cmass_data_o = io.getSDSScatalogs(file ='/n/des/lee.5922/data/galaxy_DR11v1_CMASS_South-combined.fits.gz')
     clean_cmass_data = Cuts.keepGoodRegion(cmass_data_o)
-    cmass_data = Cuts.SpatialCuts(clean_cmass_data,ra =ra, ra2=ra2 , dec=dec, dec2=dec2 )
+    cmass_data = Cuts.SpatialCuts(clean_cmass_data, ra =ra, ra2=ra2, dec=dec, dec2=dec2 )
+    
     noblend_clean_cmass_data, noblend_clean_cmass_data_des = DES_to_SDSS.match( cmass_data, des_data_clean)
+    fitsio.write('noblend_clean_cmass_data_test.fits', noblend_clean_cmass_data )
     
     """
     #lowz_data_o = io.getSDSScatalogs(file = '/n/des/lee.5922/data/galaxy_DR11v1_LOWZ_South-photoObj.fits.gz')
@@ -2293,9 +2447,17 @@ def main():
     #clean_lowz_data = Cuts.keepGoodRegion(lowz_data)
     """
     
-    sdss_data_o = io.getSDSScatalogs(bigSample = True)
-    sdss_data_clean = Cuts.doBasicSDSSCuts(sdss_data_o)
-    sdss = Cuts.SpatialCuts(sdss_data_clean,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
+    sdss_prior = fitsio.read('/n/des/lee.5922/data/cmass_cat/cmass_stripe82.fits', upper=True)
+    #sdss_data_o = io.getSDSScatalogs(bigSample = True)
+    sdss_data_clean = Cuts.doBasicSDSSCuts(sdss_prior)
+    fitsio.write('result_cat/cmass_stripe82_photo.fits', sdss_data_clean )
+    #sdss = Cuts.SpatialCuts(sdss_prior,ra =ra, ra2=ra2 , dec= dec, dec2= dec2 )
+    
+    noblend_clean_cmass_data,noblend_clean_cmass_data_des = DES_to_SDSS.match(sdss_data_clean, des)
+    fitsio.write('result_cat/noblend_cmass_stripe82_photo.fits', noblend_clean_cmass_data)
+    fitsio.write('result_cat/noblend_cmass_stripe82_photo_des.fits',noblend_clean_cmass_data_des)
+    
+    
     #cmass_sdss = SDSS_cmass_criteria(sdss)
 
     import esutil
@@ -2303,124 +2465,130 @@ def main():
     
     des_im3 = des_im3_o[des_im3_o['INFO_FLAG'] == 0]
     
-    des_im3_o = io.getDEScatalogs(file = '/n/des/lee.5922/data/im3shape_st82.fits')
-    des_im3 = Cuts.SpatialCuts(des_im3_o ,ra =320, ra2=360 , dec=-1, dec2= 1 )
+    des_im3_st82_o = io.getDEScatalogs(file = '/n/des/lee.5922/data/im3shape_st82.fits')
+    clean_des_im3_st82 = Cuts.keepGoodRegion(des_im3_st82_o)
+    des_im3_st82 = Cuts.SpatialCuts(clean_des_im3_st82 ,ra=320, ra2=360 , dec=-1, dec2=1 )
     #des = im3shape_galprof_mask(des_im3, des) # add galaxy profile mode
     
+    balrog_o = io.LoadBalrog(user = 'JELENA', truth = None)
     
-    balrog_o = io.LoadBalrog(user = 'JELENA.BALROG_Y1A1_S82', truth = None)
-    balrog = Cuts.keepGoodRegion( balrog_o, balrog=True)
+    balrog_o = io.LoadBalrog(user = 'EMHUFF.BALROG_Y1A1_00000', truth = None)
+    #balrog = Cuts.keepGoodRegion( balrog_o)
+    """
     print "alphaJ2000, deltaJ2000  -->  ra, dec"
     balrogname = list( balrog.dtype.names)
     alphaInd = balrogname.index('ALPHAWIN_J2000_DET')
     deltaInd = balrogname.index('DELTAWIN_J2000_DET')
     balrogname[alphaInd], balrogname[deltaInd] = 'RA', 'DEC'
     balrog.dtype.names = tuple(balrogname)
+    """
     balrog = AddingReddening(balrog)
     balrog = Cuts.doBasicCuts(balrog, object = 'galaxy')
     
+    #bcc_st82 = fitsio.read('/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/bcc_stripe82.fit')
     
     # start XD
     prefix = 'small_'
+    #prefix = 'photo_'
     
     #devide samples
-    (trainInd, testInd), (sdsstrainInd,sdsstestInd) = split_samples(des, des, [0.2,0.8], random_state=0)
+    (trainInd, testInd), (sdsstrainInd,sdsstestInd) = split_samples(des, des, [0.5,0.5], random_state=0)
     des_train = des[trainInd]
     des_test = des[testInd]
 
 
-    result = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des_train, test=des_test, prefix = prefix, mock=True )
+    result = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des_train, test=des, prefix = prefix, mock=True )
     result = addphotoz(result, des_im3)
     
     result_y1a1 = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des_train, test=y1a1, prefix = prefix, mock = True )
     result_y1a1 = addphotoz(result_y1a1, des_im3_o)
 
-    result_balrog = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des, test=balrog, prefix = prefix, mock = True )
-
-    #fitsio.write('result_cat/result_fullst82.fits', result)
-    fitsio.write('result1.fits', result)
-    #fitsio.write('result_y1a1.fits', result_y1a1)
-    #fitsio.write('result_balrog.fits', result_balrog)
+    result_balrog = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des_train, test=balrog, prefix = prefix, mock = True )
     
+    result_bcc = XDGMM_model(noblend_clean_cmass_data_des, noblend_clean_cmass_data_des, train=des, test=bcc, prefix = prefix, mock = True, bcc=True )
+    
+    #fitsio.write('result_cat/result_fullst82.fits', result)
+    fitsio.write('result_cat/result_photo.fits', result)
+    #fitsio.write('result_y1a1.fits', result_y1a1)
+    fitsio.write('result_cat/result_balrog.fits', result_balrog)
+    #fitsio.write('result_cat/result_balrog_JELENA.fits', result_balrog)
     # Ashley - match distribution and visulaization ----------------------------
     
     #calling catalogs
-    noblend_clean_cmass_data_des = fitsio.read('result_cat/noblend_clean_cmass_data_des.fits')
-    noblend_clean_cmass_data = fitsio.read('result_cat/noblend_clean_cmass_data.fits')
-    #noblend_clean_cmass_data = SDSSaddphotoz(noblend_clean_cmass_data)
-    result = fitsio.read('result_cat/result1.fits')
+    #noblend_clean_cmass_data_des = fitsio.read('result_cat/noblend_clean_cmass_data_des.fits')
+    #noblend_clean_cmass_data = fitsio.read('result_cat/noblend_clean_cmass_data.fits')
+    noblend_clean_cmass_data = fitsio.read('result_cat/noblend_cmass_stripe82_photo.fits')
+    noblend_clean_cmass_data_des = fitsio.read('result_cat/noblend_cmass_stripe82_photo_des.fits')
+
+    result = fitsio.read('result_cat/result_photo.fits')
     #result = fitsio.read('result_cat/result_fullst82.fits')
     result_y1a1 = fitsio.read('/n/des/lee.5922/data/y1a1_coadd/dmass_y1a1.fits')
-
     
-    #result_balrog = fitsio.read('result_cat/result_balrog.fits')
     
-    As_dmass, As_dmass2 = resampleWithPth(result_y1a1)
+    result_balrog = fitsio.read('result_cat/result_balrog.fits')
     
+    dmass_stripe82, _ = resampleWithPth(result)
+    dmass_y1a1,_ = resampleWithPth(result_y1a1)
+    dmass_bcc,_ = resampleWithPth(result_bcc)
+    As_dmass,_ = resampleWithPth(result_balrog)
     
     #As_dmass, As_dmass2 = addphotoz( As_dmass, des_im3 ), addphotoz( As_dmass2, des_im3 )
-    As_X, _ = mixing_color( As_dmass )
-    As2_X, _ = mixing_color( As_dmass2 )
+    As_X, _ = mixing_color( resample )
+    #As2_X, _ = mixing_color( As_dmass2 )
     Xtrue,_ = mixing_color( noblend_clean_cmass_data_des )
     labels = ['MAG_MODEL_R', 'MAG_MODEL_I', 'g-r', 'r-i', 'i-z']
     ranges =  [[17,22.5], [17,22.5], [0,2], [-.5,1.5], [0.0,.8]]
-    doVisualization_1d( Xtrue, As_X, labels = labels, ranges = ranges, nbins=100, prefix='Ashley_')
+    doVisualization_1d( Xtrue, As_X, labels = labels, ranges = ranges, nbins=100, prefix='reweight_')
     doVisualization_1d( Xtrue, As2_X, labels = labels, ranges = ranges, nbins=100, prefix='Ashley2_')
 
     cmassIndmass, _ = DES_to_SDSS.match( noblend_clean_cmass_data, As_dmass)
-    angularcorr( dmass = As_dmass, subCMASS = cmassIndmass, cmass =noblend_clean_cmass_data, ra = ra, ra2 = ra2, dec=dec, dec2 = dec2, suffix = '_Ashley_y1a1')
+    angularcorr( dmass = As_dmass, subCMASS = cmassIndmass, cmass =noblend_clean_cmass_data, ra = ra, ra2 = ra2, dec=dec, dec2 = dec2, suffix = '_photo')
     cmassIndmass, _ = DES_to_SDSS.match( noblend_clean_cmass_data,  As_dmass2)
     angularcorr( dmass = As_dmass2, subCMASS = cmassIndmass, cmass =noblend_clean_cmass_data, ra = ra, ra2 = ra2, dec=dec, dec2 = dec2, suffix = '_Ashley2_y1a1')
+
+
+
+    weighted_balrog = reweight(train = balrog, test = noblend_clean_cmass_data_des)
+    fitsio.write('result_cat/weighted_balrog.fits', weighted_balrog )
+    weighted_balrog = fitsio.read('result_cat/weighted_balrog.fits')
+    makePlotReweight( train = weighted_balrog, test = noblend_clean_cmass_data_des )
     
-    
-    # corr visualzation
-    suffix = '_Ashley_y1a1'
-    corr_txt = np.loadtxt('acf_comparison'+suffix+'.txt')
-    thetaS, wS, Sjkerr = corr_txt[:,0], corr_txt[:,1], corr_txt[:,2]
-    thetaD, wD, Djkerr = corr_txt[:,3], corr_txt[:,4], corr_txt[:,5]
-    thetasub, wsub, subjkerr = corr_txt[:,6], corr_txt[:,7], corr_txt[:,8]
-    theta_SGC, w_SGC, jkerr_SGC = corr_txt[:,9], corr_txt[:,10], corr_txt[:,11]
-    
-    #cross_txt = np.loadtxt('data_txt/acf_cross'+suffix+'.txt')
-    #thetaCC, wCC, CCjkerr = cross_txt[:,0], cross_txt[:,1], cross_txt[:,2]
-    
-    fig,ax = plt.subplots()
-    
-    ax.errorbar( theta_SGC, w_SGC, yerr = jkerr_SGC, fmt = '.', label = 'SGC')
-    ax.errorbar( thetaS* 0.95, wS, yerr = Sjkerr, fmt = '.', label = 'CMASS local')
-    ax.errorbar( thetaD, wD, yerr = Djkerr, fmt = '.', label = 'DMASS')
-    #ax.errorbar( thetasub* 1.05, wsub, yerr = subjkerr, fmt = '.', label = 'CMASS in dmass')
-    #ax.errorbar( thetaCC* 1.05, wCC, yerr = CCjkerr, fmt = '.', label = 'cross')
-    
-    ax.set_xlim(1e-3, 10)
-    ax.set_ylim(1e-4, 10)
-    #ax.set_ylim(1e-2,2)
-    ax.set_xlabel(r'$\theta(deg)$')
-    ax.set_ylabel(r'${w(\theta)}$')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.legend(loc = 'best')
-    ax.set_title(' angular correlation ')
-    fig.savefig('figure/acf_comparison'+suffix+'.png')
-    print 'writing plot to figure/acf_comparison'+suffix+'.png'
     
     
     # corr comparison
-    labels = [ 'Ashley_y1a1', 'Ashley2_y1a1']
-    corr_txt = [np.loadtxt('acf_comparison_'+s+'.txt') for s in labels]
-    thetaS, wS, Sjkerr = corr_txt[0][:,0], corr_txt[0][:,1], corr_txt[0][:,2]
+    labels = ['DES_SSPT', 'fullcmass_SGC']
+    #labels = [ 'photo_cmass', 'photo_dmass', 'photo_true', 'noweightcont', 'weightedcont', 'weightedcont_prop' ]
+    #labels = [ 'noweightcont', 'weightedcont', 'weightedcont_prop' ]
+    #labels = [  'noweight', 'wnstar_g']
+    
+    #labels = ['No_mask', 'All_mask', 'mask_AIRMASS', 'mask_SKYBRITE', 'mask_FWHM', 'mask_SKYSIGMA', 'wnstar+mask']
+    #labels = ['No_mask', 'All_mask'] + [ 'w+'+l for l in labels[3:6]]
+    
+    linestyle = ['-']+['--' for i in labels[:-1]]
+    fmt = ['.']+['o' for i in labels[:-2]]+['.']
+    color = ['red'] + [None for i in labels[:-1]]
+    corr_txt = [np.loadtxt('data_txt/acf_comparison_'+s+'.txt') for s in labels]
+    
+    corr_txt2 = np.loadtxt('data_txt/acf_comparison_cmass_SGC.txt')
+    thetaS, wS, Sjkerr = corr_txt2[:,0], corr_txt2[:,1], corr_txt2[:,2]
     
     fig, (ax, ax2) = plt.subplots(2,1, figsize = (10,15))
-    ax.errorbar( thetaS, wS, yerr = Sjkerr, label = 'CMASS local', color='black', alpha = 0.5)
-    ax2.errorbar( thetaS, wS-wS, yerr = Sjkerr, label = 'CMASS local', color='black', alpha = 0.9)
+    ax.errorbar( thetaS, wS, yerr = Sjkerr, label = 'CMASS SGC', color='black', alpha = 0.5)
+    ax2.errorbar( thetaS, wS-wS, yerr = 10 * Sjkerr, label = 'CMASS SGC', color='black', alpha = 0.9)
     
-    for i in range(len(suffix)):
-        thetaD, wD, Djkerr = corr_txt[i][:,3], corr_txt[i][:,4], corr_txt[i][:,5]
-        ax.errorbar( thetaD* (0.90 + 0.04*i), wD, yerr = Djkerr, fmt = '.', label = labels[i])
-        ax2.errorbar( thetaD* (0.90 + 0.04*i), wD - wS, yerr = Djkerr, fmt = '.', label = labels[i])
+    for i in range(len(labels)):
+        
+        thetaD, wD, Djkerr = corr_txt[i][:,0], corr_txt[i][:,1], corr_txt[i][:,2]
+        
+        if labels[i] == 'wnstar+mask': markersize = 12
+        else : markersize = 5
+        
+        ax.errorbar( thetaD*(0.95+0.02*i), wD, yerr = Djkerr, fmt = fmt[i], linestyle = linestyle[i] ,label = labels[i], color = color[i], markersize = markersize)
+        ax2.errorbar( thetaD*(0.95+0.05*i), 10 * (wD - wS), yerr = 10 *Djkerr, fmt = fmt[i],  linestyle = linestyle[i], label = labels[i],color = color[i], markersize=markersize)
     
-    ax.set_xlim(1e-2, 10)
-    ax.set_ylim(1e-3, 1)
+    ax.set_xlim(1e-3, 50)
+    #ax.set_ylim(-0.02 , 0.5)
+    ax.set_ylim(0.001 , 10.0)
     ax.set_xlabel(r'$\theta(deg)$')
     ax.set_ylabel(r'${w(\theta)}$')
     ax.set_xscale('log')
@@ -2428,13 +2596,14 @@ def main():
     ax.legend(loc = 'best')
     ax.set_title(' angular correlation ')
 
-    ax2.set_xlim(1e-2, 10)
-    ax2.set_ylim(-.5, .5)
+    ax2.axhline(y=0.0, color = 'black')
+    ax2.set_xlim(1e-1, 10)
+    ax2.set_ylim(-.2, .5)
     ax2.set_xscale('log')
     ax2.set_xlabel(r'$\theta(deg)$')
-    ax2.set_ylabel(r'${w(\theta)}$ - ${w_{\rm{true}}(\theta) }$')
+    ax2.set_ylabel(r'$10 \times$ $($ ${w}$ - ${w_{\rm{true}}}$ $)$')
     ax2.legend(loc='best')
-    figname = 'figure/acf_comparison_y1a1.png'
+    figname = 'figure/acf_comparison.png'
     fig.savefig(figname)
     print 'writing plot to ', figname
     
@@ -2466,7 +2635,7 @@ def main():
 
 
     # contaminant test --------------------------------------
-    from systematics import LensingSignal, cross_angular_correlation
+    from systematics_module.corr import LensingSignal, cross_angular_correlation, angular_correlation
     
     rand_o = fitsio.read('/n/des/lee.5922/data/random0_DR11v1_CMASS_South.fits.gz')
     rand_clean = Cuts.keepGoodRegion(rand_o)
@@ -2481,38 +2650,115 @@ def main():
 
 
     # 1) angular clustering signal ----------------------
+
     
-    cmassIndmass, _ = DES_to_SDSS.match( noblend_clean_cmass_data,  As_dmass)
-    angularcorr( dmass = As_dmass, subCMASS = cmassIndmass, cmass =noblend_clean_cmass_data, ra = ra, ra2 = ra2, dec=dec, dec2 = dec2, suffix = '_Ashley')
-    angularcorr( dmass = contaminant, subCMASS = cmassIndmass, cmass =noblend_clean_cmass_data, ra = ra, ra2 = ra2, dec=dec, dec2 = dec2, suffix = '_Ashley_cont')
+    # weighting contaminant
+    def WeightingCont(result, dmass, true, contaminant):
+        
+        # cont hist
+        pth_bin, step = np.linspace(0.0, 1.01, 50, endpoint = True, retstep = True)
+        pcenter = pth_bin + step/2.
+        N, edge = np.histogram( contaminant['EachProb_CMASS'], bins = pth_bin, normed=0)
+        N_t, edge = np.histogram( true['EachProb_CMASS'], bins = pth_bin,normed=0)
+        N_d, edge = np.histogram( dmass['EachProb_CMASS'], bins = pth_bin,normed=0)
+        w_cont =   N_t*1./N
+        w_cont_prop = pth_bin[:-1]
+        N_all, edge = np.histogram( result['EachProb_CMASS'], bins = pth_bin, normed=0)
+        
+        weight_cont, weight_cont_prop = np.zeros(contaminant.size, dtype=float), np.zeros(contaminant.size, dtype=float)
+        for i, p in enumerate(pth_bin[:-1]):
+            mask = ( contaminant['EachProb_CMASS'] >= p ) & ( contaminant['EachProb_CMASS'] < p + step)
+            print p, p+step, contaminant[mask].size, w_cont[i]
+            weight_cont[mask] = w_cont[i]
+            weight_cont_prop[mask] = w_cont_prop[i]
+        
+        """
+        fig, (ax,ax2) = plt.subplots(1,2,figsize=(14,7))
+        
+        ax.plot( pcenter[:-1], N, color = 'red', linestyle = '--', label = 'cont')
+        ax.plot( pcenter[:-1], N * w_cont , color = 'green', linestyle = '-', label = 'weighted cont')
+        ax.plot( pcenter[:-1], N_t , color = 'blue', linestyle = '--', label = 'true')
+        ax.plot( pcenter[:-1], N_d, color = 'grey', linestyle = '--', label = 'all')
+        
+        
+        ax2.plot( pcenter[:-1], N* 1./N_all, color = 'red', linestyle = '--', label = 'cont')
+        ax2.plot( pcenter[:-1], N * w_cont* 1./N_all, color = 'green', linestyle = '-', label = 'weighted cont')
+        ax2.plot( pcenter[:-1], N_t* 1./N_all , color = 'blue', linestyle = '--', label = 'true')
+        ax2.plot( pcenter[:-1], N_d * 1./N_all, color = 'grey', linestyle = '--', label = 'all')
+        
+        
+        ax.set_xlim(0,0.95)
+        ax.set_ylim(0,N_d[:10].max() + 1)
+        ax.set_ylabel('N')
+        ax.set_xlabel('p_threshold')
+        ax.legend(loc='best')
+        
+        ax2.set_xlim(0,1.0)
+        ax2.set_ylabel('fraction')
+        ax2.set_xlabel('p_threshold')
+        ax2.legend(loc='best')
+        
+        fig.savefig('test')
+        print 'figure to ', 'test.png'
+        """
+        
+        
+        return weight_cont, weight_cont_prop
     
-    # cross correlation
-    cross_angular_correlation(data = true, data2 = contaminant, rand = cat_cmass_rand82, rand2= cat_cmass_rand82, suffix = '_Ashley')
+    w_cont, w_cont_prop = WeightingCont(result, As_dmass, true, contaminant)
+    
+    angular_correlation(data = noblend_clean_cmass_data, rand = cat_cmass_rand82,  weight = [None, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_cmass')
+    angular_correlation(data = true, rand = cat_cmass_rand82,  weight = [None, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_true')
+    angular_correlation(data = As_dmass, rand = cat_cmass_rand82,  weight = [None, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_dmass')
+
+    angular_correlation(data = contaminant, rand = cat_cmass_rand82,  weight = [None, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_noweightcont')
+    angular_correlation(data = contaminant, rand = cat_cmass_rand82, weight = [ w_cont_prop, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_weightedcont_prop')
+    angular_correlation(data = contaminant, rand = cat_cmass_rand82, weight = [ w_cont, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_weightedcont')
+
+    cross_angular_correlation(data = true, data2 = contaminant, rand = cat_cmass_rand82, rand2= cat_cmass_rand82, weight = [None, cat_cmass_rand82['WEIGHT_FKP'], None, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_noweightcont')
+    cross_angular_correlation(data = true, data2 = contaminant, rand = cat_cmass_rand82, rand2= cat_cmass_rand82, weight = [None, cat_cmass_rand82['WEIGHT_FKP'], w_cont_prop, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_weightedcont_prop')
+    cross_angular_correlation(data = true, data2 = contaminant, rand = cat_cmass_rand82, rand2= cat_cmass_rand82, weight = [None, cat_cmass_rand82['WEIGHT_FKP'], w_cont, cat_cmass_rand82['WEIGHT_FKP']], suffix = '_weightedcont')
+    
+    
+
+    LensingSignal(lense = contaminant, source = des_im3_st82, rand = cat_cmass_rand82, weight = [None,None,None], suffix = 'noweightcont')
+    LensingSignal(lense = contaminant, source = des_im3_st82, rand = cat_cmass_rand82, weight = [w_cont_prop,None,None], suffix = 'weightedcont_prop')
+    LensingSignal(lense = contaminant, source = des_im3_st82, rand = cat_cmass_rand82, weight = [w_cont,None,None], suffix = 'weightedcont')
+    
+    
+    # -------------------------
+    
+    angular_correlation(data = As_dmass, rand = cat_cmass_rand82, suffix = '_photo_dmass')
+    angular_correlation(data = noblend_clean_cmass_data, rand = cat_cmass_rand82, suffix = '_photo_true')
+    angular_correlation(data = contaminant, rand = cat_cmass_rand82, suffix = '_photo_cont')
+    cross_angular_correlation(data = true, data2 = contaminant, rand = cat_cmass_rand82, rand2= cat_cmass_rand82, weight = [None, None, None, None], suffix = '_photo')
     
     
     # 2) Lensing signal ----------------------
 
-    LensingSignal(lense = As_dmass, source = des_im3, rand = cat_cmass_rand82, prefix = 'Ashley_')
-    LensingSignal(lense = true, source = des_im3, rand = cat_cmass_rand82, prefix = 'Ashley_true_')
-    LensingSignal(lense = contaminant, source = des_im3, rand = cat_cmass_rand82, prefix = 'Ashley_cont_')
+    LensingSignal(lense = As_dmass, source = des_im3, rand = cat_cmass_rand82, suffix = 'noweightcont')
+    LensingSignal(lense = true, source = des_im3, rand = cat_cmass_rand82, suffix = 'weightedcont_prop')
+    LensingSignal(lense = contaminant, source = des_im3, rand = cat_cmass_rand82, suffix = 'weightedcont')
 
     # plotting
-    prefix = 'Ashley_true_'
-    filename = 'data_txt/'+prefix+'lensing.txt'
-    lensingdat = np.loadtxt(filename)
-    r_p_bins, LensSignal, LSjkerr, correctedLensSignal, CLSjkerr, BoostFactor, Boostjkerr = lensingdat[:,0], lensingdat[:,1],lensingdat[:,2],lensingdat[:,3],lensingdat[:,4],lensingdat[:,5],lensingdat[:,6]
-
-    fig, ax = plt.subplots(1,1, figsize = (7,7))
-    #signals = [[LensSignal, correctedLensSignal], [LSjkerr, CLSjkerr]]
-    signals = [[LensSignal], [LSjkerr]]
-    labels = ['Lensing', 'Corrected Lensing']
-    for i in range(len(signals[0])):
-        ax.errorbar(r_p_bins * (1 + 0.1*i), signals[0][i], yerr = signals[1][i], fmt='o', label = labels[i])
+    
+    labels = ['noweightcont', 'weightedcont_prop', 'weightedcont']
+    
+    lensingdat = [np.loadtxt('data_txt/lensing_'+s+'.txt') for s in labels ]
+    
+    #r_p_bins, LensSignal, LSjkerr, correctedLensSignal, CLSjkerr, BoostFactor, Boostjkerr = lensingdat[:,0], lensingdat[:,1],lensingdat[:,2],lensingdat[:,3],lensingdat[:,4],lensingdat[:,5],lensingdat[:,6]
+    fig, ax = plt.subplots(1,1, figsize = (12,7))
+    
+    for j in range(len(labels)):
+        
+        r_p_bins, LensSignal, LSjkerr = [lensingdat[j][:,i] for i in range(lensingdat[0][0].size)]
+        ax.errorbar(r_p_bins * (1 + 0.1*j), LensSignal, yerr = LSjkerr, fmt='o', label = labels[j])
+                                         
     theory = np.loadtxt('data_txt/smd_v_theta_cmass.dat')
     rr_the = theory[:,0]
     delta_sigma_the = theory[:,1]
     error_the = theory[:,2] * np.sqrt(5000/120)
-    ax.errorbar(10**rr_the, 10**delta_sigma_the, yerr = 10**error_the, color = 'red', fmt='--o', label = 'theory')
+    ax.errorbar(10**rr_the, 10**delta_sigma_the, yerr = 10**error_the, color = 'black', fmt='--o', label = 'theory')
     
     ax.set_yscale('log')
     ax.set_xscale('log')
@@ -2520,13 +2766,12 @@ def main():
     ax.set_ylim(1e-2,1e3)
     ax.set_xlabel(r'$r$ $(kpc/h)$')
     ax.set_ylabel(r'$\Delta\Sigma$ $(M_{s}h/pc^{2})$')
-    ax.set_title('DMASS lensing signal (z_lense = [0.45, 0.55] )'  )
+    ax.set_title('contaminant lensing signal (z_lense = [0.45, 0.55] )'  )
     ax.legend(loc = 'best')
 
-    figname='figure/'+prefix+'lensing.png'
+    figname='figure/lensing_weightedcont.png'
     fig.savefig(figname)
     print 'saving fig to :', figname
-
 
     EstimateContaminantFraction( dmass = As_dmass, cmass = noblend_clean_cmass_data )
 
@@ -2535,23 +2780,36 @@ def main():
     # systematics ----------------------------------------------
 
     # 1) systematic maps
+    
+    from systematics import GalaxyDensity_Systematics,loadSystematicMaps, chisquare_dof, MatchHPArea
+    
+    # random
+    balrog_y1a1 = fitsio.read('result_cat/result_balrog_EMHUFF.fits')
+    balrog_SSPT = balrog_y1a1[balrog_y1a1['DEC'] < -3]
+    #dmass_balrog_SSPT, _ = resampleWithPth(balrog_SSPT)
+    rand_clean = Cuts.keepGoodRegion(balrog_SSPT)
+
+    cmass_DR12 = fitsio.read('/n/des/lee.5922/data/cmass_cat/bosstile-final-collated-boss2-boss38-photoObj.fits.gz')
+    rand_DR12 = fitsio.read('/n/des/lee.5922/data/random0_DR12v5_CMASS_South.fits.gz')
+    #rand_clean_st82 = Cuts.keepGoodRegion(rand_DR11)
+
+    # dmass
+    result_y1a1 = fitsio.read('/n/des/lee.5922/data/y1a1_coadd/dmass_y1a1.fits')
+    dmass_y1a1, _ = resampleWithPth(result_y1a1)
+    dmass_stripe82 = dmass_y1a1[dmass_y1a1['DEC']>-3]
+    dmass_SSPT = MatchHPArea(cat = dmass_y1a1, origin_cat = balrog_SSPT)
 
 
-    from systematics import GalaxyDensity_Systematics,loadSystematicMaps, chisquare_dof
-
-    properties = ['FWHM', 'AIRMASS', 'SKYSIGMA', 'SKYBRITE', 'NSTARS']
-    properties = ['AIRMASS', 'NSTARS']
+    properties = ['FWHM', 'AIRMASS','SKYSIGMA', 'SKYBRITE', 'NSTARS']
     filters = ['g','r','i', 'z']
-    kind = 'STRIPE82'
+    kind = 'SPT'
     nside = 1024
     njack = 10
 
-    property = 'NSTARS'
-    filter = 'i'
+    property = 'FWHM'
+    filter = 'g'
 
     for property in properties:
-        fig, ax = plt.subplots(2, 2, figsize = (15, 10))
-        ax = ax.ravel()
         for i, filter in enumerate(filters):
             if property == 'NSTARS':
                 nside = 512
@@ -2559,39 +2817,42 @@ def main():
                 sysMap_o = loadSystematicMaps( filename = filename, nside = nside )
                 
                 if kind is 'STRIPE82' :sysMap = sysMap_o[sysMap_o['DEC'] > -5.0]
-                if kind is 'SPT' :sysMap = sysMap_o[sysMap_o['DEC'] < -5.0]
-                if kind is 'Y1A1':sysMap = sysMap_o
+                elif kind is 'SPT' :sysMap = sysMap_o[sysMap_o['DEC'] < -5.0]
+                elif kind is 'Y1A1':sysMap = sysMap_o
+                sysMap = MatchHPArea( cat = sysMap, origin_cat=balrog_SSPT)
                 sysMap82 = sysMap_o.copy() #loadSystematicMaps( filename = filename, nside = nside )
             else :
-                sysMap = loadSystematicMaps( property = property, filter = filter, nside = nside , kind = kind)
-                sysMap82 = loadSystematicMaps( property = property, filter = filter, nside = nside )
+                sysMap = loadSystematicMaps( property = property, filter = filter, nside = nside , kind = kind )
+                sysMap = MatchHPArea( cat = sysMap, origin_cat=balrog_SSPT)
+                #sysMap82 = loadSystematicMaps( property = property, filter = filter, nside = nside )
             
-            sysMap82 = Cuts.SpatialCuts(sysMap82, ra = 320, ra2=360 , dec=-1 , dec2= 1 )
+            #sysMap82 = Cuts.SpatialCuts(sysMap82, ra = 320, ra2=360 , dec=-1 , dec2= 1 )
             
-            bins, Cdensity, Cerr = GalaxyDensity_Systematics(noblend_clean_cmass_data, sysMap82, nside = nside, raTag = 'RA', decTag='DEC', property = property)
-            bins, Bdensity, Berr = GalaxyDensity_Systematics(As_dmass, sysMap82, nside = nside, raTag = 'RA', decTag='DEC', property = property)
+            #bins, Cdensity, Cerr, Cf_area = GalaxyDensity_Systematics(dmass_stripe82, sysMap82, rand = rand_clean_st82 ,nside = nside, raTag = 'RA', decTag='DEC', property = property)
+            bins, Bdensity, Berr, Bf_area = GalaxyDensity_Systematics(dmass_SSPT, sysMap, rand = rand_clean, nside = nside, raTag = 'RA', decTag='DEC', property = property, filter = filter)
             
             #bins = bins/np.sum(sysMap['SIGNAL']) *len(sysMap)
             #C_jkerr = jksampling(cmass_catalog, sysMap, nside = nside, njack = 10, raTag = 'RA', decTag = 'DEC' )
             #B_jkerr = jksampling(balrog_cmass, sysMap, nside = nside, njack = 10, raTag = 'RA', decTag = 'DEC' )
             
             filename = 'data_txt/systematic_'+property+'_'+filter+'_'+kind+'.txt'
-            DAT = np.column_stack(( bins-(bins[1]-bins[0])*0.1, Cdensity, Cerr, Bdensity, Berr  ))
-            np.savetxt(filename, DAT, delimiter = ' ', header = 'bins, Cdensity, Cerr, Bdensity, Berr')
+            DAT = np.column_stack(( bins-(bins[1]-bins[0])*0.1, Bdensity, Berr, Bf_area, Bdensity, Berr, Bf_area  ))
+            np.savetxt(filename, DAT, delimiter = ' ', header = 'bins, Cdensity, Cerr, Cfarea, Bdensity, Berr, Bfarea')
             print "saving data to ", filename
-         
+
 
     # visualization
     for property in properties:
         
+        if property is 'NSTARS' : nside = 512
+        
         fig, ax = plt.subplots(2, 2, figsize = (15, 10))
         ax = ax.ravel()
         for i, filter in enumerate(filters):
-            
             filename = 'data_txt/systematic_'+property+'_'+filter+'_'+kind+'.txt'
+            #print filename
             data = np.loadtxt(filename)
-            bins, Cdensity, Cerr, Bdensity, Berr = [data[:,j] for j in range(5)]
-            
+            bins, Cdensity, Cerr, Cf_area, Bdensity, Berr, Bf_area = [data[:,j] for j in range(data[0].size)]
             zeromaskC, zeromaskB = ( Cdensity != 0.0 ), (Bdensity != 0.0 )
             Cdensity, Cbins, Cerr = Cdensity[zeromaskC], bins[zeromaskC], Cerr[zeromaskC]
             #C_jkerr = C_jkerr[zeromaskC]
@@ -2602,11 +2863,13 @@ def main():
             Cchi, Cchidof = chisquare_dof( Cbins, Cdensity, Cerr )
             Bchi, Bchidof = chisquare_dof( Bbins, Bdensity, Berr )
             
-            ax[i].errorbar(Cbins-(bins[1]-bins[0])*0.1, Cdensity, yerr = Cerr, color = 'blue', fmt = '.', label='CMASS, chi2/dof={:>2.2f}'.format(Cchidof))
-            ax[i].errorbar(Bbins+(bins[1]-bins[0])*0.1, Bdensity, yerr = Berr, color = 'red', fmt= '.',  label='DMASS, chi2/dof={:>2.2f}'.format(Bchidof))
+            #ax[i].errorbar(Cbins-(bins[1]-bins[0])*0.1, Cdensity, yerr = Cerr, color = 'blue', fmt = '.', label='CMASS') #, chi2/dof={:>2.2f}'.format(Cchidof))
+            ax[i].errorbar(Bbins+(bins[1]-bins[0])*0.1, Bdensity, yerr = Berr, color = 'red', fmt= '.',  label='DMASS')#, chi2/dof={:>2.2f}'.format(Bchidof))
+            #ax[i].bar(Cbins+(bins[1]-bins[0])*0.1, Cf_area[zeromaskC],(bins[1]-bins[0]) ,color = 'blue', alpha = 0.3 )
+            ax[i].bar(Bbins+(bins[1]-bins[0])*0.1, Bf_area[zeromaskB]+0.5, (bins[1]-bins[0]) ,color = 'red', alpha=0.3 )
             ax[i].set_xlabel('{}_{} (mean)'.format(property, filter))
             ax[i].set_ylabel('n_gal/n_tot '+str(nside))
-            ax[i].set_ylim(0.0, 2)
+            ax[i].set_ylim(0.5, 1.5)
             #ax[i].set_xlim(8.2, 8.55)
             ax[i].axhline(1.0,linestyle='--',color='grey')
             ax[i].legend(loc = 'best')
@@ -2614,15 +2877,365 @@ def main():
             #if property == 'FWHM' : ax[i].set_ylim(0.6, 1.4)
             #if property == 'AIRMASS': ax[i].set_ylim(0.0, 2.0)
             #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
-            #if property == 'NSTARS': ax[i].set_xlim(0.0, 2.5)
+            if property == 'NSTARS': ax[i].set_xlim(0.0, 2.0)
         
-        fig.suptitle('systematic test (y1a1 DFULL)')
+        fig.suptitle('systematic test ({})'.format(kind))
         figname = 'figure/systematic_'+property+'_'+kind+'.png'
         fig.savefig(figname)
         print "saving fig to ", figname
 
 
 
+    # correcting systematic errors
+    # ** Mask Bad Region
+    #
+    #
+
+    #properties = ['NSTARS','FWHM', 'AIRMASS','SKYSIGMA', 'SKYBRITE']
+    #filters = ['g','r','i', 'z']
+    kind = 'SPT'
+    nside = 1024
+    njack = 10
+    
+    property = 'NSTARS'
+    filter = 'g'
+
+    from systematics import SysMapBadRegionMask, loadSystematicMaps, MatchHPArea
+    from systematics_module.corr import angular_correlation
+
+    dmass_stripe82 = dmass_y1a1[dmass_y1a1['DEC'] > -3.0 ]
+    dmass_SSPT = MatchHPArea(cat = dmass_y1a1, origin_cat = balrog_SSPT)
+    nside = 1024
+    kind = 'SPT'
+
+    properties = ['NSTARS','FWHM', 'AIRMASS','SKYSIGMA', 'SKYBRITE']
+    #property = [ 'AIRMASS', 'SKYBRITE', 'FWHM', 'SKYSIGMA']
+    filter = ['g', 'r', 'i', 'z']
+
+    # Calling maps
+    MaskDic = {}
+    for i,p in enumerate(property):
+        for j,f in enumerate(filter):
+            if property == 'NSTARS':
+                filename =  'y1a1_gold_1.0.2_stars_nside1024.fits'
+                nside = 512
+            else : filename = None
+            
+            sysMap = loadSystematicMaps( filename = filename, property = p, filter = f, nside = nside , kind = kind)
+            sysMap = MatchHPArea( cat = sysMap, origin_cat=balrog_SSPT)
+            mapname = 'sys_'+p+'_'+f
+            MaskDic[mapname] = sysMap
+
+
+
+
+    for p in property:
+        correctMask = np.ones(dmass_SSPT.size, dtype=bool)
+        
+        for i, filter in enumerate(filters):
+
+            bins, Bdensity, Berr, Bf_area = GalaxyDensity_Systematics(dmass_SSPT, sysMap, rand = rand_clean, nside = nside, raTag = 'RA', decTag='DEC', property = p, filter = filter)
+            
+            filename = 'data_txt/systematic_'+property+'_'+filter+'_'+kind+'.txt'
+            DAT = np.column_stack(( bins-(bins[1]-bins[0])*0.1, Bdensity, Berr, Bf_area, Bdensity, Berr, Bf_area  ))
+            np.savetxt(filename, DAT, delimiter = ' ', header = 'bins, Cdensity, Cerr, Cfarea, Bdensity, Berr, Bfarea')
+            print "saving data to ", filename
+
+            mapname = 'sys_'+p+'_'+f
+            correctMask = SysMapBadRegionMask(dmass_SSPT, MaskDic[mapname], nside = nside, cond = '<=', val = 1.35)
+            MaskDic[p+'_mask'] = correctMask
+            print p+'_mask', np.sum(correctMask)
+
+
+    """
+
+    for i,p in enumerate(property):
+        
+            for j,f in enumerate(filter):
+                mapname = 'sys_'+p+'_'+f
+                correctMask = correctMask * SysMapBadRegionMask(dmass_SSPT, MaskDic[mapname], nside = nside, cond = '<=', val = value[i][j])
+        MaskDic[p+'_mask'] = correctMask
+            print p+'_mask', np.sum(correctMask)
+
+
+    """
+
+
+
+
+    value = [[1.45, 1.45, 1.45, 1.45],  # airmass
+             [120, 350, 1150, 2500],  # skybrightness
+             [6.5, 5.0, 4.5, 4.0], # fwhm (seeing)
+             [5.8, 8.7, 17, 25]]       # skysigma
+            #[6., 9.5, 17, 25]]
+
+    for i,p in enumerate(property):
+        correctMask = np.ones(dmass_SSPT.size, dtype=bool)
+        for j,f in enumerate(filter):
+            mapname = 'sys_'+p+'_'+f
+            correctMask = correctMask * SysMapBadRegionMask(dmass_SSPT, MaskDic[mapname], nside = nside, cond = '<=', val = value[i][j])
+        MaskDic[p+'_mask'] = correctMask
+        print p+'_mask', np.sum(correctMask)
+
+
+    TotalMask = MaskDic['AIRMASS_mask'] * MaskDic['FWHM_mask'] * MaskDic['SKYSIGMA_mask'] * MaskDic['SKYBRITE_mask']
+
+    clean_dmass = dmass_SSPT[TotalMask]
+    clean_dmass_AIRMASS = dmass_SSPT[MaskDic['AIRMASS_mask']]
+    clean_dmass_SKYBRITE = dmass_SSPT[ MaskDic['SKYBRITE_mask'] ]
+    clean_dmass_FWHM = dmass_SSPT[MaskDic['FWHM_mask'] ]
+    clean_dmass_SKYSIGMA = dmass_SSPT[  MaskDic['SKYSIGMA_mask'] ]
+
+
+    # Testing difference
+    rand_o = fitsio.read('/n/des/lee.5922/data/random0_DR11v1_CMASS_South.fits.gz')
+    rand_clean_st82 = Cuts.keepGoodRegion(rand_o)
+    balrog_y1a1 = fitsio.read('result_cat/result_balrog_EMHUFF.fits')
+    balrog_SSPT = balrog_y1a1[balrog_y1a1['DEC'] < -3]
+    #dmass_balrog_SSPT, _ = resampleWithPth(balrog_SSPT)
+    rand_clean = Cuts.keepGoodRegion(balrog_SSPT)
+
+    #angular_correlation(data = dmass_SSPT, rand = rand_clean, suffix = '_No_mask')
+    #angular_correlation(data = clean_dmass, rand = rand_clean, suffix = '_All_mask')
+    #angular_correlation(data = clean_dmass_AIRMASS, rand = rand_clean, suffix = '_mask_AIRMASS')
+    #angular_correlation(data = clean_dmass_SKYBRITE, rand = rand_clean, suffix = '_mask_SKYBRITE')
+    #angular_correlation(data = clean_dmass_FWHM, rand = rand_clean, suffix = '_mask_FWHM')
+    #angular_correlation(data = clean_dmass_SKYSIGMA, rand = rand_clean, suffix = '_mask_SKYSIGMA')
+
+
+    # ** Weighting
+    #
+    #   weighting
+    #   NSTAR
+    #   FWHM riz bands
+    #
+    from systematics import ReciprocalWeights
+
+    re_weights = ReciprocalWeights( catalog = clean_dmass, property = 'NSTARS', filter = 'g', nside = 512, kind = kind )
+    angular_correlation(data = clean_dmass, rand = rand_clean, weight = [re_weights, None], suffix = '_'+kind+'_w+mask_'+property)
+
+
+    weight_property = ['FWHM', 'SKYBRITE', 'SKYSIGMA']
+
+    reweights = np.ones(clean_dmass.size, dtype=float)
+    for p in weight_property:
+        for f in filters:
+            reweights = reweights * ReciprocalWeights( catalog = clean_dmass, sysMap = MaskDic['sys_'+p+'_'+f], property = p, filter = f, nside = 1024, kind = kind )
+        MaskDic[p+'_weight'] = re_weights
+        
+        
+    result = [ angular_correlation(data = clean_dmass, rand = rand_clean, weight = [MaskDic[p+'_weight'], None], suffix = '_w+mask_'+p) for p in weight_property ]
+
+
+
+    # applying weight iteratively -----------------
+
+
+
+
+
+
+
+
+
+
+
+    # ---------------------------------------------
+    # Foreground Stars
+
+    # from Ashley's paper :
+    # Take des stars between 17.5 < i_psf < 19.9
+    # devide dmass galaxy sample between 18.5 < i_detmag < 19.9 into 5 bins
+    # 1) number density as a ftn of degree for 5 different bins around the whole star sample
+    # 2) number density for the whole galaxy sample around star between 19 < i_psf < 20.5
+    # 3) seeing 6 bins
+    # test stripe 82
+    # test whole y1a1
+
+
+    """
+    balrog SPT region : result_cat/result_balrog_y1a1.fit'
+    """
+    
+    from systematics import MatchHPArea
+    
+    # random
+    balrog_y1a1 = fitsio.read('result_cat/result_balrog_EMHUFF.fits')
+    balrog_SSPT = balrog_y1a1[balrog_y1a1['DEC'] < -3]
+    dmass_balrog_SSPT, _ = resampleWithPth(balrog_SSPT)
+    rand_clean = Cuts.keepGoodRegion(dmass_balrog_SSPT)
+    #random
+    #result_barlog = fitsio.read('result_cat/result_balrog_JELENA.fits')
+    #cat_cmass_rand82, _ = resampleWithPth(result_balrog)
+    #rand_o = fitsio.read('/n/des/lee.5922/data/random0_DR11v1_CMASS_South.fits.gz')
+    #rand_clean = Cuts.keepGoodRegion(rand_o)
+    
+    # dmass
+    result_y1a1 = fitsio.read('/n/des/lee.5922/data/y1a1_coadd/dmass_y1a1.fits')
+    dmass_y1a1, _ = resampleWithPth(result_y1a1)
+    dmass_SSPT = MatchHPArea(dmass_y1a1, balrog_SSPT)
+    
+    
+    # star
+    SSPT_star = fitsio.read('result_cat/SSPT_star.fits')
+    #full_des_data = io.getDESY1A1catalogs(keyword = 'des_st82', sdssmask=False)
+    #clean_des_star = Cuts.doBasicCuts(full_des_data, object = 'star')
+    star_maglimit = ( SSPT_star['MAG_PSF_I'] > 17.5 ) & ( SSPT_star['MAG_PSF_I'] < 19.9 )
+    bright_des_star = SSPT_star[star_maglimit]
+    
+
+    dmass = dmass_SSPT.copy()
+    des_star = SSPT_star.copy()
+    bright_des_star = bright_des_star.copy()
+    rand = balrog_SSPT.copy()
+
+    from systematics import ForegroundStarCorrelation
+    
+    bins, step = np.linspace(19.5, 20.5, 5, retstep = True)
+    bin_center, binned_dmass, binned_keep = divide_bins( dmass, Tag = 'MAG_MODEL_I', min = bins[0], max = bins[-1], bin_num = bins.size-1 )
+    
+    bins2, step2 = np.linspace(19.0, 20.5, 5, retstep = True)
+    bin_center2, binned_star, binned_keep2 = divide_bins( des_star, Tag = 'MAG_PSF_I', min = bins2[0], max = bins2[-1], bin_num = bins2.size-1 )
+    
+    labels = [ 'i_mod < {}'.format(bins[0])] + ['{:>0.2f} < i_mod < {:>0.2f}'.format(bins[i], bins[i+1]) for i in range(len(bins)-1) ]
+    labels2 = [ 'i_psf < {}'.format(bins2[0])] + ['{:>0.2f} < i_psf < {:>0.2f}'.format(bins2[i], bins2[i+1]) for i in range(len(bins2)-1) ]
+
+    bins3, step = np.linspace(20.25, 21.0, 5, retstep = True)
+    bin_center3, binned_dmass3, binned_keep3 = divide_bins( dmass, Tag = 'MAG_APER_4_I', min = bins3[0], max = bins3[-1], bin_num = bins3.size-1 )
+    
+    labels3 = [ 'i_aper < {}'.format(bins3[0])] + ['{:>0.2f} < i_aper < {:0.2f}'.format(bins3[i], bins3[i+1]) for i in range(len(bins3)-1) ]
+
+
+    imod_average, ipsf_average, err_imod, err_ipsf = [], [], [], []
+    seeing_average, iaper_average, err_seeing, err_iaper = [], [], [], []
+    
+    for cat, cat2, cat3 in zip(binned_dmass, binned_star, binned_dmass3):
+        print cat.size, cat2.size, cat3.size
+        theta, n_dmass, err_dmass = ForegroundStarCorrelation(dmass = cat, star = bright_des_star, rand = rand )
+        theta, n_star, err_star = ForegroundStarCorrelation(dmass = dmass, star = cat2, rand = rand )
+        theta, n_dmass3, err_dmass3 = ForegroundStarCorrelation(dmass = cat3, star = bright_des_star, rand = rand )
+        
+        imod_average.append(n_dmass)
+        ipsf_average.append(n_star)
+        iaper_average.append(n_dmass3)
+        err_imod.append(err_dmass)
+        err_ipsf.append(err_star)
+        err_iaper.append(err_dmass3)
+    
+    data_imod = np.column_stack(( [theta] + imod_average + err_imod ))
+    data_ipsf = np.column_stack(( [theta] + ipsf_average + err_ipsf ))
+    data_iaper = np.column_stack(( [theta] + iaper_average + err_iaper ))
+    np.savetxt('data_txt/foregroundStar_imod.txt', data_imod, delimiter = ' ', header='theta '+str(labels) + ' err')
+    np.savetxt('data_txt/foregroundStar_ipsf.txt', data_ipsf, delimiter = ' ', header='theta '+str(labels2)+ ' err')
+    np.savetxt('data_txt/foregroundStar_iaper.txt', data_iaper, delimiter = ' ', header='theta '+str(labels3)+ ' err')
+
+
+
+    # visualization
+    fig, ax = plt.subplots(2,2, figsize = (20,14))
+    ax = ax.ravel()
+
+    data_imod = np.loadtxt('data_txt/foregroundStar_imod.txt')
+    data_ipsf = np.loadtxt('data_txt/foregroundStar_ipsf.txt')
+    data_iaper = np.loadtxt('data_txt/foregroundStar_iaper.txt')
+    
+    data = [data_imod, data_ipsf, data_iaper]
+    label = [labels, labels2, labels3]
+
+    for j,d in enumerate(data):
+        theta = d[:,0] * 3600
+        for i in range((len(d[0])-1)/2):
+            ax[j].errorbar(theta, d[:,i+1], yerr=d[:,i+(len(d[0])-1)/2 + 1], linestyle='-', fmt='.' ,label = label[j][i])
+        ax[j].axhline(y=1.0, color='grey', linestyle='--')
+        ax[j].legend(loc='best')
+        ax[j].set_xlim(0.0, 50)
+        #ax[j].set_xscale('log')
+        ax[j].set_ylim(0.0, 2.0)
+        ax[j].set_ylabel(r'$n$/$n_{avg}$')
+        ax[j].set_xlabel(r'$\theta$ $(\rm{arcsec})$')
+
+    fig.savefig('figure/foregroundStar.png')
+
+
+
+
+    # systematic - ideal fraction --------------------------------------
+
+
+    balrog_y1a1 = fitsio.read('result_cat/result_balrog_EMHUFF.fits')
+    balrog_SSPT = balrog_y1a1[balrog_y1a1['DEC'] < -3]
+    dmass_balrog_SSPT, _ = resampleWithPth(balrog_SSPT)
+    rand_clean = Cuts.keepGoodRegion(dmass_balrog_SSPT)
+
+
+    #cat_cmass_rand82, _ = resampleWithPth(result_balrog)
+    #rand_o = fitsio.read('/n/des/lee.5922/data/random0_DR11v1_CMASS_South.fits.gz')
+    #rand_clean = Cuts.keepGoodRegion(rand_o)
+    
+    # dmass
+    result_y1a1 = fitsio.read('/n/des/lee.5922/data/y1a1_coadd/dmass_y1a1.fits')
+    dmass_y1a1, _ = resampleWithPth(result_y1a1)
+    dmass_SSPT = MatchHPArea(cat = dmass_y1a1, origin_cat=balrog_SSPT)
+
+    cmass_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South.fits.gz')
+    rand_cmass_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/random0_DR12v5_CMASS_South.fits.gz')
+    cmass_NGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_North.fits.gz')
+    rand_cmass_NGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/random0_DR12v5_CMASS_North.fits.gz')
+
+    rand_cmass_SGC =  excludeSt82(rand_cmass_SGC)
+
+    #cmass_photoAll = fitsio.read('/n/des/lee.5922/data/cmass_cat/cmass_photoz_All.fits')
+
+    def excludeSt82(cat):
+        mask = (cat['RA'] < 360) & (cat['RA'] > 310) & (cat['DEC'] > -1.5) & (cat['DEC'] < 1.5)
+        return cat[~mask]
+
+    cat = [cmass_SGC, rand_cmass_SGC, cmass_NGC, rand_cmass_NGC]
+    cmass_SGC, rand_cmass_SGC, cmass_NGC, rand_cmass_NGC = [ excludeSt82(c) for c in cat ]
+
+
+    from systematics_module.corr import LensingSignal, cross_angular_correlation, angular_correlation
+    from systematics import MatchHPArea
+    
+    # dmass SSPT
+    angular_correlation(data = dmass_y1a1, rand = rand_clean,  weight = [None, None], suffix = '_SSPT_y1a1')
+    # NGC
+    angular_correlation(data = cmass_NGC, rand = rand_cmass_NGC,  weight = [None,None], suffix = '_cmass_NGC')
+    angular_correlation(data = cmass_SGC, rand = rand_cmass_SGC,  weight = [None,None], suffix = '_cmass_SGC')
+
+
+    result = fitsio.read('result_cat/result1.fits')
+    As_dmass,_ = resampleWithPth(result)
+    noblend_clean_cmass_data = fitsio.read('result_cat/noblend_cmass_stripe82_photo.fits')
+    noblend_clean_cmass_data_des = fitsio.read('result_cat/noblend_cmass_stripe82_photo_des.fits')
+    EstimateContaminantFraction( dmass = As_dmass, cmass = noblend_clean_cmass_data )
+
+    # calculating contaminant fraction with full correl
+
+    import esutil
+    fullcmass_name = "/n/des/lee.5922/data/cmass_cat/cmass_noclean_SGC_NGC.fits"
+    fullcmass = esutil.io.read(fullcmass_name, upper=True)
+    fullcmass = Cuts.CMASSQaulityCut(fullcmass[fullcmass['FIBER2MAG_I'] < 21.5 ])
+    fullcmass = excludeSt82(fullcmass)
+    
+    """
+    NGCmask = (fullcmass['RA'] > 70) & (fullcmass['RA'] < 300)
+    fullcmass_NGC, fullcmass_SGC = fullcmass[NGCmask], fullcmass[~NGCmask]
+    """
+    
+    # match HP area
+    fullcmass_NGC = MatchHPArea(cat=fullcmass, origin_cat=rand_cmass_NGC, nside=512)
+    fullcmass_SGC = MatchHPArea(cat=fullcmass, origin_cat=rand_cmass_SGC, nside=512)
+
+    # SDSS CMASS full correlation (NGC+ SGC - st82)
+    angular_correlation(data = fullcmass, rand = rand, suffix = '_SDSS_full')
+    # DES CMASS full correlation (half of SPT )
+    angular_correlation(data = dmass_SSPT, rand = balrog_SSPT,  weight = [None, None], suffix = '_DES_SSPT')
+    angular_correlation(data = cmass_SGC, rand = rand_cmass_SGC,  weight = [None,None], suffix = '_cmass_SGC')
+    angular_correlation(data = cmass_NGC, rand = rand_cmass_NGC,  weight = [None,None], suffix = '_cmass_NGC')
+
+    angular_correlation(data = fullcmass_NGC, rand = rand_cmass_NGC,  weight = [None,None], suffix = '_fullcmass_NGC')
+    angular_correlation(data = fullcmass_SGC, rand = rand_cmass_SGC,  weight = [None,None], suffix = '_fullcmass_SGC')
 
 
 if __name__ == "__main__":
