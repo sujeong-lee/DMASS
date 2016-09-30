@@ -8,15 +8,14 @@ from astroML.decorators import pickle_results
 from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import pdb
 import numpy.lib.recfunctions as rf
-from scipy import linalg
+from numpy import linalg
 #from __future__ import print_function, division
 from sklearn.mixture import GMM
 import fitsio
 #from ..utils import logsumexp, log_multivariate_gaussian, check_random_state
-
-
+from multiprocessing import Process, Queue
+import pdb
 
 
 class XDGMM(object):
@@ -46,6 +45,7 @@ class XDGMM(object):
         self.V = None
         self.mu = None
         self.alpha = None
+    
 
     def fit(self, X, Xerr, init_means=None, init_covars = None, init_weights = None, R=None):
         """Fit the XD model to data
@@ -60,6 +60,7 @@ class XDGMM(object):
             Transformation matrix from underlying to observed data.  If
             unspecified, then it is assumed to be the identity matrix.
         """
+        
         if R is not None:
             raise NotImplementedError("mixing matrix R is not yet implemented")
 
@@ -72,12 +73,12 @@ class XDGMM(object):
 
         # initialize components via a few steps of GMM
         # this doesn't take into account errors, but is a fast first-guess
-
+        
         gmm = GMM(self.n_components, n_iter=10, covariance_type='full',
                   random_state=self.random_state).fit(X)
         
         print 'sum of weights',np.sum(gmm.weights_)
-        print gmm.weights_
+        #print gmm.weights_
         
         if init_means is not None:
             gmm.means_[:init_means.shape[0],:] = init_means
@@ -89,12 +90,16 @@ class XDGMM(object):
         self.V = gmm.covars_
         
         logL = self.logL(X, Xerr)
-
+        
         for i in range(self.n_iter):
             t0 = time()
             self._EMstep(X, Xerr)
             logL_next = self.logL(X, Xerr)
             t1 = time()
+            
+            sys.stdout.write("\r" + 'expected time: {:0.2f} s,  process: {:0.2f} % '.format((t1-t0) * (self.n_iter - i), i * 1./self.n_iter * 100.))
+            sys.stdout.flush()
+ 
 
             if self.verbose:
                 print("%i: log(L) = %.5g" % (i + 1, logL_next))
@@ -104,10 +109,12 @@ class XDGMM(object):
                 break
             logL = logL_next
 
+        sys.stdout.write("\r" + 'expected time: {:0.2f} s,  process: {:0.2f} % \n'.format(0, 100))
+        
         return self
 
 
-    def logprob_a(self, X, Xerr):
+    def logprob_a(self, X, Xerr, parallel = None):
         """
         Evaluate the probability for a set of points
         Parameters
@@ -132,9 +139,9 @@ class XDGMM(object):
         Xerr = Xerr[:, np.newaxis, :, :]
         T = Xerr + self.V
 
-        return log_multivariate_gaussian(X, self.mu, T) + np.log(self.alpha)
+        return log_multivariate_gaussian(X, self.mu, T, parallel = parallel) + np.log(self.alpha)
 
-    def logL(self, X, Xerr):
+    def logL(self, X, Xerr, parallel = True):
         """Compute the log-likelihood of data given the model
         Parameters
         ----------
@@ -147,7 +154,8 @@ class XDGMM(object):
         logL : float
             log-likelihood
         """
-        return np.sum(logsumexp(self.logprob_a(X, Xerr), -1))
+        return np.sum(logsumexp(self.logprob_a(X, Xerr, parallel = parallel), -1))
+
 
     def _EMstep(self, X, Xerr):
         """
@@ -159,25 +167,46 @@ class XDGMM(object):
         Xerr = Xerr[:, np.newaxis, :, :]
 
         w_m = X - self.mu
-
         T = Xerr + self.V
 
         #------------------------------------------------------------
         # compute inverse of each covariance matrix T
+        
         Tshape = T.shape
         T = T.reshape([n_samples * self.n_components,
                        n_features, n_features])
-        Tinv = np.array([linalg.inv(T[i])
-                         for i in range(T.shape[0])]).reshape(Tshape)
+        #Tinv = np.array([linalg.inv(T[i]) for i in range(T.shape[0])]).reshape(Tshape)
+        """
+        # split data
+        n_process = 12
+        T_split = np.array_split( T, n_process, axis=0)
+    
+        def inv_process(q, order, T):
+            re = np.array([linalg.inv(T[i]) for i in range(T.shape[0])])
+            q.put((order, re))
+    
+        q = Queue()
+        Processes = [Process(target = inv_process, args=(q, z[0], z[1])) for z in zip(range(n_process), T_split)]
+    
+        for p in Processes: p.start()
+        result = []
+        for p in Processes : result.append(q.get())
+
+        result.sort()
+        Tinv = np.vstack([np.array(r[1]) for r in result ]).reshape(Tshape)
+        """
+        
+        Tinv = invMatrixMultiprocessing(T).reshape(Tshape)
         T = T.reshape(Tshape)
 
         #------------------------------------------------------------
         # evaluate each mixture at each point
+        
         N = np.exp(log_multivariate_gaussian(X, self.mu, T, Vinv=Tinv))
-
         #------------------------------------------------------------
         # E-step:
         #  compute q_ij, b_ij, and B_ij
+        
         q = (N * self.alpha) / np.dot(N, self.alpha)[:, None]
 
         tmp = np.sum(Tinv * w_m[:, :, np.newaxis, :], -1)
@@ -191,6 +220,7 @@ class XDGMM(object):
         #------------------------------------------------------------
         # M-step:
         #  compute alpha, m, V
+        
         qj = q.sum(0)
 
         self.alpha = qj / n_samples
@@ -202,6 +232,8 @@ class XDGMM(object):
         tmp += B
         tmp *= q[:, :, np.newaxis, np.newaxis]
         self.V = tmp.sum(0) / qj[:, np.newaxis, np.newaxis]
+
+    
 
     def sample(self, size=1, random_state=None):
         if random_state is None:
@@ -371,29 +403,31 @@ def SDSS_LOWZ_criteria(sdss):
 
 
 
-def priorCut(data, reddening = 'SFD98'):
-    
+def priorCut(data):
+    """
     reddeningtag = 'XCORR_SFD98'
+    fac = 1.0
+    
     if reddening == None :
         fac = 0.0
     elif reddening == 'SLR':
         fac = -1.0
         reddeningtag = 'SLR_SHIFT'
-    
+    """
 
-    modelmag_g_des = data['MAG_DETMODEL_G'] - fac * data[reddeningtag+'_G']
-    modelmag_r_des = data['MAG_DETMODEL_R'] - fac * data[reddeningtag+'_R']
-    modelmag_i_des = data['MAG_DETMODEL_I'] - fac * data[reddeningtag+'_I']
-    cmodelmag_i_des = data['MAG_MODEL_I'] - fac * data[reddeningtag+'_I']
-    fib2mag_des = data['MAG_APER_4_I'] - fac * data[reddeningtag+'_I']
-    dperp = modelmag_r_des - modelmag_i_des - (modelmag_g_des - modelmag_r_des)/8.0
+    modelmag_g_des = data['MAG_DETMODEL_G_corrected']# - fac * data[reddeningtag+'_G']
+    modelmag_r_des = data['MAG_DETMODEL_R_corrected']# - fac * data[reddeningtag+'_R']
+    modelmag_i_des = data['MAG_DETMODEL_I_corrected']# - fac * data[reddeningtag+'_I']
+    cmodelmag_i_des = data['MAG_MODEL_I_corrected']# - fac * data[reddeningtag+'_I']
+    fib2mag_des = data['MAG_APER_4_I_corrected']# - fac * data[reddeningtag+'_I']
+    #dperp = modelmag_r_des - modelmag_i_des - (modelmag_g_des - modelmag_r_des)/8.0
 
-    cut = ((cmodelmag_i_des > 17) &
-           (cmodelmag_i_des < 22.) &
+    cut = (#(cmodelmag_i_des > 17) &
+           #(cmodelmag_i_des < 22.) &
            ((modelmag_r_des - modelmag_i_des ) < 1.5 ) &
            ((modelmag_r_des - modelmag_i_des ) > 0.0 ) &
-           ((modelmag_g_des - modelmag_r_des ) > 0.5 ) &
-            ((modelmag_g_des - modelmag_r_des ) < 2.5 ) &
+           ((modelmag_g_des - modelmag_r_des ) > 0.0 ) &
+           ((modelmag_g_des - modelmag_r_des ) < 2.5 ) &
            (fib2mag_des < 22.0 )# &
            #(dperp > 0.4)
            #(data['MAG_APER_4_I'] < 24.0 )
@@ -467,58 +501,53 @@ def im3shape_galprof_mask( im3shape, fulldes ):
 
 
 
+def detMatrixMultiprocessing( T ):
 
-def spatialcheck(data, label = None, convert = None, suffix = ''):
+    # split data
+    n_process = 12
+    T_split = np.array_split( T, n_process, axis=0)
     
+    def det_process(q, order, T):
+        re = np.array([linalg.det(T[i]) for i in range(T.shape[0])])
+        q.put((order, re))
     
-    fig, ax = plt.subplots(1,1,figsize = (7,7))
-    if len(data) > 20 :
-            print "Warning : Be careful when you put more than 20 data"
-            data = [data]
-
-    if label is None: label = ['data_'+str(i+1) for i in range(0,len(data))]
-    for d, l in zip(data, label):
-        
-        #rows = np.random.choice(np.arange(d.size), size = 500 )
-        #d = d[rows]
-        
-        try:
-            ra = d['RA']
-            dec = d['DEC']
-        
-        except ValueError:
-
-            ra = d['ALPHAWIN_J2000_DET']
-            dec = d['DELTAWIN_J2000_DET']
-        """
-        if convert is True:
-            ra = data['ALPHAWIN_J2000_DET'] + 360
-            dec = data['DELTAWIN_J2000_DET']
-            
-            cut = ra < 180
-            ra1 = ra[cut] + 360
-            ra[cut] = ra1
-        
-
-
-        if convert is None :
-            ra = data['RA']
-            dec = data['DEC']
-        """
-        
-        ax.plot(ra, dec, '.', alpha = 0.3, label = l )
+    q = Queue()
+    Processes = [Process(target = det_process, args=(q, z[0], z[1])) for z in zip(range(n_process), T_split)]
     
-    ax.set_xlabel('RA')
-    ax.set_ylabel('DEC')
-    ax.set_xlim(0,360)
-    ax.legend(loc = 'best')
-    fig.savefig('figure/spatialtest_'+suffix)
-    print 'figsave : figure/spatialtest_'+suffix+'.png'
+    for p in Processes: p.start()
+    result = []
+    for p in Processes : result.append(q.get())
+    
+    result.sort()
+    Tdet = np.hstack([np.array(r[1]) for r in result ]) #.reshape(Tshape)
+    
+    return Tdet
 
 
+def invMatrixMultiprocessing( T ):
+    
+    # split data
+    n_process = 12
+    T_split = np.array_split( T, n_process, axis=0)
+    
+    def inv_process(q, order, T):
+        re = np.array([linalg.inv(T[i]) for i in range(T.shape[0])])
+        q.put((order, re))
+    
+    q = Queue()
+    Processes = [Process(target = inv_process, args=(q, z[0], z[1])) for z in zip(range(n_process), T_split)]
+    
+    for p in Processes: p.start()
+    result = []
+    for p in Processes : result.append(q.get())
+    
+    result.sort()
+    Tinv = np.vstack([np.array(r[1]) for r in result ]) #.reshape(Tshape)
+    
+    return Tinv
 
 
-def log_multivariate_gaussian(x, mu, V, Vinv=None, method=1):
+def log_multivariate_gaussian(x, mu, V, Vinv=None, method=1, parallel = True):
     """Evaluate a multivariate gaussian N(x|mu, V)
     This allows for multiple evaluations at once, using array broadcasting
     Parameters
@@ -583,13 +612,14 @@ def log_multivariate_gaussian(x, mu, V, Vinv=None, method=1):
 
     elif method == 1:
         if Vinv is None:
-            Vinv = np.array([linalg.inv(V[i])
-                             for i in range(V.shape[0])]).reshape(Vshape)
+            if parallel == None : Vinv = np.array([linalg.inv(V[i]) for i in range(V.shape[0])]).reshape(Vshape)
+            else : Vinv = invMatrixMultiprocessing(V).reshape(Vshape)
         else:
             assert Vinv.shape == Vshape
 
-        logdet = np.log(np.array([linalg.det(V[i])
-                                  for i in range(V.shape[0])]))
+        if parallel == None : logdet = np.log(np.array([linalg.det(V[i]) for i in range(V.shape[0])]))
+        else: logdet = np.log(detMatrixMultiprocessing(V))
+
         logdet = logdet.reshape(Vshape[:-2])
 
         xVI = np.sum(x_mu.reshape(x_mu.shape + (1,)) * Vinv, -2)
@@ -697,157 +727,24 @@ def logsumexp(arr, axis=None):
 
 
 
-def AddingReddening(cat):
-    import numpy.lib.recfunctions as rf   
-    from suchyta_utils.y1a1_slr_shiftmap import SLRShift
-    zpfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
-    slrshift = SLRShift(zpfile, fill_periphery=True, balrogprint=None)
-    offsets_g = slrshift.get_zeropoint_offset('g',cat['RA'],cat['DEC'],interpolate=True)
-    offsets_r = slrshift.get_zeropoint_offset('r',cat['RA'],cat['DEC'],interpolate=True)
-    offsets_i = slrshift.get_zeropoint_offset('i',cat['RA'],cat['DEC'],interpolate=True)
-    offsets_z = slrshift.get_zeropoint_offset('z',cat['RA'],cat['DEC'],interpolate=True)
-
-    offsets = [ offsets_g, offsets_r, offsets_i, offsets_z  ]
-    from pandas import DataFrame, concat
-    nametag = ['SLR_SHIFT_'+f for f in ['G', 'R', 'I', 'Z'] ]
-    offsetsdf = DataFrame( offsets, index = nametag ).T
-    cat = DataFrame(cat)
-    #del cat['index']
-    print 'concatenate two ndarrays'
-    cat = concat([cat, offsetsdf], axis=1)
-    print 'dataframe to recordarray'
-    cat = cat.to_records()
-    
-    """
-    cat = rf.append_fields(cat, 'SLR_SHIFT_G', offsets_g)
-    cat = rf.append_fields(cat, 'SLR_SHIFT_R', offsets_r)
-    cat = rf.append_fields(cat, 'SLR_SHIFT_I', offsets_i)
-    cat = rf.append_fields(cat, 'SLR_SHIFT_Z', offsets_z)
-    """
-    return cat
 
 
-
-
-def mixing_color(data, reddening = 'SFD98', sdss = None, cmass = None ):
+def mixing_color(data, suffix = '_corrected', sdss = None, cmass = None ):
     
     filter = ['G', 'R', 'I', 'Z']
-    magtag = ['MAG_DETMODEL', 'MAG_MODEL']
-    errtag = ['MAGERR_DETMODEL', 'MAGERR_MODEL']
-    reddeningtag = 'XCORR_SFD98'
+    mag = ['MAG_MODEL', 'MAG_DETMODEL', ]
+    magtag = [ m+'_'+f+suffix for m in mag for f in filter ]
+    del magtag[0], magtag[2]
+    err = [ 'MAGERR_MODEL','MAGERR_DETMODEL']
+    errtag = [ e+'_'+f for e in err for f in filter ]
+    del errtag[0], errtag[2]
     
-    fac = 1.0 #default for sfd98, cmass, sdss.
-    if reddening is 'SLR' :
-        fac = -1.
-        reddeningtag = 'SLR_SHIFT'
-        print 'reddening correction :', reddeningtag
-    
-    elif reddening is None :
-        fac = 0.0
-        print 'reddening correction : No reddening correction'
-    
-    if sdss is True :
-        magtag = ['MODELMAG', 'CMODELMAG']
-        errtag = ['MODELMAGERR', 'CMODELMAGERR']
-        reddeningtag = 'EXTINCTION'
-        print 'reddening correction :', reddeningtag
-    
-    if reddening is 'SLRtoSFD98' :
-        print 'SLR corrected color to SFD98 corrected color'
-
-    X = []
-    Xerr = []
-    for i in range(len(magtag)):
-        if i == 1 : filter = ['R', 'I']
-        for f in filter:
-            descolor = data[magtag[i]+'_'+f] - fac * data[reddeningtag+'_'+f]
-            if reddening is 'SLRtoSFD98' :
-                descolor = data[magtag[i]+'_'+f] - data['SLR_SHIFT'+'_'+f] - data['XCORR_SFD98'+'_'+f]
-            err = data[errtag[i]+'_'+f]
-            X.append(descolor)
-            Xerr.append(err)
+    X = [ data[mt] for mt in magtag ]
+    Xerr = [ data[mt] for mt in errtag ]
+    #reddeningtag = 'XCORR_SFD98'
 
     X = np.vstack(X).T
     Xerr = np.vstack(Xerr).T
-
-    """
-    
-    if gold is True:
-        des_g = data['MAG_DETMODEL_G'] - data['SLR_SHIFT_G'] - data['XCORR_SFD98_G']
-        des_r = data['MAG_DETMODEL_R'] - data['SLR_SHIFT_R'] - data['XCORR_SFD98_R']
-        des_i = data['MAG_DETMODEL_I'] - data['SLR_SHIFT_I'] - data['XCORR_SFD98_I']
-        des_z = data['MAG_DETMODEL_Z'] - data['SLR_SHIFT_Z'] - data['XCORR_SFD98_Z']
-        des_ci = data['MAG_MODEL_I'] - data['SLR_SHIFT_I'] - data['XCORR_SFD98_I']
-        des_cr = data['MAG_MODEL_R'] - data['SLR_SHIFT_R'] - data['XCORR_SFD98_R']
-        
-        
-        X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z ]).T
-        Xerr = np.vstack([data['MAGERR_MODEL_R'],
-                          data['MAGERR_MODEL_I'],
-                          data['MAGERR_DETMODEL_G'],
-                          data['MAGERR_DETMODEL_R'],
-                          data['MAGERR_DETMODEL_I'],
-                          data['MAGERR_DETMODEL_Z'],
-                          ]).T
-
-    # mixing matrix
-    
-    elif sdss is True:
-    
-        des_g = data['MODELMAG_G'] - data['EXTINCTION_G']
-        des_r = data['MODELMAG_R'] - data['EXTINCTION_R']
-        des_i = data['MODELMAG_I'] - data['EXTINCTION_I']
-        des_z = data['MODELMAG_Z'] - data['EXTINCTION_Z']
-        des_ci = data['CMODELMAG_I'] - data['EXTINCTION_I']
-        des_cr = data['CMODELMAG_R'] - data['EXTINCTION_R']
-        
-        X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z]).T
-        #X = np.vstack([des_ci, des_g, des_r, des_i]).T
-        Xerr = np.vstack([data['CMODELMAGERR_R'] ,
-                          data['CMODELMAGERR_I'],
-                          data['MODELMAGERR_G'],
-                          data['MODELMAGERR_R'],
-                          data['MODELMAGERR_I'],
-                          data['MODELMAGERR_Z']
-                          ]).T
-    
-    elif cmass is True:
-        
-        des_g = data['MODELMAG'][:,1] - data['EXTINCTION'][:,1]
-        des_r = data['MODELMAG'][:,2] - data['EXTINCTION'][:,2]
-        des_i = data['MODELMAG'][:,3] - data['EXTINCTION'][:,3]
-        des_z = data['MODELMAG'][:,4] - data['EXTINCTION'][:,4]
-        des_ci = data['CMODELMAG'][:,3] - data['EXTINCTION'][:,3]
-        des_cr = data['CMODELMAG'][:,2] - data['EXTINCTION'][:,2]
-        
-        X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z]).T
-        #X = np.vstack([des_ci, des_g, des_r, des_i]).T
-        Xerr = np.vstack([data['CMODELMAGERR'][:,2] ,
-                          data['CMODELMAGERR'][:,3],
-                          data['MODELMAGERR'][:,1],
-                          data['MODELMAGERR'][:,2],
-                          data['MODELMAGERR'][:,3],
-                          data['MODELMAGERR'][:,4]
-                          ]).T
-
-    
-    else:
-        des_g = data['MAG_DETMODEL_G'] - data['XCORR_SFD98_G']
-        des_r = data['MAG_DETMODEL_R'] - data['XCORR_SFD98_R']
-        des_i = data['MAG_DETMODEL_I'] - data['XCORR_SFD98_I']
-        des_z = data['MAG_DETMODEL_Z'] - data['XCORR_SFD98_Z']
-        des_ci = data['MAG_MODEL_I'] - data['XCORR_SFD98_I']
-        des_cr = data['MAG_MODEL_R'] - data['XCORR_SFD98_R']
-        
-        X = np.vstack([des_cr, des_ci, des_g, des_r, des_i, des_z ]).T
-        Xerr = np.vstack([data['MAGERR_MODEL_R'],
-                          data['MAGERR_MODEL_I'],
-                          data['MAGERR_DETMODEL_G'],
-                          data['MAGERR_DETMODEL_R'],
-                          data['MAGERR_DETMODEL_I'],
-                          data['MAGERR_DETMODEL_Z'],
-                          ]).T
-    """
     # mixing matrix
     W = np.array([
                   [1, 0, 0, 0, 0, 0],
@@ -1174,7 +1071,6 @@ def makePlotReweight(train = None, test = None, cmass = None ):
     print 'figure/reweight.png'
     return resample
 
-    
 
 
 def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=100, prefix= 'default' ):
@@ -1214,7 +1110,7 @@ def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=10
                 axes[j][i].set_ylabel(labels[j])
                 axes[j][i].set_title('data2')
 
-    filename = prefix+"diagnostic_histograms3.png"
+    filename = 'figure/'+prefix+"diagnostic_histograms3.png"
     print "writing output plot to: "+filename
     fig.savefig(filename)
 
@@ -1251,7 +1147,7 @@ def doVisualization_1d( true, data1, labels = None, ranges = None, nbins=100, pr
 
 
 
-def doVisualization(model_data, real_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
+def doVisualization(model_data, real_data, name = ['model', 'real'], labels = None, ranges = None, nbins=100, prefix= 'default'):
     if labels == None:
         print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
@@ -1271,9 +1167,9 @@ def doVisualization(model_data, real_data, labels = None, ranges = None, nbins=1
         for j in xrange(ndim):
             if i == j:
                 xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-                axes[i][i].hist(real_data[:,i],bins=xbins,normed=True,label='real')
+                axes[i][i].hist(real_data[:,i],bins=xbins,normed=True,label=name[1])
                 axes[i][i].set_xlabel(labels[i])
-                axes[i][i].hist(model_data[:,i],bins=xbins,normed=True,alpha=0.5,label='model')
+                axes[i][i].hist(model_data[:,i],bins=xbins,normed=True,alpha=0.5,label=name[0])
                 axes[i][i].legend(loc='best')
             else:
                 xbins = np.linspace(ranges[i][0],ranges[i][1],100)
@@ -1281,13 +1177,13 @@ def doVisualization(model_data, real_data, labels = None, ranges = None, nbins=1
                 axes[i][j].hist2d(real_data[:,i], real_data[:,j], bins = [xbins,ybins], normed=True)
                 axes[i][j].set_xlabel(labels[i])
                 axes[i][j].set_ylabel(labels[j])
-                axes[i][j].set_title('real')
+                axes[i][j].set_title(name[1])
                 axes[j][i].hist2d(model_data[:,i], model_data[:,j], bins = [xbins,ybins], normed=True)
                 axes[j][i].set_xlabel(labels[i])
                 axes[j][i].set_ylabel(labels[j])
-                axes[j][i].set_title('model')
+                axes[j][i].set_title(name[0])
 
-    filename = prefix+"diagnostic_histograms.png"
+    filename = 'figure/'+prefix+"diagnostic_histograms.png"
     print "writing output plot to: "+filename
     fig.savefig(filename)
 
@@ -1409,39 +1305,52 @@ def Cut_test(contS, sdss):
 
 
 
+def _FindOptimalN( N, data, pickleFileName = None):
+    from sklearn.mixture import GMM
+        
+    @pickle_results( pickleFileName )
+    def compute_GMM( N, covariance_type='full', n_iter=1000):
+        models = [None for n in N]
+        for i in range(len(N)):
+            sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
+            sys.stdout.flush()
+            models[i] = GMM(n_components=N[i], n_iter=n_iter,
+                            covariance_type=covariance_type)
+            models[i].fit(data)
+        return models
+    models = compute_GMM(N)
+    AIC = [m.aic(data) for m in models]
+    BIC = [m.bic(data) for m in models]
+    i_best = np.argmin(BIC)
+    gmm_best = models[i_best]
+    sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(100))
+    print "\nbest fit converged:", gmm_best.converged_,
+    print " n_components =  %i" % N[i_best]
+    return N[i_best], AIC, BIC
 
 
-def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening = 'SFD98', reverse=None, prefix = ''):
+def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reverse=None, prefix = ''):
 
     import esutil
     import numpy.lib.recfunctions as rf
     from multiprocessing import Process, Queue
     
-    
-    if reverse is True: pass
-        #train, _ = SDSS_cmass_criteria(train, prior=True)
-        #test, _ = SDSS_cmass_criteria(test, prior=True)
-    
-    else:
-        train, _ = priorCut(train, reddening = reddening)
-        test, _ = priorCut(test, reddening = reddening )
+    train, _ = priorCut(train)
+    test, _ = priorCut(test)
 
     # making cmass and lowz mask
-    h = esutil.htm.HTM(10)
-    matchDist = 1/3600. # match distance (degrees) -- default to 1 arcsec
-    m_des, m_sdss, d12 = h.match(train['RA'],train['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
+    #h = esutil.htm.HTM(10)
+    #matchDist = 1/3600. # match distance (degrees) -- default to 1 arcsec
+    #m_des, m_sdss, d12 = h.match(train['RA'],train['DEC'], cmass['RA'], cmass['DEC'],matchDist,maxmatch=1)
+    m_des, m_sdss = esutil.numpy_util.match( train['COADD_OBJECTS_ID'], cmass['COADD_OBJECTS_ID'] )
+    
     true_cmass = np.zeros( train.size, dtype = int)
     true_cmass[m_des] = 1
     cmass_mask = true_cmass == 1
-
-    m_des, m_sdss, d12 = h.match(train['RA'], train['DEC'], lowz['RA'],lowz['DEC'],matchDist,maxmatch=1)
-    true_lowz = np.zeros( train.size, dtype = int)
-    true_lowz[m_des] = 1
-    lowz_mask = true_lowz == 1
     
-    print 'num of cmass/lowz in train', np.sum(cmass_mask), np.sum(lowz_mask)
+    print 'num of cmass in train', np.sum(cmass_mask)
     
-    
+    """
     if mock is None:
         # test mask
         m_des, m_sdss, d12 = h.match(test['RA'],test['DEC'], cmass['RA'], cmass['DEC'], matchDist,maxmatch=1)
@@ -1459,21 +1368,22 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
         y_test[:,1][lowz_mask_test] = 1
         
         print 'num of cmass/lowz in test', np.sum( y_test[:,0][cmass_mask_test]), np.sum( y_test[:,1][lowz_mask_test])
-
+    """
     # stack DES data
 
     #if reverse is True:
-    X_cmass, Xcov_cmass = mixing_color( cmass, reddening = reddening )
-    X_train, Xcov_train = mixing_color(train, reddening = reddening  )
-    X_test, Xcov_test = mixing_color(test, reddening = reddening)
+    X_cmass, Xcov_cmass = mixing_color( cmass )
+    X_train, Xcov_train = mixing_color( train )
+    X_test, Xcov_test = mixing_color( test )
     X, Xcov = np.vstack((X_train,X_test)), np.vstack((Xcov_train, Xcov_test))
-
 
     y_train = np.zeros(( train.size, 2 ), dtype=int)
     y_train[:,0][cmass_mask] = 1
-    y_train[:,1][lowz_mask] = 1
-    if mock is None : y = np.vstack((y_train, y_test))
+    #y_train[:,1][lowz_mask] = 1
     
+    
+    
+    if mock is None : y = np.vstack((y_train, y_test))
     
 
     print 'train/test', len(X_train), len( X_test )
@@ -1483,58 +1393,40 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     # finding optimal n_cluster
 
     from sklearn.mixture import GMM
-    
+    prefix1 = prefix # 'gold_st82_5_'
+    prefix2 = prefix #'gold_st82_6_' # has only all likelihood.
+    #prefix2 = prefix
+    """
     N = np.arange(1, 50, 2)
-    
-    def FindOptimalN( N, data, pickleFileName = None):
-        @pickle_results( pickleFileName )
-        def compute_GMM( N, covariance_type='full', n_iter=1000):
-            models = [None for n in N]
-            for i in range(len(N)):
-                sys.stdout.write('.')
-                models[i] = GMM(n_components=N[i], n_iter=n_iter,
-                                covariance_type=covariance_type)
-                models[i].fit(data)
-            return models
-        models = compute_GMM(N)
-        AIC = [m.aic(data) for m in models]
-        BIC = [m.bic(data) for m in models]
-        i_best = np.argmin(BIC)
-        gmm_best = models[i_best]
-        print 'end'
-        print "best fit converged:", gmm_best.converged_
-        print "BIC: n_components =  %i" % N[i_best]
-        return N[i_best], AIC, BIC
-    
-    pickleFileName_GMM = ['pickle/'+prefix+'bic_cmass.pkl', 'pickle/'+prefix+'bic_all.pkl']
-    if reverse is True : pickleFileName_GMM = ['pickle/'+'reverse_GMM_bic_cmass.pkl', 'pickle/'+'reverse_GMM_bic_all.pkl']
-    n_cl_cmass, aic_cmass, bic_cmass = FindOptimalN( N, X_cmass, pickleFileName = pickleFileName_GMM[0])
-    rows = np.random.choice(np.arange(X_train.shape[0]), 10 * len(X_train[cmass_mask]))
-    n_cl_all, aic_all, bic_all  = FindOptimalN( N, X_train[rows,:], pickleFileName = pickleFileName_GMM[1])
+    #pickleFileName_GMM = ['pickle/'+prefix+'bic_cmass.pkl', 'pickle/'+prefix+'bic_all.pkl']
+    pickleFileName_GMM = ['pickle/'+prefix1+'bic_cmass.pkl', 'pickle/'+prefix1+'bic_all.pkl']
+    n_cl_cmass, aic_cmass, bic_cmass = _FindOptimalN( N, X_cmass, pickleFileName = pickleFileName_GMM[0])
+    rows = np.random.choice(np.arange(X_train.shape[0]), 10 * np.sum(cmass_mask))
+    n_cl_all, aic_all, bic_all  = _FindOptimalN( N, X_train[rows,:], pickleFileName = pickleFileName_GMM[1])
+    #n_cl_all, aic_all, bic_all  = _FindOptimalN( N, X_train, pickleFileName = pickleFileName_GMM[1])
     #n_cl_no, aic_no, bic_no = FindOptimalN( N, X_train[~cmass_mask], pickleFileName = 'GMM_bic_no.pkl')
     
     DAT = np.column_stack(( N, bic_cmass, bic_all, aic_cmass, aic_all))
     np.savetxt('BIC.txt', DAT, delimiter = ' ', header = 'N, bic_cmass, bic_all,  aic_cmass, aic_all' )
     print 'save to BIC.txt'
-
-    #n_cl_cmass = 5
+    """
+    n_cl_cmass = 10
     #n_cl_no = 25
-    #n_cl_all = 25
+    n_cl_all = 25
     # ----------------------------------
   
-    pickleFileName = ['pickle/'+prefix +'XD_all.pkl', 'pickle/'+prefix+'XD_dmass.pkl', 'pickle/'+prefix+'XD_no.pkl']
+    #pickleFileName = ['pickle/'+prefix +'XD_all.pkl', 'pickle/'+prefix+'XD_dmass.pkl', 'pickle/'+prefix+'XD_no.pkl']
+    pickleFileName = ['pickle/'+prefix2 +'XD_all.pkl', 'pickle/'+prefix1+'XD_dmass.pkl', 'pickle/'+prefix+'XD_no.pkl']
     def XDDFitting( X_train, Xcov_train, init_means=None, init_covars = None, init_weights = None, filename = None, n_cluster = 25 ):
         clf = None
         @pickle_results(filename, verbose = True)
-        def compute_XD(n_clusters=n_cluster, n_iter=500, verbose=True):
+        def compute_XD(n_clusters=n_cluster, n_iter=500, verbose=False):
             clf= XDGMM(n_clusters, n_iter=n_iter, tol=1E-2, verbose=verbose)
             clf.fit(X_train, Xcov_train, init_means=init_means, init_covars = init_covars, init_weights = init_weights)
             return clf
         clf = compute_XD()
         return clf
 
-    # calculates CMASS fits
-    clf_cmass = XDDFitting( X_cmass, Xcov_cmass, filename=pickleFileName[1], n_cluster=n_cl_cmass)
 
     # giving initial mean, V, amp
     """
@@ -1555,10 +1447,17 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     init_covars = np.vstack(( init_covars, cV ))
     """
     
+    # calculates CMASS fits
+    
+    #rows = np.random.choice(np.arange(X_train.shape[0]), train.size * 0.33)
+    #clf = XDDFitting( X_train[rows,:], Xcov_train[rows,:,:], filename= pickleFileName[0], n_cluster= n_cl_all)
     clf = XDDFitting( X_train, Xcov_train, filename= pickleFileName[0], n_cluster= n_cl_all)
+    clf_cmass = XDDFitting( X_cmass, Xcov_cmass, filename=pickleFileName[1], n_cluster=n_cl_cmass)
+    
     #clf = XDDFitting( X_train[rows,:], Xcov_train[rows,:,:], init_means=init_means, init_covars = init_covars, init_weights = init_weights, filename= pickleFileName[0], n_cluster= n_cl_all + n_cl_cmass)
-
-
+    
+    #fitsio.write('result_cat/'+prefix+'X_obs.fits' ,X_train[rows,:])
+    fitsio.write('result_cat/'+prefix+'X_obs.fits' ,X_train)
     """
     rows = np.random.choice(np.arange(X_train[~cmass_mask].shape[0]), 10 * len(X_train[cmass_mask]))
     init_weightsN, init_meansN, init_covarsN = initialize_deconvolve(X_train[~cmass_mask].data,  Xcov_train[~cmass_mask], n_components = n_cl_no)
@@ -1567,10 +1466,13 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     """
 
     # logprob_a ------------------------------------------
+    
 
 
     print "calculate loglikelihood gaussian with multiprocessing module"
-
+    #cmass_logprob_a = logsumexp(clf_cmass.logprob_a( X, Xcov, parallel = True ), axis = 1)
+    #all_logprob_a = logsumexp(clf.logprob_a( X, Xcov, parallel = True ), axis = 1)
+    
     from multiprocessing import Process, Queue
     # split data
     n_process = 12
@@ -1581,44 +1483,54 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     X_split = np.array_split(X, n_process, axis=0)
     Xcov_split = np.array_split(Xcov, n_process, axis=0)
     
-    print 'multiprocessing...',
-    
     def logprob_process(q,  classname, order,(data, cov)):
         re = classname.logprob_a(data, cov)
-        sys.stdout.write('...')
         result = logsumexp(re, axis = 1)
         q.put((order, result))
-        
-    #inputs = [ (X_test_split[i], Xcov_test_split[i]) for i in range(n_process) ]
+
     inputs = [ (X_split[i], Xcov_split[i]) for i in range(n_process) ]
     
     q_cmass = Queue()
     q_all = Queue()
-    q_no = Queue()
+    #q_no = Queue()
     cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
     all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(range(n_process), inputs)]
 
     #no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
     
+
+
+    #sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+    
     for p in cmass_Processes: p.start()
-    result = [q_cmass.get() for p in cmass_Processes]
+    
+    percent = 0.0
+    result = []
+    for p in cmass_Processes:
+        result.append(q_cmass.get())
+        percent += + 1./( n_process * 2 ) * 100
+        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+        sys.stdout.flush()
+    
+    #result = [q_cmass.get() for p in cmass_Processes]
     result.sort()
     cmass_logprob_a = np.hstack([np.array(r[1]) for r in result ])
     
     
     for p in all_Processes: p.start()
-    resultall = [q_all.get() for p in all_Processes]
+
+    resultall = []
+    for p in all_Processes:
+        resultall.append(q_all.get())
+        percent += + 1./( n_process * 2 ) * 100
+        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+        sys.stdout.flush()
+
+    #resultall = [q_all.get() for p in all_Processes]
     resultall.sort()
     all_logprob_a = np.hstack([r[1] for r in resultall ])
-    
-    """
-    for p in no_Processes: p.start()
-    resultno = [q_no.get() for p in no_Processes]
-    resultno.sort()
-    no_logprob_a = np.hstack([r[1] for r in resultno ])
-    """
-    print 'end'
-    
+
+    sys.stdout.write("\r" + 'multiprocessing {:0.0f} % \n'.format( 100 ))
 
     numerator =  np.exp(cmass_logprob_a) * np.sum(y_train[:,0]) * 1.
     denominator = np.exp(all_logprob_a) * len(X_train)
@@ -1627,9 +1539,9 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     denominator_zero = denominator == 0
     EachProb_CMASS = np.zeros( numerator.shape )
     EachProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
-    EachProb_CMASS[EachProb_CMASS > 1.0] = 1.0
+    #EachProb_CMASS[EachProb_CMASS > 1.0] = 1.0
     
-    print 'EachProb max', EachProb_CMASS.max()
+    #print 'EachProb max', EachProb_CMASS.max()
     
     
     train = rf.append_fields(train, 'EachProb_CMASS', EachProb_CMASS[:train.size])
@@ -1645,11 +1557,8 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
 
     X_sample_all_split = np.array_split(X_sample_all, n_process, axis=0)
     
-
-
     def addingerror_process(q, order, (model, data, cov)):
         re = add_errors(model, data, cov)
-        sys.stdout.write('...')
         q.put((order, re))
     
     inputs = [ (X_sample_all_split[i], X_train, Xcov_train) for i in range(n_process) ]
@@ -1658,14 +1567,25 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     Processes = [Process(target = addingerror_process, args=(q, z[0], z[1])) for z in zip(range(n_process), inputs)]
     
     for p in Processes: p.start()
-    result = [q.get() for p in Processes]
+
+    percent = 0.0
+    result = []
+    for p in Processes:
+        result.append(q.get())
+        percent += + 1./( n_process ) * 100
+        sys.stdout.write("\r" + 'add noise to sample {:0.0f} %'.format( percent ))
+        sys.stdout.flush()
+
+    sys.stdout.write("\r" + 'add noise to sample {:0.0f} %'.format( 100 ))
+    #result = [q.get() for p in Processes]
     result.sort()
     result = [r[1] for r in result ]
 
     noisy_X_sample_all = np.vstack( result[:n_process] ) #result[1]
     noisy_X_sample_cmass = add_errors( X_sample_cmass, X_train[cmass_mask], Xcov_train[cmass_mask] )
+    
+    fitsio.write('result_cat/'+prefix+'noisy_X_sample.fits' ,noisy_X_sample_all)
     """
-
     # Histogram method-----------------------------------------
     """
     print "calculate histogram number density"
@@ -1728,9 +1648,6 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, reddening =
     # ---------------------------------------------------------
     if mock is None:
         result = np.hstack((train, test))
-        print "calculate comp/pur"
-        completeness_purity( test, test[y_test[:,0]], prefix = prefix)
-        #GetCMASS_mask = test['EachProb_CMASS'] > p_threshold
         return result
 
     if mock is not None:
@@ -1953,8 +1870,6 @@ def com_pur_arbi(cat = None, true = None, prefix = '', subset = None):
     fig.savefig('com_pur_results/'+ prefix + 'com_pur_check')
     print 'save fig: com_pur_results/'+prefix+'com_pur_check.png'
 
-
-    stop
     
     # probability calibration
     prob = []
@@ -1990,87 +1905,35 @@ def com_pur_arbi(cat = None, true = None, prefix = '', subset = None):
     return pps, coms2, purs2
 
 
+def probability_calibration( des = None, cmass_des = None, prefix = 'test' ):
+    from utils import matchCatalogs
+    pth_bin, pstep = np.linspace(0.0, 3.0, 50, retstep = True)
+    pbin_center = pth_bin[:-1] + pstep/2.
+    
+    cmass_des, _ = matchCatalogs( des, cmass_des, tag='COADD_OBJECTS_ID' )
+    
+    N_cmass, _ = np.histogram( cmass_des['EachProb_CMASS'], bins = pth_bin, density=False )
+    N_all, _ = np.histogram( des['EachProb_CMASS'], bins = pth_bin, density=False )
+    
+    prob = N_cmass * 1./N_all
+    real = N_cmass * 1./cmass_des.size
+    
+    for i, j, k in zip(pbin_center, prob, N_cmass): print i, j, k
+    
+    fig,ax = plt.subplots()
+    ax.plot(pbin_center, prob,label='true fraction' )
+    ax.plot(pbin_center, real,label='total fraction' )
+    ax.set_xlim(0,3)
+    ax.set_ylim(0,1)
+    ax.legend(loc='best')
+    fig.savefig('com_pur_results/'+prefix + '_probability_calibration.png')
+    print 'save fig: com_pur_results/'+prefix+'_probability_calibration.png'
 
-
-
-def angularcorr( dmass = None, subCMASS = None, cmass = None, ra = 320, ra2 = 360, dec=-1.0, dec2 = 1.0, weight = [None, None], suffix = ''):
-    
-    from systematics import _acf, jk_error
-    # CMASS SGC, CMASS LOCAL, subCMASS, DMASS
-    
-    # testing dmass with angular correlation function ------------------------------------------------
-    #rand_catD = Balrog_DMASS.copy()
-    import fitsio
-    cmass_cat_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South.fits.gz')
-    cmass_cat_SGC = Cuts.keepGoodRegion(cmass_cat_SGC)
-    rand_cat_SGC = fitsio.read('/n/des/lee.5922/data/cmass_cat/random0_DR12v5_CMASS_South.fits.gz')
-    rand_cat_SGC = Cuts.keepGoodRegion(rand_cat_SGC)
-    
-    cmass_catS = cmass.copy()
-    if cmass is None: cmass_catS = fitsio.read('noblend_clean_cmass_data.fits')
-    cmass_catS = Cuts.SpatialCuts(cmass_catS, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    rand_catS = Cuts.SpatialCuts(rand_cat_SGC, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    
-    dmass_cat = dmass.copy() #Cuts.SpatialCuts(dmass, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    rand_catD = rand_catS.copy()
-    subCMASS_cat = Cuts.SpatialCuts(subCMASS, ra =ra, ra2=ra2 , dec=dec , dec2= dec2 )
-    rand_catsub = rand_catS.copy()
-    
-    #weight_rand_SGC = rand_cat_SGC['WEIGHT_FKP']
-    #weight_data_SGC = cmass_cat_SGC['WEIGHT_FKP'] * cmass_cat_SGC['WEIGHT_STAR'] * ( cmass_cat_SGC['WEIGHT_CP']+cmass_cat_SGC['WEIGHT_NOZ'] -1. )
-    #weight_randS = rand_catS['WEIGHT_FKP']
-    #weight_dataS = cmass_catS['WEIGHT_FKP'] * cmass_catS['WEIGHT_STAR'] * ( cmass_catS['WEIGHT_CP']+cmass_catS['WEIGHT_NOZ'] -1. )
-    #weight_sub = subCMASS_cat['REWEIGHT']
-    #weight_randsub = rand_catsub['WEIGHT_FKP']
-    #weight_D = dmass_cat['EachProb_CMASS'] * 1./np.sum(dmass_cat['EachProb_CMASS'])
-    #weight_randD = rand_catD['WEIGHT_FKP']
-    weight_D, weight_randD = weight
-    #theta_SGC, w_SGC, _ = _acf(cmass_cat_SGC, rand_cat_SGC, weight = [weight_data_SGC, weight_rand_SGC])
-    thetaS, wS, werrS = _acf(cmass_catS, rand_catS )#, weight = [weight_dataS, weight_randS])
-    thetaD, wD, werrD = _acf(dmass_cat, rand_catD, weight = [weight_D, weight_randD])
-    thetasub, wsub, werrsub = _acf(subCMASS_cat, rand_catsub ) #, weight = [weight_sub, weight_randsub ])
-    # jk errors
-    
-    #from astroML.plotting import setup_text_plots
-    #setup_text_plots(fontsize=20, usetex=True)
-    
-    njack = 30
-    raTag = 'RA'
-    decTag = 'DEC'
-    #_, jkerr_SGC = jk_error( cmass_cat_SGC, njack = njack , target = _acf, jkargs=[cmass_cat_SGC, rand_cat_SGC], jkargsby=[[raTag, decTag],[raTag, decTag]], raTag = raTag, decTag = decTag )
-    _, Sjkerr = jk_error( cmass_catS, njack = njack , target = _acf, jkargs=[cmass_catS, rand_catS], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    _, Djkerr = jk_error( dmass_cat, njack = njack , target = _acf, jkargs=[dmass_cat, rand_catD], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    _, subjkerr = jk_error( subCMASS_cat, njack = njack , target = _acf, jkargs=[subCMASS_cat, rand_catsub], jkargsby=[[raTag, decTag],[raTag, decTag]],raTag = raTag, decTag = decTag )
-    
-    DAT = np.column_stack((thetaD, wD, Djkerr, thetaS, wS, Sjkerr, thetasub, wsub, subjkerr ))
-    np.savetxt( 'data_txt/acf_comparison'+suffix+'.txt', DAT, delimiter = ' ', header = ' thetaD, wD, Djkerr, thetaS, wS, Sjkerr,thetasub, wsub, subjkerr  theta_SGC  w_SGC   jkerr_SGC    ' )
-    print 'writing txt to data_txt/acf_comparison'+suffix+'.txt'
-    
-    
-    """
-    fig, ax = plt.subplots(1,1, figsize = (7, 7))
-    
-    ax.errorbar( theta_SGC*0.95, w_SGC, yerr = jkerr_SGC, fmt = '.', label = 'SGC')
-    ax.errorbar( thetaS* 1.05, wS, yerr = Sjkerr, fmt = '.', label = 'CMASS local')
-    ax.errorbar( thetaD, wD, yerr = Djkerr, fmt = '.', label = 'DMASS')
-    ax.errorbar( thetasub, wsub, yerr = subjkerr, fmt = '.', label = 'subCMASS')
-    
-    ax.set_xlim(1e-2, 10)
-    ax.set_ylim(1e-4, 10)
-    ax.set_xlabel(r'$\theta(deg)$')
-    ax.set_ylabel(r'${w(\theta)}$')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.legend(loc = 'best')
-    ax.set_title(' angular correlation ')
-    fig.savefig('acf_comparison'+suffix+'.png')
-    print 'writing plot to acf_comparison'+suffix+'.png'
-    """
 
 
 def _resampleWithPth( des ):
     
-    pth_bin, step = np.linspace(0.01, 1.0, 200, endpoint = True, retstep = True)
+    pth_bin, step = np.linspace(0.01, 1.0, 100, endpoint = True, retstep = True)
     pcenter = pth_bin + step/2.
     
     dmass = [None for i in range(pcenter.size)]
@@ -2092,18 +1955,72 @@ def _resampleWithPth( des ):
     return dmass
 
 
-def makeTagUppercase(cat):
-    names = list(cat.dtype.names)
-    names = [ n.upper() for n in names ]
-    cat.dtype.names = names
-    return cat
+def resamplewithCmassHist( des, cmass_des, des_st82 = None, pstart = 0.01 ):
 
-def resampleWithPth( des ):
+    from utils import matchCatalogs
+    cmass_des, _ = matchCatalogs( des_st82, cmass_des, tag ='COADD_OBJECTS_ID')
+
+    pth_bin, step = np.linspace(pstart, 3.0, 300, endpoint = True, retstep = True)
+    pcenter = pth_bin + step/2.
+    pcenter = pcenter[:-1]
+    N_cmass, _ = np.histogram( cmass_des['EachProb_CMASS'], bins = pth_bin, density=False )
+    N_all, _ = np.histogram( des_st82['EachProb_CMASS'], bins = pth_bin, density=False )
+    n = N_cmass * 1./N_all
+    #n = n * 1./n[-1]
+    
+    desInd = np.digitize( des['EachProb_CMASS'], bins= pth_bin )
+
+    fraction = [None for i in range(pcenter.size)]
+    sampled_dmass = []
+    for i in range(1, pth_bin.size-1):
+        cat = des[ desInd == i ]
+        try :
+            sd = np.random.choice( cat, size = int(np.around(n[i] * cat.size)) )
+            sampled_dmass.append(sd)
+            fraction[i] = sd.size * 1./cat.size
+        except ValueError:
+            sd = np.random.choice( des, size = 0)
+            sampled_dmass.append(sd)
+            fraction[i] = 0.0
+
+    sampled_dmass = np.hstack(sampled_dmass)
+
+
+    """
+    fig, ax = plt.subplots()
+    
+    #ax.plot( pcenter, pcurve2, color = 'grey', label = 'Ashley1', linestyle = '--')
+    #ax.plot( np.insert(pcenter, 0, pcenter[0]), np.insert(n, 0, 0.0), color = 'grey',linestyle = '--', label='straight')
+    ax.plot( pcenter, fraction, color = 'red', linestyle = '--' )
+    ax.plot( pcenter, n, color = 'grey',linestyle = '--', label='cmass curve')
+
+
+    pbin, st = np.linspace(0.0, 3., 100, endpoint=False, retstep = True)
+    pc = pbin + st/2.
+    
+    #N, edge = np.histogram( des['EachProb_CMASS'], bins = pbin)
+    weights = np.ones_like(des['EachProb_CMASS'])/len(des['EachProb_CMASS'])
+    ax.hist( des['EachProb_CMASS'], bins = pbin, weights = weights * 20, alpha = 0.3, color = 'green')
+    #ax.plot( pc[:-1], N * 1./des.size,  )
+    ax.set_xlim(0,3)
+    ax.set_ylim(0,1.1)
+    ax.set_ylabel('fraction')
+    ax.set_xlabel('p_threshold')
+    ax.legend(loc='best')
+    fig.savefig('figure/selection_prob_2.png')
+    print 'figure to ', 'figure/selection_prob_2.png'
+    """
+    return sampled_dmass
+
+
+
+def resampleWithPth( des, pstart = 0.1, pmax = 0.8 ):
     
     pmin = 0.1
-    pmax = 0.75
+    pmax = pmax # should be adjused with different samples
     p1stbin = 0.1
-    pth_bin, step = np.linspace(0.0, 1.0, 300, endpoint = True, retstep = True)
+    
+    pth_bin, step = np.linspace(pstart, 1.0, 300, endpoint = True, retstep = True)
     pcenter = pth_bin + step/2.
     
     # ellipse
@@ -2113,7 +2030,7 @@ def resampleWithPth( des ):
     
     # straight
     pcurve2 = np.zeros(pth_bin.size)
-    pcurve_front = np.linspace(0.0, 1.0, 300, endpoint = True)
+    pcurve_front = np.linspace(pstart, 1.0, 300, endpoint = True)
     pcurve2[:pcurve_front.size] = pcurve_front
     pcurve2[pcurve_front.size:] = pmax
 
@@ -2121,13 +2038,15 @@ def resampleWithPth( des ):
     straight_dmass = [None for i in range(pth_bin.size)]
     el_fraction, st_fraction = np.zeros(pth_bin.size),  np.zeros(pth_bin.size)
     
+    desInd = np.digitize( des['EachProb_CMASS'], bins= pth_bin )
+    
     for i in range(pth_bin.size-1):
-        mask = (des['EachProb_CMASS'] >= pth_bin[i]) & (des['EachProb_CMASS'] < pth_bin[i]+step)
-        cat = des[mask]
-        
+        #mask = (des['EachProb_CMASS'] >= pth_bin[i]) & (des['EachProb_CMASS'] < pth_bin[i]+step)
+        #cat = des[mask]
+        cat = des[ desInd == i+1 ]
         try :
-            ellipse_dmass[i] = np.random.choice( cat, size = np.around(pcurve[i] * cat.size) )
-            straight_dmass[i] = np.random.choice( cat, size = np.around(pcurve2[i] * cat.size) )
+            ellipse_dmass[i] = np.random.choice( cat, size = int(np.around(pcurve[i] * cat.size)) )
+            straight_dmass[i] = np.random.choice( cat, size = int(np.around(pcurve2[i] * cat.size)) )
             el_fraction[i] = ellipse_dmass[i].size * 1./cat.size
             st_fraction[i] = straight_dmass[i].size * 1./cat.size
         except ValueError:
@@ -2141,8 +2060,8 @@ def resampleWithPth( des ):
     i = i+1
     mask = (des['EachProb_CMASS'] >= pth_bin[i])
     cat = des[mask]
-    ellipse_dmass[i] = np.random.choice( cat, size = int(pmax * cat.size) )
-    straight_dmass[i] = np.random.choice( cat, size = int(1.0 * cat.size) )
+    ellipse_dmass[i] = np.random.choice( cat, size = int(np.around(pmax * cat.size)) )
+    straight_dmass[i] = np.random.choice( cat, size = int(np.around(pmax * cat.size)) )
     #print pth_bin[i], pth_bin[i]+step, 0.75, dmass[i].size * 1./cat.size, dmass[i].size
     
     ellipse_dmass = np.hstack(ellipse_dmass)
@@ -2153,12 +2072,12 @@ def resampleWithPth( des ):
     fig, ax = plt.subplots()
 
     #ax.plot( pcenter, pcurve2, color = 'grey', label = 'Ashley1', linestyle = '--')
-    ax.plot( np.insert(pcenter, 0, pcenter[0]), np.insert(pcurve2, 0, 0.0), color = 'grey',linestyle = '--', label='Ashley1')
-    ax.plot( np.insert(pcenter, 0, pcenter[0]), np.insert(pcurve, 0, 0.0), color = 'grey' , label = 'Ashley2')
+    ax.plot( np.insert(pcenter, 0, pcenter[0]), np.insert(pcurve2, 0, 0.0), color = 'grey',linestyle = '--', label='straight')
+    ax.plot( np.insert(pcenter, 0, pcenter[0]), np.insert(pcurve, 0, 0.0), color = 'grey' , label = 'ellipse')
     ax.plot( pcenter, el_fraction, color = 'red', linestyle = '--' )
     ax.plot( pcenter, st_fraction, color = 'blue',linestyle = '--'  )
     
-    pbin, st = np.linspace(0.01, 1.1, 100, endpoint=False, retstep = True)
+    pbin, st = np.linspace(0.0, 1.1, 100, endpoint=False, retstep = True)
     pc = pbin + st/2.
     
     #N, edge = np.histogram( des['EachProb_CMASS'], bins = pbin)
@@ -2176,27 +2095,6 @@ def resampleWithPth( des ):
     return straight_dmass, ellipse_dmass
 
 
-def addphotoz(des = None, im3shape = None):
-    
-    import esutil
-    h = esutil.htm.HTM(10)
-    m_re, m_im3,_ = h.match( des['RA'], des['DEC'], im3shape['RA'], im3shape['DEC'], 1./3600, maxmatch=1)
-    desdm_zp = np.zeros(des.size, dtype=float)
-    desdm_zp[m_re] = im3shape[m_im3]['DESDM_ZP']
-    result = rf.append_fields(des, 'DESDM_ZP', desdm_zp)
-    return result
-
-def SDSSaddphotoz(cmass):
-    # add photoz to cmass cat
-    photoz = fitsio.read('/n/des/lee.5922/data/cmass_cat/cmass_photoz_radec.fits')
-    sortIdx, sortIdx2 = cmass['OBJID'].sort(), photoz['OBJID'].sort()
-    cmass, photoz = cmass[sortIdx].ravel(), photoz[sortIdx2].ravel()
-    mask = np.in1d(cmass['OBJID'], photoz['OBJID'])
-    mask2 = np.in1d(photoz['OBJID'], cmass['OBJID'][mask])
-    photozline = np.zeros( cmass.size, dtype=float )
-    photozline[mask] = photoz['Z'][mask2]
-    cmass = rf.append_fields(cmass, 'PHOTOZ', photozline)
-    return cmass
 
 
 def EstimateContaminantFraction( dmass = None, cmass = None ):
