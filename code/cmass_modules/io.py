@@ -9,64 +9,17 @@ import fitsio
 from fitsio import FITS, FITSHDR
 
 
+def SearchAndCallFits(path = None, keyword = None, columns = None):
+    import os, sys
+    tables = []
+    for i in os.listdir(path):
+        if os.path.isfile(os.path.join(path,i)) and keyword in i:
+            tables.append(path+i)
+            print i
+            sys.stdout.flush()
 
-def getDEScatalogs( file = '/n/des/huff.791/Projects/CMASS/Data/DES_Y1_S82.fits', size = 50000, bigSample = False):
-    print "don't use for DES cat!!"
-
-
-    if bigSample is True:
-        
-        filepath = '/n/des/lee.5922/data/y1a1_coadd/'
-        des_files = [filepath+'des_st82_310_330_000001.fits',
-                    filepath+'des_st82_310_330_000002.fits',
-                    filepath+'des_st82_310_330_000003.fits',
-                    filepath+'des_st82_310_330_000004.fits',
-                    filepath+'des_st82_310_330_000005.fits',
-                    filepath+'des_st82_310_330_000006.fits',
-                    filepath+'des_st82_330_335_000001.fits',
-                    filepath+'des_st82_330_335_000002.fits',
-                    filepath+'des_st82_335_340_000001.fits',
-                    filepath+'des_st82_335_340_000002.fits',
-                    filepath+'des_st82_340_350_000001.fits',
-                    filepath+'des_st82_340_350_000002.fits',
-                    filepath+'des_st82_340_350_000003.fits',
-                    filepath+'des_st82_340_350_000004.fits',
-                    filepath+'des_st82_350_360_000001.fits',
-                    filepath+'des_st82_350_360_000002.fits',
-                    filepath+'des_st82_350_360_000003.fits',
-                    filepath+'des_st82_350_360_000004.fits']
-            
-    
-        """
-        if file is False :
-            
-            #get file from server and save
-            connection=ea.connect()
-            query=connection.loadsql('../query/stripe82_des_cut.sql')
-
-            #data = connection.query_to_pandas(query)
-            data = connection.query_and_save(query,'../data/stripe82_des_cut.fits')
-            data = fitsio.read(file)
-        
-        else:
-        """
-        data = esutil.io.read(des_files,combine=True)
-        #data = fitsio.read(filename, rows=[0,10], ext=2)
-        #data,thing = esutil.io.read_header(cfile,ext=1,rows=rows)
-
-    else:
-        #if rows is not None:
-        
-        #sample = np.arange(139142161)
-        #rows = np.random.choice( sample, size=size , replace = False)
-        #rows = np.arange(500000)
-        data = fitsio.read(file, rows=None)
-        #data = fitsio.read(file)
-    
-    data.dtype.names = tuple([ data.dtype.names[i].upper() for i in range(len(data.dtype.names))])
-    #data.sort(order = 'COADD_OBJECTS_ID')
+    data = esutil.io.read(tables, columns = columns, combine = True)
     return data
-
 
 def getSGCCMASSphotoObjcat():
     
@@ -92,11 +45,18 @@ def getSGCCMASSphotoObjcat():
            
     cmass = cmass[use]
     
+    _, ind = np.unique(cmass['OBJID'], return_index=True, return_inverse=False, return_counts=False)
+    no_duplicate_mask = np.zeros(cmass.size, dtype=bool)
+    no_duplicate_mask[ind] = 1
+
+    cmass = cmass[no_duplicate_mask]
+
     print "Applying Healpix BOSS SGC footprint mask"
+    print "Change healpix mask to spatial cut later..... Don't forget!!! "
     HPboss = esutil.io.read('/n/des/lee.5922/data/cmass_cat/healpix_boss_footprint_SGC_1024.fits')
     from systematics import hpRaDecToHEALPixel
     HealInds = hpRaDecToHEALPixel( cmass['RA'],cmass['DEC'], nside= 1024, nest= False)
-    BOSSHealInds = np.in1d( HealInds, HPboss )
+    BOSSHealInds = np.in1d( HealInds, HPboss )    
     return cmass[BOSSHealInds]
 
 
@@ -136,13 +96,28 @@ def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_em
     return sdss_data
 
 
+def getCatalogsWithKeys(keyword = None, path = None):
+    
+    import os, esutil, sys
+    
+    tables = []
+    for i in os.listdir(path):
+        if os.path.isfile(os.path.join(path,i)) and keyword in i:
+            tables.append(path+i)
+            print i
+            sys.stdout.flush()
+    des_data = esutil.io.read( tables, combine=True)
+    return des_data
+ 
+    
+    
 def getDESY1A1catalogs(keyword = 'Y1A1', gold = False, size = None, sdssmask=True, im3shape=None):
     
     import time
-    import os
+    import os, sys
     
-    colortags = ['FLUX_MODEL', 'FLUX_DETMODEL', 'FLUXERR_MODEL', 'FLUXERR_DETMODEL', 'FLAGS', 'MAG_MODEL', 'MAG_DETMODEL', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'XCORR_SFD98', 'MAGERR_DETMODEL', 'MAG_AUTO', 'MAG_PETRO', 'MAG_PSF' ]
-    #colortags = ['FLAGS', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'MAG_AUTO', 'MAG_PETRO', 'XCORR_SFD98']
+    #colortags = ['FLUX_MODEL', 'FLUX_DETMODEL', 'FLUXERR_MODEL', 'FLUXERR_DETMODEL', 'FLAGS', 'MAG_MODEL', 'MAG_DETMODEL', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6', 'XCORR_SFD98', 'MAGERR_DETMODEL', 'MAG_AUTO', 'MAG_PETRO', 'MAG_PSF' ]
+    colortags = ['FLAGS', 'MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5','MAG_APER_6']
     
     filters = ['G', 'R', 'I', 'Z']
     colortags = [ colortag + '_'+filter for colortag in colortags for filter in filters ]
@@ -151,7 +126,8 @@ def getDESY1A1catalogs(keyword = 'Y1A1', gold = False, size = None, sdssmask=Tru
 
     if sdssmask is False : sdssmasktags=[]
     
-    tags = ['RA', 'DEC', 'COADD_OBJECTS_ID', 'SPREAD_MODEL_I', 'SPREADERR_MODEL_I' ,'CLASS_STAR_I', 'MAGERR_MODEL_I', 'MAGERR_MODEL_R'] + colortags + sdssmasktags
+    #tags = ['RA', 'DEC', 'COADD_OBJECTS_ID', 'SPREAD_MODEL_I', 'SPREADERR_MODEL_I' ,'CLASS_STAR_I', 'MAGERR_MODEL_I', 'MAGERR_MODEL_R'] + colortags + sdssmasktags
+    tags = ['RA', 'DEC', 'COADD_OBJECTS_ID'] + colortags + sdssmasktags
     #tags = ['COADD_OBJECTS_ID'] + colortags + sdssmasktags
     path = '/n/des/lee.5922/data/y1a1_coadd/'
     if gold is True : path = '/n/des/lee.5922/data/gold_cat/'
@@ -161,13 +137,19 @@ def getDESY1A1catalogs(keyword = 'Y1A1', gold = False, size = None, sdssmask=Tru
         if os.path.isfile(os.path.join(path,i)) and keyword in i:
             tables.append(path+i)
             print i
+            sys.stdout.flush()
 
     rows = None
     if size is not None:
         sample = np.arange(152160)
         rows = np.random.choice( sample, size=size , replace = False)
 
-    if gold is True: tags = None
+     
+    if gold is True: 
+        #tags = None
+        colortags = ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO', 'MAGERR_MODEL', 'MAGERR_DETMODEL']
+        tags = ['RA', 'DEC', 'COADD_OBJECTS_ID', 'FLAGS_GOLD', 'MODEST_CLASS', 'DESDM_ZP', 'HPIX' ]\
+        + [ c+'_'+f for f in filters for c in colortags ]
 
     des_data = esutil.io.read( tables, combine=True, columns = tags, rows = rows)
     

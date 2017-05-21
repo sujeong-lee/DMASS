@@ -13,6 +13,31 @@ from ang2stripe import *
 import fitsio
 from fitsio import FITS, FITSHDR
 
+
+
+def priorCut(data):
+    modelmag_g_des = data['MAG_DETMODEL_G']
+    modelmag_r_des = data['MAG_DETMODEL_R']
+    modelmag_i_des = data['MAG_DETMODEL_I']
+    cmodelmag_g_des = data['MAG_MODEL_G']
+    cmodelmag_r_des = data['MAG_MODEL_R']
+    cmodelmag_i_des = data['MAG_MODEL_I']
+    magauto_des = data['MAG_AUTO_I']
+
+    cut = (((cmodelmag_r_des > 17) & (cmodelmag_r_des <24)) &
+           ((cmodelmag_i_des > 17) & (cmodelmag_i_des <24)) &
+           ((cmodelmag_g_des > 17) & (cmodelmag_g_des <24)) &
+           ((modelmag_r_des - modelmag_i_des ) < 1.5 ) & # 10122 (95%)
+           ((modelmag_r_des - modelmag_i_des ) > 0. ) & # 10120 (95%)
+           ((modelmag_g_des - modelmag_r_des ) > 0. ) & # 10118 (95%)
+           ((modelmag_g_des - modelmag_r_des ) < 2.5 ) & # 10122 (95%)
+           (magauto_des < 21. ) #&  10124 (95%)
+        )
+    return cut
+
+
+
+
 def CmassGal_in_stripe82(data):
     
     list = []
@@ -31,15 +56,15 @@ def CmassGal_in_stripe82(data):
     return list
 
 
-def modestify(data):
+def modestify(data, suffix='_corrected'):
     #from Eric's code
     
     modest = np.zeros(len(data), dtype=np.int32)
     
-    galcut = (data['FLAGS_I'] <=3) & -( ((data['CLASS_STAR_I'] > 0.3) & (data['MAG_AUTO_I'] < 18.0)) | ((data['SPREAD_MODEL_I'] + 3*data['SPREADERR_MODEL_I']) < 0.003) | ((data['MAG_PSF_I'] > 30.0) & (data['MAG_AUTO_I'] < 21.0)))
+    galcut = (data['FLAGS_I'] <=3) & -( ((data['CLASS_STAR_I'] > 0.3) & (data['MAG_AUTO_I'+suffix] < 18.0)) | ((data['SPREAD_MODEL_I'] + 3*data['SPREADERR_MODEL_I']) < 0.003) | ((data['MAG_PSF_I'] > 30.0) & (data['MAG_AUTO_I'+suffix] < 21.0)))
     modest[galcut] = 1
     
-    starcut = (data['FLAGS_I'] <=3) & ((data['CLASS_STAR_I'] > 0.3) & (data['MAG_AUTO_I'] < 18.0) & (data['MAG_PSF_I'] < 30.0) | (((data['SPREAD_MODEL_I'] + 3*data['SPREADERR_MODEL_I']) < 0.003) & ((data['SPREAD_MODEL_I'] +3*data['SPREADERR_MODEL_I']) > -0.003)))
+    starcut = (data['FLAGS_I'] <=3) & ((data['CLASS_STAR_I'] > 0.3) & (data['MAG_AUTO_I'+suffix] < 18.0) & (data['MAG_PSF_I'] < 30.0) | (((data['SPREAD_MODEL_I'] + 3*data['SPREADERR_MODEL_I']) < 0.003) & ((data['SPREAD_MODEL_I'] +3*data['SPREADERR_MODEL_I']) > -0.003)))
     modest[starcut] = 3
     
     neither = -(galcut | starcut)
@@ -50,39 +75,31 @@ def modestify(data):
     return modest
 
 
-def keepGoodRegion(des, hpInd = False, balrog=None):
+def _keepGoodRegion(des, hpInd = False, balrog=None):
     import healpy as hp
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
     
     path = '/n/des/lee.5922/data/balrog_cat/'
+
     goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
     badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    fraction = hp.read_map(path+'Y1A1_WIDE_frac_combined_griz_o.4096_t.32768_EQU.fits')
+    
     # Note that the masks here in in equatorial, ring format.
     gdmask = hp.read_map(goodmask)
     bdmask = hp.read_map(badmask)
+
+    ind_good_ring = np.where(( gdmask >= 1)
+                             & ((bdmask.astype('int64') & (64+32+8)) == 0)
+                             & (fraction > 0.8)
+                             )
     
-    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) )
     # healpixify the catalog.
     nside=4096
     # Convert silly ra/dec to silly HP angular coordinates.
-    
-    if balrog is True:
-        
-        print "no RA and DEC columns. Use ALPHAWIN_J2000 and DELTAWIN_J2000"
-        ra = des['ALPHAWIN_J2000_DET']
-        dec = des['DELTAWIN_J2000_DET']
-        cut = ra < 0
-        ra1 = ra[cut] + 360
-        ra[cut] = ra1
-        print des['ALPHAWIN_J2000_DET']
-        phi = des['ALPHAWIN_J2000_DET'] * np.pi / 180.0
-        theta = ( 90.0 - des['DELTAWIN_J2000_DET'] ) * np.pi/180.0
-
-    else:
-        
-        phi = des['RA'] * np.pi / 180.0
-        theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
+    phi = des['RA'] * np.pi / 180.0
+    theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
 
     hpInd = hp.ang2pix(nside,theta,phi,nest=False)
     keep = np.in1d(hpInd,ind_good_ring)
@@ -93,52 +110,212 @@ def keepGoodRegion(des, hpInd = False, balrog=None):
         return des
 
 
-def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy'):
+    
+    
+
+def keepGoodRegion(des, hpInd = False, balrog=None):
+    import healpy as hp
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+    
+    path = '/n/des/lee.5922/data/systematic_maps/'
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits')
+    #Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits
+    frac_cut = LSSGoldmask['FRAC'] > 0.8
+    ind_good_ring = LSSGoldmask['PIXEL'][frac_cut]
+    
+    # healpixify the catalog.
+    nside=4096
+    # Convert silly ra/dec to silly HP angular coordinates.
+    phi = des['RA'] * np.pi / 180.0
+    theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
+
+    hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+    keep = np.in1d(hpInd, ind_good_ring)
+    des = des[keep]
+    if hpInd is True:
+        return ind_good_ring
+    else:
+        return des
+
+
+def limitingDepth(catalog, nside = 4096):
+
+    print "Don't use this function"
+    import healpy as hp
+    Npix = hp.nside2npix(nside)
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    mask = np.ones(Npix, dtype = bool)
+    for f in ['g','r','i','z']:
+        maglim = hp.read_map(path+'Y1A1_SPT_and_S82_IMAGE_SRC_band_'+f+'_nside4096_oversamp4_maglimit__.fits.gz')
+        mask = mask * (maglim > 22 )
+
+    ind_good_ring = np.where(mask)
+    nside=4096
+    phi = catalog['RA'] * np.pi / 180.0
+    theta = ( 90.0 - catalog['DEC'] ) * np.pi/180.0
+    
+    hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+    keep = np.in1d(hpInd,ind_good_ring)
+    return catalog[keep]
+
+
+
+def doGoldBasicCuts(des, raTag = 'RA', decTag = 'DEC', object = 'galaxy'):
+    import healpy as hp
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+    print "Don't use this function"
+    """
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
+    badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    fraction = hp.read_map(path+'Y1A1_WIDE_frac_combined_griz_o.4096_t.32768_EQU.fits')
+    # Note that the masks here in in equatorial, ring format.
+    gdmask = hp.read_map(goodmask)
+    bdmask = hp.read_map(badmask)
+    
+    mask = np.ones(fraction.size, dtype = bool)
+    for f in ['g','r','i','z']:
+        maglim = hp.read_map(path+'Y1A1_SPT_and_S82_IMAGE_SRC_band_'+f+'_nside4096_oversamp4_maglimit__.fits.gz')
+        mask = mask * (maglim > 22 )
+
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) & (fraction > 0.8) & mask )
+    """
+    # healpixify the catalog.
+    nside=4096
+    # Convert silly ra/dec to silly HP angular coordinates.
+    
+    phi = des[raTag] * np.pi / 180.0
+    theta = ( 90.0 - des[decTag] ) * np.pi/180.0
+
+    hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+    keep = np.in1d(hpInd,ind_good_ring)
+    des = des[keep]
+    
+    #modtype = modestify(des)
+    modtype = des['MODEST_CLASS']
+    use = np.ones(des.size, dtype=bool)
+
+    if object is 'galaxy': use = use & (modtype == 1)
+    elif object is 'star'  : use = use & (modtype == 2)
+    elif object is None : print 'no object selected. retrieve star + galaxy both'
+    
+    taglist = ['MAG_MODEL'] #, 'MAG_DETMODEL','MAG_AUTO', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
+    filters = ['R','I']
+    
+    # cut for deleting outlier
+    for tag in taglist:
+        for thisfilter in filters:
+            thistag = tag+'_'+thisfilter
+            use = use & ((des[thistag] < 25.0) & (des[thistag] > 10.))
+
+    print 'do Basic Cut', np.sum(use)
+    return des[use]
+
+
+
+
+
+def _doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy', suffix='_corrected'):
+    import healpy as hp
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+     
+    use = ((des['FLAGS_G'] < 3) &
+           (des['FLAGS_R'] < 3) &
+           (des['FLAGS_I'] < 3) &
+           (des['FLAGS_Z'] < 3))
+    
+    """
+    taglist = ['MAG_MODEL'] 
+    filters = ['R','I']
+
+    # cut for deleting outlier
+    for tag in taglist:
+       for thisfilter in filters:
+           thistag = tag+'_'+thisfilter+suffix
+           use = use & ((des[thistag] < 25.0) & (des[thistag] > 10.))
+    """
+    
+    taglist2 = ['MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5', 'MAG_APER_6']
+
+    filters = ['G', 'R','I', 'Z']
+    for tag in taglist2:
+        for thisfilter in filters:
+            thistag = tag+'_'+thisfilter+suffix
+            use = use & ((des[thistag] < 30.0) & (des[thistag] > 15.))
+
+
+    print 'do Basic Cut', np.sum(use)
+    return des[use]
+
+
+
+
+
+def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy', suffix=''):
     import healpy as hp
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
     
     path = '/n/des/lee.5922/data/balrog_cat/'
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
+    ind_good_ring = LSSGoldmask['PIXEL']
+    
+    
+    
+    #maglim = hp.read_map(path+'Y1A1_SPT_and_S82_IMAGE_SRC_band_i_nside4096_oversamp4_maglimit__.fits.gz')
+    #mask = maglim > 21.
+    
+    """
     goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
     badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    fraction = hp.read_map(path+'Y1A1_WIDE_frac_combined_griz_o.4096_t.32768_EQU.fits')
+    LSSmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    
+    mask = np.ones(fraction.size, dtype = bool)
+    
+    for f in ['g','r','i','z']:
+        maglim = hp.read_map(path+'Y1A1_SPT_and_S82_IMAGE_SRC_band_'+f+'_nside4096_oversamp4_maglimit__.fits.gz')
+        mask = mask * (maglim > 22 )
+    
+    
     # Note that the masks here in in equatorial, ring format.
     gdmask = hp.read_map(goodmask)
     bdmask = hp.read_map(badmask)
 
-    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) )
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) & (fraction > 0.8) & mask)
+    """
     # healpixify the catalog.
     nside=4096
     # Convert silly ra/dec to silly HP angular coordinates.
     
-    if balrog is True:
-    
-        print "no RA and DEC columns. Use ALPHAWIN_J2000 and DELTAWIN_J2000"
-        ra = des['ALPHAWIN_J2000_DET']
-        dec = des['DELTAWIN_J2000_DET']
-        cut = ra < 0
-        ra1 = ra[cut] + 360
-        ra[cut] = ra1
-        print des['ALPHAWIN_J2000_DET']
-        phi = des['ALPHAWIN_J2000_DET'] * np.pi / 180.0
-        theta = ( 90.0 - des['DELTAWIN_J2000_DET'] ) * np.pi/180.0
-    
-    else:
-        phi = des[raTag] * np.pi / 180.0
-        theta = ( 90.0 - des[decTag] ) * np.pi/180.0
+
+    phi = des[raTag] * np.pi / 180.0
+    theta = ( 90.0 - des[decTag] ) * np.pi/180.0
     
     hpInd = hp.ang2pix(nside,theta,phi,nest=False)
     keep = np.in1d(hpInd,ind_good_ring)
     des = des[keep]
     
-    modtype = modestify(des)
-    
-    use = ((des['FLAGS_G'] < 3) &
-           (des['FLAGS_R'] < 3) &
-           (des['FLAGS_I'] < 3) &
-           (des['FLAGS_Z'] < 3))
+    use = ((des['FLAGS_G'] <= 3) &
+           (des['FLAGS_R'] <= 3) &
+           (des['FLAGS_I'] <= 3) &
+           (des['FLAGS_Z'] <= 3))
 
-    if object is 'galaxy': use = use & (modtype == 1)
-    elif object is 'star'  : use = use & (modtype == 3)
+    
+    if object is 'galaxy': 
+        #modtype = modestify(des, suffix=suffix)
+        modtype = des['MODEST_CLASS']
+        use = use & (modtype == 1)
+    elif object is 'star' :
+        #modtype = modestify(des, suffix=suffix)
+        modtype = des['MODEST_CLASS']
+        use = use & (modtype == 3)
     elif object is None : print 'no object selected. retrieve star + galaxy both'
     
     taglist = ['MAG_MODEL'] #, 'MAG_DETMODEL','MAG_AUTO', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
@@ -146,17 +323,18 @@ def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy
 
     # cut for deleting outlier
     for tag in taglist:
-       for thisfilter in filters:
-           thistag = tag+'_'+thisfilter
-           use = use & ((des[thistag] < 25.0) & (des[thistag] > 10.))
-
+        for thisfilter in filters:
+            thistag = tag+'_'+thisfilter+suffix
+            use = use & ((des[thistag] < 25.0) & (des[thistag] > 10.))
+           
     taglist2 = ['MAG_APER_3', 'MAG_APER_4', 'MAG_APER_5', 'MAG_APER_6']
 
+    filters = ['G', 'R','I', 'Z']
     for tag in taglist2:
         for thisfilter in filters:
-            thistag = tag+'_'+thisfilter
-            use = use & ((des[thistag] < 25.0) & (des[thistag] > 15.))
-
+            thistag = tag+'_'+thisfilter+suffix
+            use = use & ((des[thistag] < 25) & (des[thistag] > 15.))
+            #use = use & (des[thistag] != 99)
 
     print 'do Basic Cut', np.sum(use)
     return des[use]
@@ -168,6 +346,11 @@ def doBasicSDSSCuts(sdss):
     import healpy as hp
     # bad region mask (DES footprint)
     path = '/n/des/lee.5922/data/balrog_cat/'
+    LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    ind_good_ring = LSSGoldmask['PIXEL']
+    
+    """
+    path = '/n/des/lee.5922/data/balrog_cat/'
     goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
     badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
     # Note that the masks here in in equatorial, ring format.
@@ -175,6 +358,7 @@ def doBasicSDSSCuts(sdss):
     bdmask = hp.read_map(badmask)
 
     ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) )
+    """
     # healpixify the catalog.
     nside=4096
     # Convert silly ra/dec to silly HP angular coordinates.
