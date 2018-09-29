@@ -1,0 +1,20 @@
+############################################### 
+#   Extreme Deconvolution yaml settings
+############################################### 
+
+fitting : False
+train_sample : /n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South_z055_10.fits.gz
+random_sampling : True
+
+cmass_pickle : pickle/gold_st82_z055_10_XD_cmass.pkl
+no_pickle : pickle/gold_st82_z055_10_XD_no.pkl
+
+#cmass_fraction : 0.016306526563
+n_cmass : 5  
+n_no : 25
+
+input_cat_dir : /n/des/lee.5922/data/gold_cat/
+input_cat_keyword : Y1A1_GOLD_STRIPE82_v2 # Y1A1_GOLD_00 #Y1A1_GOLD_STRIPE82_v2
+cat_area : st82  # if not st82, leave it empty
+out_catname : result_cat/gold_st82_z055_10_prob.fits
+out_resampled_cat : result_cat/dmass_st82_z055_10.fits

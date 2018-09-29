@@ -11,7 +11,7 @@ import pandas as pd
 import numpy.lib.recfunctions as rf
 #import seaborn as sns
 
-from ang2stripe import *
+#from ang2stripe import *
 import fitsio
 from fitsio import FITS, FITSHDR
 

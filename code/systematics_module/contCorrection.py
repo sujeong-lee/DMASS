@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 #from __future__ import print_function, division
 
-import sys
-import os
+import sys, os, fitsio
 import numpy as np
 from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 import matplotlib as mpl
@@ -12,20 +11,50 @@ from scipy import linalg
 
 
 
-def L_nu_from_magAB(magAB = None, z = None):
-    import numpy as np
-    
-    """Convert absolute magnitude into luminosity (erg s^-1 Hz^-1)."""
-    
+
+def getavgbias( mag, z , pstart=0.0 ):
+    #mag_i = cat['MAG_MODEL_I_corrected']
+    #z = cat['DESDM_ZP']
+    logL = logL_from_mag( mag = mag, z = z )
+    avg_b = logL_to_galaxyBias(logL = logL)
+    print 'avg bias=',avg_b, ' sample size=', mag.size
+    return avg_b
+
+
+def ABmag_from_mag( mag = None, z = None ):
+
     from astropy.cosmology import FlatLambdaCDM
+    from astropy.constants import L_sun, M_sun
+    from astropy import units as u
+    from cosmolopy import magnitudes
+    
     cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
-    
-    m_zero = 30.
-    d = cosmo.comoving_distance( z ).value
-    factor = 4. * np.pi * d**2.
-    L_nu =  factor * 10.**((magAB - m_zero)/(-2.5))
-    
-    return L_nu
+    d = cosmo.comoving_distance( z ) * u.Mpc.to(u.pc)
+    magAB = mag + 5 - 5*np.log10(d.value)
+    return magAB
+
+
+def logL_from_mag( mag = None, z = None ):
+    """
+    log(L/L_sun) from apparent magnitude.
+    """
+
+    from astropy.cosmology import FlatLambdaCDM
+    from astropy.constants import L_sun, M_sun
+    from astropy import units as u
+    from cosmolopy import magnitudes
+
+    cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
+    d = cosmo.comoving_distance( z ) * u.Mpc.to(u.pc)
+    magAB = mag + 5 - 5*np.log10(d.value)
+
+    magnitudes.MAB0 = 30 # des zeropoint
+    L = magnitudes.L_nu_from_magAB(magAB)
+    LogLuminosity = np.log10(L/L_sun.value)
+
+    return LogLuminosity
+
+
 
 def SW_halobias(mass, z, h=None, Om_M=None, Om_L=None):
     
@@ -80,133 +109,250 @@ def haloBiasTinker10(M_halo, z = None):
     # http://bdiemer.bitbucket.org/cosmology_cosmology.html#cosmology.cosmology.Cosmology.sigma
     #delta_c = cosmo.collapseOverdensity()
     
-    from colossus.halo import bias
+    from colossus.lss import bias
     #HaloModel = bias.MODELS
     HaloBias = bias.haloBias(M_halo, z, 'vir', model='tinker10')
     # http://bdiemer.bitbucket.org/halo_bias.html#halo.bias.haloBias
     # mdef parameter : http://bdiemer.bitbucket.org/halo_mass.html#spherical-overdensity-basics
     
-    nu = cosmo.peakHeight(M_halo, z, filt='tophat', Pk_source='eh98', deltac_const=True)
+    #nu = cosmo.peakHeight(M_halo, z, filt='tophat', Pk_source='eh98', deltac_const=True)
+
+    from colossus.lss import peaks
+    nu = peaks.peakHeight(M_halo, z, ps_args={'model':'eisenstein98'})
     # http://bdiemer.bitbucket.org/cosmology_cosmology.html#cosmology.cosmology.Cosmology.peakHeight
     
     return nu, HaloBias
 
-def Mag_to_galaxyBias(magAB = None, z = 0.0):
-    
-    #from astropy.constants import L_sun, M_sun
-    #from systematics_weight import L_nu_from_magAB
+
+
+def massLuminosity( M_halo ):
     """
-        Calculate Occupation number of galaxies in haloes by using mass-luminosity relation
+    the mass luminosity relation (Vale et al 2004 )
+    M_halo unit :  M (M_sun)
+    return  L (L_sun)
     """
-    # change magnitude to luminosity
-    # binning in luminosity bin
-    # replace x axis to halo mass bin
-    # calculate weight for each galaxies by using bias-halo relation (Tinker et al. 2010)
-    # summing over all sample
-    
-    Luminosity = L_nu_from_magAB(magAB = magAB, z = z)
-    
-    # binning in Mag bin
-    
-    magbin, step = np.linspace(-1 * magAB.max(), -1 * magAB.min(), 200, retstep =True )
-    N, _ = np.histogram( -1. * magAB, bins = magbin )
-    magbin_center = magbin[:-1] + step/2.
-    
-    Lbin = np.linspace( np.log10(Luminosity.min()), 13, 200 )
-    N_L, _ = np.histogram( np.log10(Luminosity), bins=Lbin )
-    
-    
-    # the mass luminosity relation (Vale et al 2004 )
     A = 5.7e+9
     m = 1e+11
     b,c,d,k = 4., 0.57, 3.72, 0.23
-    Mbin2 = np.logspace(16, 22, 100, base=10.)
-    Lbin2 = np.log10( A * (Mbin2/m)**b * 1./ (c + (Mbin2/m)**(d*k))**(1./k) )
+    #Mbin2 = np.logspace(11, 15, 200, base=10.)
+    L = A * (M_halo/m)**b * 1./ (c + (M_halo/m)**(d*k))**(1./k)
+
+    return L
+
+
+def __Mag_to_galaxyBias(mag = None, z = None):
+
+    Mbin = np.logspace(10, 20, 1000, base=10.)
+    Lbin = massLuminosity( Mbin )
+    _, bhbin = haloBiasTinker10(Mbin, z = 0.0 )
+
+    logL = logL_from_mag(mag=mag, z=z )
+
     
-    # get Ocupation number as a ftn of halo mass
-    N_gal, _ = np.histogram( np.log10(Luminosity), bins=Lbin2 )
-    
-    # calculating bias
-    # Halo bias as weight ( equation 5) in Seljak et al. 2004 )
-    
-    Mbin2_center = np.log10( (Mbin2[:-1] + Mbin2[1:])/2. )
-    nu, haloBias = haloBiasTinker10(Mbin2_center, z = 0)
-    # assign weights to each gal in catalog
-    nu_avg = np.mean(nu)
-    N_sample = len(magAB)
-    bias_g = np.sum( haloBias * N_gal ) *1./N_sample
-    
-    """
-    fig, ax = plt.subplots()
-    N_sample = catalog.size
-    zbin = np.linspace(0.0, 20, 50)
-    bias_g, nu_avg = np.zeros( zbin.size ), np.zeros( zbin.size )
-    for i in range(zbin.size):
-    nu, haloBias = haloBiasTinker10(Mbin2_center, z = zbin[i])
-    nu_avg[i] = np.mean(nu)
-    bias_g[i] = np.sum( haloBias * N_gal ) *1./N_sample
-    ax.scatter( np.log10(nu), haloBias, marker = '.', alpha = 0.1)
-    
-    ax.plot(np.log10(nu_avg), bias_g, '--', label='galaxy bias' )
-    ax.set_title( 'DMASS galaxy bias')
-    ax.set_xlabel(' log10( nu )')
-    ax.set_ylabel('galaxy bias')
-    #ax.set_xlim(-0.5, 1 )
-    #ax.set_ylim(0, 8)
-    ax.legend(loc='best')
-    figname = 'figure/haloBias.png'
-    print 'savefig : ', figname
-    fig.savefig(figname)
-    #
-    # plot
-    
-    fig, ((ax, ax2), (ax3, ax4)) = plt.subplots(2,2,figsize = (15,15))
-    ax.hist( -1 * magAB, bins = magbin, histtype='bar', label='magnitude' )
-    ax2.hist(np.log10(Luminosity), bins = Lbin, label = 'Luminosity' )
-    ax.set_ylabel('N_gal')
-    ax.set_xlabel('MAG_MODEL_I')
-    ax2.set_ylabel('N_gal')
-    ax2.set_xlabel('log L (L_0)')
-    #ax2.set_xscale('log')
-    ax.legend()
-    ax2.legend()
-    
-    Mbin = np.logspace(9, 30, 100, base=10.)
-    L = np.log10(A * (Mbin/m)**b * 1./ (c + (Mbin/m)**(d*k))**(1./k))
-    ax3.plot(np.log10(Mbin), L, )
-    ax3.set_xlabel( 'log M_halo ( M_0 )')
-    ax3.set_ylabel( 'log L (L_0)')
-    ax3.set_xlim(9,20)
-    ax3.set_title('The mass luminosity relation (Vale et al 2004)')
-    
-    ax4.plot( np.log10(Mbin2[:-1]), N_gal)
-    ax4.set_xlabel('log M_halo (M_0)')
-    ax4.set_ylabel('N_gal')
-    figname = 'figure/OccupationNumber.png'
-    print 'savefig : ', figname
-    fig.savefig(figname)
-    
-    
-    # large scale structure bias plot
-    
-    fig, ax = plt.subplots()
-    ax.plot(np.log10(nu_avg), bias_g )
-    #ax.set_xlim(-0.5, 0.6)
-    ax.set_title( 'DMASS galaxy bias')
-    ax.set_xlabel(' log10( nu )')
-    ax.set_ylabel('galaxy bias')
-    figname = 'figure/haloBias.png'
-    print 'savefig : ', figname
-    fig.savefig(figname)
-    
-    """
-    
+    N, _ = np.histogram( logL, bins = np.log10(Lbin) )
+    N_sample = mag.size
+    bias_g = np.sum( bhbin[:-1] * N ) *1./N_sample
+    #print N.size, np.sum(N!=0)
     return bias_g
+
+
+def logL_to_galaxyBias( logL = None ):
+   
+    Mbin = np.logspace(10, 20, 1000, base=10.)
+    Lbin = massLuminosity( Mbin )
+    _, bhbin = haloBiasTinker10(Mbin, z = 0.0 )
+    
+    #logL = logL_from_mag(mag=mag, z=z )  
+    logL = np.ma.masked_invalid(logL)
+    logL = logL[~logL.mask]
+    N, _ = np.histogram( logL, bins = np.log10(Lbin) )
+    
+    N_sample = logL.size
+    bias_g = np.sum( bhbin[:-1] * N ) *1./N_sample
+    #print N.size, np.sum(N!=0)
+    return bias_g
+
 
 
 def _loadndarray(data):
     r, w, err = data[:,0], data[:,1], data[:,2]
     return r, w, err
+
+
+
+def doVisualization_ngal(property = None, nside = 1024, kind = 'SPT', suffix='', inputdir = '.', outdir='./'):
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from systematics import SysMapBadRegionMask, loadSystematicMaps, MatchHPArea, chisquare_dof, ReciprocalWeights
+    from systematics_module.corr import angular_correlation
+    
+    
+    filters = ['g', 'r', 'i', 'z']
+    #filters = ['g']
+    
+    
+    if property is 'NSTARS_allband' :
+        nside = 1024
+        filters = ['g']
+    elif property is 'GE' :
+        nside = 512
+        filters = ['g']
+    elif property in ['SKYBRITEpca0','SKYBRITEpca1','SKYBRITEpca2','SKYBRITEpca3'] :
+        nside = 4096
+        filters = ['g']     
+
+    fig, ax = plt.subplots(2, 2, figsize = (15, 10))
+    ax = ax.ravel()
+
+    for i, filter in enumerate(filters):
+        filename = inputdir+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix+'.txt'
+        #print filename
+        data = np.loadtxt(filename)
+        bins, Cdensity, Cerr, Cf_area, Bdensity, Berr, Bf_area = [data[:,j] for j in range(data[0].size)]
+        Cf_area = Cf_area * 1./Cf_area.max()/5.
+        
+        
+        #zeromaskC, zeromaskB = ( Cdensity != 0.0 )*( Cerr != 0.0 ), (Bdensity != 0.0 )*( Berr != 0.0 )
+        zeromaskC = ( Cdensity != 0.0 ) 
+        zeromaskB = ( Bdensity != 0.0 )
+        #Cdensity, Cbins, Cerr, Cf_area = Cdensity, bins, Cerr, Cf_area #Cdensity[zeromaskC], bins[zeromaskC], Cerr[zeromaskC]
+        #C_jkerr = C_jkerr[zeromaskC]
+        #Bdensity, Bbins, Berr = Bdensity, bins, Berr #Bdensity[zeromaskB],bins[zeromaskB],Berr[zeromaskB]
+        #B_jkerr = B_jkerr[zeromaskB]
+
+        #fitting
+        #Cchi, Cchidof = chisquare_dof( bins[zeromaskC], Cdensity[zeromaskC], Cerr[zeromaskC] )
+        #Bchi, Bchidof = chisquare_dof( bins[zeromaskB], Bdensity[zeromaskB], Berr[zeromaskB] )
+    
+        nCbins = np.sum(zeromaskC)
+        nBbins = np.sum(zeromaskB)
+        Cchi = np.sum( (Cdensity[zeromaskC] - 1.0 * np.ones(nCbins) )**2/Cerr[zeromaskC]**2 )
+        Bchi = np.sum( (Bdensity[zeromaskB] - 1.0 * np.ones(nBbins) )**2/Berr[zeromaskB]**2 )
+
+
+        ax[i].errorbar(bins[zeromaskC] , Cdensity[zeromaskC], yerr = Cerr[zeromaskC], 
+            color = 'blue', fmt = '.-', capsize=3, label='DMASS, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+        ax[i].errorbar(bins[zeromaskB]*1.0 , Bdensity[zeromaskB], yerr = Berr[zeromaskB], 
+            color = 'red', fmt= '.-', capsize=3, label='Random, chi2/dof={:>2.2f}/{:3.0f}'.format(Bchi, nBbins) )
+
+        #ax[i].bar(Bbins+(bins[1]-bins[0])*0.1, Bf_area[zeromaskB]+0.7, (bins[1]-bins[0]) ,color = 'red', alpha=0.3 )
+        
+        ax[i].set_xlabel('{}_{} (mean)'.format(property, filter))
+        ax[i].set_ylabel('n_gal/n_tot '+str(nside))
+        
+        ymin, ymax = 0.7, 1.3
+        if kind is 'SPT' : ymin, ymax = 0.7, 1.3
+        ax[i].set_ylim(ymin, ymax)
+
+        barwidth = (bins[1]-bins[0])
+        #if property is 'GE' : 
+        #    barwidth = bins[zeromaskC][1:] - bins[zeromaskC][:-1]
+        #    print barwidth.size, bins[zeromaskC].size
+        ax[i].bar(bins[zeromaskC], Cf_area[zeromaskC]+ymin,barwidth ,color = 'blue', alpha = 0.1 )
+
+        #ax[i].set_xlim(8.2, 8.55)
+        ax[i].axhline(1.0,linestyle='--',color='grey')
+        ax[i].legend(loc = 'best')
+        
+        #if property == 'FWHM' : ax[i].set_ylim(0.6, 1.4)
+        #if property == 'AIRMASS': ax[i].set_ylim(0.0, 2.0)
+        #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
+        if property == 'NSTARS_allband': ax[i].set_xlim(0.0, 2.0)
+        if property == 'NSTARS': ax[i].set_xlim(0.0, 1000)
+        if property == 'GE' : ax[i].set_xscale('log')
+    fig.suptitle('systematic test ({})'.format(kind))
+    os.system('mkdir '+outdir)
+    figname = outdir+'systematic_'+property+'_'+kind+'_'+suffix+'.png'
+    fig.savefig(figname)
+    print "saving fig to ", figname
+
+    return 0
+
+
+
+def plot_sysweight(property = None, nside = 1024, kind = 'SPT', suffix1='', suffix2='', inputdir1 = '.', inputdir2 = '.', outdir='./'):
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from systematics import SysMapBadRegionMask, loadSystematicMaps, MatchHPArea, chisquare_dof, ReciprocalWeights
+    from systematics_module.corr import angular_correlation
+    
+    
+    filters = ['g', 'r', 'i', 'z']
+    #filters = ['g']
+    
+    
+    if property is 'NSTARS_allband' :
+        nside = 1024
+        filters = ['g']
+    if property is 'GE':
+        nside = 512
+        filters = ['g']
+        
+    fig, ax = plt.subplots(2, 2, figsize = (15, 10))
+    ax = ax.ravel()
+
+    for i, filter in enumerate(filters):
+        filename1 = inputdir1+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix1+'.txt'
+        filename2 = inputdir2+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix2+'.txt'
+        #print filename
+        data1 = np.loadtxt(filename1)
+        data2 = np.loadtxt(filename2)
+        bins, Cdensity, Cerr, Cf_area, _, _, _ = [data1[:,j] for j in range(data1[0].size)]
+        bins, Bdensity, Berr, Bf_area, _, _, _ = [data2[:,j] for j in range(data2[0].size)]
+        Cf_area = Cf_area * 1./Cf_area.max()/5.
+
+        #zeromaskC, zeromaskB = ( Cdensity != 0.0 )*( Cerr != 0.0 ), (Bdensity != 0.0 )*( Berr != 0.0 )
+        zeromaskC = ( Cdensity != 0.0 ) 
+        zeromaskB = ( Bdensity != 0.0 )
+        #Cdensity, Cbins, Cerr, Cf_area = Cdensity, bins, Cerr, Cf_area #Cdensity[zeromaskC], bins[zeromaskC], Cerr[zeromaskC]
+        #C_jkerr = C_jkerr[zeromaskC]
+        #Bdensity, Bbins, Berr = Bdensity, bins, Berr #Bdensity[zeromaskB],bins[zeromaskB],Berr[zeromaskB]
+        #B_jkerr = B_jkerr[zeromaskB]
+
+        #fitting
+        #Cchi, Cchidof = chisquare_dof( bins[zeromaskC], Cdensity[zeromaskC], Cerr[zeromaskC] )
+        #Bchi, Bchidof = chisquare_dof( bins[zeromaskB], Bdensity[zeromaskB], Berr[zeromaskB] )
+    
+        nCbins = np.sum(zeromaskC)
+        nBbins = np.sum(zeromaskB)
+        Cchi = np.sum( (Cdensity[zeromaskC] - 1.0 * np.ones(nCbins) )**2/Cerr[zeromaskC]**2 )
+        Bchi = np.sum( (Bdensity[zeromaskB] - 1.0 * np.ones(nBbins) )**2/Berr[zeromaskB]**2 )
+
+        #ax[i].errorbar(bins[zeromaskC] , Cdensity[zeromaskC], yerr = Cerr[zeromaskC], 
+        #    color = 'grey', fmt = '.-', capsize=3, label='no weight, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+        ax[i].plot(bins[zeromaskC] , Cdensity[zeromaskC], color = 'grey', label='no weight, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+        ax[i].errorbar(bins[zeromaskB]*1.0 , Bdensity[zeromaskB], yerr = Berr[zeromaskB], 
+            color = 'red', fmt= '.-', capsize=3, label='weighted, chi2/dof={:>2.2f}/{:3.0f}'.format(Bchi, nBbins) )
+
+        #ax[i].bar(Bbins+(bins[1]-bins[0])*0.1, Bf_area[zeromaskB]+0.7, (bins[1]-bins[0]) ,color = 'red', alpha=0.3 )
+        ax[i].set_xlabel('{}_{} (mean)'.format(property, filter))
+        ax[i].set_ylabel('n_gal/n_tot '+str(nside))
+
+        ymin, ymax = 0.7, 1.3
+        if kind is 'SPT' : ymin, ymax = 0.7, 1.3
+        ax[i].set_ylim(ymin, ymax)
+        ax[i].bar(bins[zeromaskC], Cf_area[zeromaskC]+ymin,(bins[1]-bins[0]) ,color = 'grey', alpha = 0.1 )
+
+        #ax[i].set_xlim(8.2, 8.55)
+        ax[i].axhline(1.0,linestyle='--',color='grey')
+        ax[i].legend(loc = 'best')
+        
+        #if property == 'FWHM' : ax[i].set_ylim(0.6, 1.4)
+        #if property == 'AIRMASS': ax[i].set_ylim(0.0, 2.0)
+        #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
+        if property is 'GE': ax[i].set_xscale('log')
+        if property == 'NSTARS': ax[i].set_xlim(0.0, 2.0)
+
+    fig.suptitle('systematic test ({})'.format(kind))
+    os.system('mkdir '+outdir)
+    figname = outdir+'comparison_systematic_'+property+'_'+kind+'_'+suffix2+'.png'
+    fig.savefig(figname)
+    print "saving fig to ", figname
+
+    return 0
+
 
 
 class CorrectContaminant():
@@ -269,7 +415,7 @@ class CorrectContaminant():
         r, w, err = _loadndarray(self.w_obs_data)
         
         keep = (r > rmin) & (r < rmax)
-        eps82 = np.mean(err[keep]/w[keep])/np.sqrt(np.sum(keep))
+        eps82 = np.mean(np.fabs(err[keep]/w[keep]))/np.sqrt(np.sum(keep))
         eps = eps82  * np.sqrt(180./1000)
         print 'angular stat err (st82, full) ', eps82, eps
         return eps82, eps
@@ -280,10 +426,10 @@ class CorrectContaminant():
         r_t, L_t, err_t = _loadndarray(self.L_true_data)
         r_c, L_c, err_c = _loadndarray(self.L_cont_data)
         
-        keep = (r > rmin) & (~(L == 0)) & (~(L_c == 0)) & (~(L_t == 0))
+        keep = (r > rmin) & (r < rmax) & (~(L == 0)) # & (~(L_c == 0)) & (~(L_t == 0))
         
         # ideal fraction
-        eps_len82 = np.mean(err[keep]/L[keep])/np.sqrt(np.sum(keep))
+        eps_len82 = np.mean(np.abs(err[keep]/L[keep]))/np.sqrt(np.sum(keep))
         eps_len = eps_len82 * np.sqrt(180./1000)
         
         print 'lensing stat err (st82, full) ', eps_len82, eps_len
@@ -307,18 +453,14 @@ class CorrectContaminant():
         ang_L = 1. + w - (1. -f_c)**2 * (1. + w_t)
     
         keep = (r > rmin) & (r < rmax)
+        
         fractionL = 1. - np.sqrt( (1. + w - ang_L) * 1./(1. + w_t) )
         m_fL = np.mean(fractionL) # current max cont fraction
-        
-        # stat error
-        #eps82 = np.mean(err[keep]/w[keep])/np.sqrt(np.sum(keep))
-        #eps = eps82  * np.sqrt(180./1000)
+
         i_fL = np.abs(1. - np.sqrt( (1 + w - self.eps) * 1./(1 + w_t) ))
-
-
         self.m_i_fL = np.mean(np.ma.masked_invalid(i_fL[keep]))
 
-        print 'Angular max fc ', m_fL, ' ideal fc (simple mean) ', self.m_i_fL
+        print 'Angular max fc ', m_fL, ' ideal fc (simple mean) ', self.m_i_fL, ' mean sys ', np.mean(ang_L[keep])
         return m_fL, self.m_i_fL
 
 
@@ -342,7 +484,7 @@ class CorrectContaminant():
         #square weight
         self.m_i_fR = np.mean(np.ma.masked_invalid(i_fR[keep]))
         
-        print 'Angular max fc ', m_fR, ' ideal fc (simple mean) ', self.m_i_fR
+        print 'Angular max fc ', m_fR, ' ideal fc (simple mean) ', self.m_i_fR, ' mean sys ', np.mean(ang_R[keep])
         return m_fR, self.m_i_fR
 
 
@@ -352,7 +494,7 @@ class CorrectContaminant():
         r_t, L_t, err_t = _loadndarray(self.L_true_data)
         r_c, L_c, err_c = _loadndarray(self.L_cont_data)
     
-        keep = (r > rmin) & (~(L == 0)) & (~(L_c == 0)) & (~(L_t == 0))
+        keep = (r > rmin) &(r < rmax)& (~(L == 0)) & (~(L_t == 0))
         len_L = L - (1 - self.f_c) * L_t
     
         fractionL = 1 - (L - len_L)/L_t
@@ -373,7 +515,7 @@ class CorrectContaminant():
         i_f_weighted_len = weight_len * i_fL_len
         self.f_weighted_len_L = np.sum(i_f_weighted_len[keep * maskL])
         
-        print 'Lening max fc ', m_fL_len, ' ideal fc (weighted mean) ', self.f_weighted_len_L
+        print 'Lensing max fc ', m_fL_len, ' ideal fc (weighted mean) ', self.f_weighted_len_L, ' mean sys ', np.mean(len_L[keep])
         return m_fL_len, self.f_weighted_len_L
 
 
@@ -383,7 +525,7 @@ class CorrectContaminant():
         r_t, L_t, err_t = _loadndarray(self.L_true_data)
         r_c, L_c, err_c = _loadndarray(self.L_cont_data)
 
-        keep = (r > rmin) & (~(L == 0)) & (~(L_c == 0)) & (~(L_t == 0))
+        keep = (r > rmin) &(r < rmax) & (~(L_c == 0)) #& (~(L == 0)) & (~(L_t == 0))
         len_R = L_c * self.f_c
         
         fractionR = len_R/L_c
@@ -404,25 +546,29 @@ class CorrectContaminant():
         i_f_weighted_len = weight_len * i_fR_len
         self.f_weighted_len_R = np.sum(i_f_weighted_len[keep * maskR])
         
-        print 'Lening max fc ', m_fR_len, ' ideal fc (weighted mean) ', self.f_weighted_len_R
+        print 'Lening max fc ', m_fR_len, ' ideal fc (weighted mean) ', self.f_weighted_len_R, ' mean sys ', np.mean(len_R[keep])
         return m_fR_len, self.f_weighted_len_R
 
 
 
     def Angsys_from_bias(self, rmin = 0.02, rmax = 10.0):
-        
         r, w, err = _loadndarray(self.w_obs_data)
         rt, w_t, err_t = _loadndarray(self.w_true_data)
         #f_c = np.min( [self.m_i_fR, self.m_i_fL] ) #self.f_c
         f_c = self.f_c
         
         keep = (r > rmin) & (r < rmax)
-        magc = self.cont_data['MAG_MODEL_I'] - self.cont_data['XCORR_SFD98_I']
-        magt = self.true_data['MAG_MODEL_I'] - self.true_data['XCORR_SFD98_I']
+        magc = self.cont_data['MAG_MODEL_I_corrected']
+        magt = self.true_data['MAG_MODEL_I_corrected']
         z_c = self.cont_data['DESDM_ZP']
         z_t = self.true_data['DESDM_ZP']
-        b_c = Mag_to_galaxyBias( magAB = magc, z = z_c )
-        b_t = Mag_to_galaxyBias( magAB = magt, z = z_t )
+        logLt = logL_from_mag( mag = magt, z = z_t )
+        logLt = logLt[logLt > 9.0]
+        logLc = logL_from_mag( mag = magc, z = z_c )
+        logLc = logLc[logLc > 9.0]
+
+        b_c = logL_to_galaxyBias(logL = logLc)
+        b_t = logL_to_galaxyBias(logL = logLt)
         
         sys = w_t * 2 * f_c * (b_c/b_t -1 )
         
@@ -431,7 +577,7 @@ class CorrectContaminant():
 
 
 
-    def Lensys_from_bias(self, rmin = 0.02, rmax = 10.0):
+    def Lensys_from_bias(self, rmin = 0.02, rmax = 10000.0):
         r, L, err = _loadndarray(self.L_obs_data)
         r_t, L_t, err_t = _loadndarray(self.L_true_data)
         r_c, L_c, err_c = _loadndarray(self.L_cont_data)
@@ -440,19 +586,27 @@ class CorrectContaminant():
         
         keep = (r > rmin) & (~(L == 0)) & (~(L_c == 0)) & (~(L_t == 0))
         
-        magc = self.cont_data['MAG_MODEL_I'] #- self.obs_data['XCORR_SFD98']
-        magt = self.true_data['MAG_MODEL_I'] #- self.obs_data['XCORR_SFD98']
-        z_c = self.cont_data['DESDM_ZP'] #- self.obs_data['XCORR_SFD98']
-        z_t = self.true_data['DESDM_ZP'] #- self.obs_data['XCORR_SFD98']
+        magc = self.cont_data['MAG_MODEL_I_corrected']# - self.cont_data['XCORR_SFD98_I']
+        magt = self.true_data['MAG_MODEL_I_corrected']# - self.true_data['XCORR_SFD98_I']
+        z_c = self.cont_data['DESDM_ZP']
+        z_t = self.true_data['DESDM_ZP']
+        logLt = logL_from_mag( mag = magt, z = z_t )
+        logLt = logLt[logLt > 9.0]
+        logLc = logL_from_mag( mag = magc, z = z_c )
+        logLc = logLc[logLc > 9.0]
+        b_c = logL_to_galaxyBias(logL = logLc)
+        b_t = logL_to_galaxyBias(logL = logLt)
         
-        b_c = Mag_to_galaxyBias( magAB = magc, z = z_c )
-        b_t = Mag_to_galaxyBias( magAB = magt, z = z_t )
+        #b_c = Mag_to_galaxyBias( mag = magc, z = z_c )
+        #b_t = Mag_to_galaxyBias( mag = magt, z = z_t )
     
         sys = L_t * f_c * (b_c/b_t - 1)
         
         #self.len_stat_err(rmin = rmin, rmax = rmax)
         print 'b_c ', b_c, ' b_t ', b_t, ' mean sys ', np.mean(np.abs(sys[keep]))
         return r, sys
+
+
 
 
 

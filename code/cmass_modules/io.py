@@ -11,6 +11,9 @@ from fitsio import FITS, FITSHDR
 
 def SearchAndCallFits(path = None, keyword = None, columns = None):
     import os, sys
+    
+    print '\n--------------------------------\n calling catalog\n--------------------------------'
+    
     tables = []
     for i in os.listdir(path):
         if os.path.isfile(os.path.join(path,i)) and keyword in i:
@@ -22,6 +25,8 @@ def SearchAndCallFits(path = None, keyword = None, columns = None):
     return data
 
 def getSGCCMASSphotoObjcat():
+    
+    print '\n--------------------------------\n calling BOSS SGC CMASS catalog\n--------------------------------'
     
     import esutil
     import numpy as np
@@ -58,6 +63,7 @@ def getSGCCMASSphotoObjcat():
     HealInds = hpRaDecToHEALPixel( cmass['RA'],cmass['DEC'], nside= 1024, nest= False)
     BOSSHealInds = np.in1d( HealInds, HPboss )    
     return cmass[BOSSHealInds]
+
 
 
 def getSDSScatalogs(  file = '/n/des/huff.791/Projects/CMASS/Data/s82_350_355_emhuff.fit', bigSample = False):

@@ -123,8 +123,40 @@ def keepGoodRegion(des, hpInd = False, balrog=None):
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
     LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits')
     #Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits
-    frac_cut = LSSGoldmask['FRAC'] > 0.8
-    ind_good_ring = LSSGoldmask['PIXEL'][frac_cut]
+    #frac_cut = LSSGoldmask['FRAC'] > 0.8
+    #ind_good_ring = LSSGoldmask['PIXEL'][frac_cut]
+    ind_good_ring = LSSGoldmask['PIXEL']
+    
+    # healpixify the catalog.
+    nside=4096
+    # Convert silly ra/dec to silly HP angular coordinates.
+    phi = des['RA'] * np.pi / 180.0
+    theta = ( 90.0 - des['DEC'] ) * np.pi/180.0
+
+    hpInd = hp.ang2pix(nside,theta,phi,nest=False)
+    keep = np.in1d(hpInd, ind_good_ring)
+    des = des[keep]
+    if hpInd is True:
+        return ind_good_ring
+    else:
+        return des
+
+
+def keepY1GoldRegion(des, hpInd = False):
+    import healpy as hp
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+    from systematics import callingY1GoldMask
+    ind_good_ring = callingY1GoldMask( nside = 4096 )['PIXEL']
+
+    #path = '/n/des/lee.5922/data/systematic_maps/'
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits')
+    #Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits
+    #frac_cut = LSSGoldmask['FRAC'] > 0.8
+    #ind_good_ring = LSSGoldmask['PIXEL'][frac_cut]
+    #ind_good_ring = LSSGoldmask['PIXEL']
     
     # healpixify the catalog.
     nside=4096
