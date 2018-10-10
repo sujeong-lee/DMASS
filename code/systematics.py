@@ -194,12 +194,12 @@ def loadSystematicMaps(  property ='AIRMASS', filter='g', nside = 1024, filename
             goodIndices = np.arange(clean_map.size)
             
 
-    else :
+    else :       
 
         if property is 'GE': 
 
             nside = 512
-        
+            
             reddening_nest = esutil.io.read('/n/des/lee.5922/data/2mass_cat/lambda_sfd_ebv.fits', ensure_native=True)
             reddening_ring = hp.reorder(reddening_nest['TEMPERATURE'], inp='NEST', out='RING')
             clean_map = rotate_hp_map(reddening_ring, coord = ['C', 'G'])
@@ -401,8 +401,40 @@ def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096,
     if property == 'GE' : 
         log = True
         max = 0.2
+
+    if property == 'SLR': 
+        if filter == 'i' : 
+            bin_num = bin_num*2
+            min = -0.5
+            max = 0.5
+        elif filter == 'z' : 
+            bin_num = bin_num*2
+            min = -0.5
+            max = 0.5
+        else : pass
+        #if filter == 'r' : max = 5.5
+        #if filter == 'i' : max = 4.5
+        #if filter == 'z' : max = 4.5    
     
-    
+    if property == 'SLRSFDRES': 
+        if filter == 'g' : 
+            #bin_num = bin_num*2
+            min = -0.2
+            max = 0.2
+        elif filter == 'r' : 
+            #bin_num = bin_num*2
+            min = -0.04
+            max = 0.04
+        elif filter == 'i' : 
+            #bin_num = bin_num*2
+            min = -0.01
+            max = 0.01
+        elif filter == 'z' : 
+            bin_num = bin_num*10
+            min = -0.04
+            #min = -0.12
+            max = 0.8
+        else : pass
 
     bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = min, max = max, bin_num = bin_num, log=log )
     
@@ -619,6 +651,7 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
         if plot : 
             figname = path+'systematic_fitting_'+p+'_'+f+'_'+kind+'_'+suffix+'.png'
             fig.savefig(figname)
+            print 'saving fig to ', figname
 
 
 
@@ -783,6 +816,9 @@ def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, 
         elif p in ['SKYBRITEpca0','SKYBRITEpca1', 'SKYBRITEpca2', 'SKYBRITEpca3'] :
             nside = 4096
             filter = ['g']
+        elif p is 'SLR':
+            nside = 512
+            filter = ['g', 'r', 'i', 'z']
         else :
             nside = nside
             filter = ['g', 'r', 'i', 'z']
@@ -806,46 +842,6 @@ def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, 
             print "saving data to ", filename
 
 
-def sys_iteration( nextweight=None, suffix=None, all_weight = None, 
-                  cat1=None, cat2=None, rand1 = None, rand2=None,
-                  sysMap = None, nside=4096, kind='SPT', function=None, function2=None,
-                  properties = None, filters = ['g', 'r', 'i', 'z'], 
-                  path=None, plot=True, weightDic=None, FullArea=None ):
-    
-    #nextprop, nextfil= init(nextweight)   
-
-    nextw = nextweight.split('_')    
-    if len(nextw) == 2 : nextprop = nextw[0]
-    else : nextprop = nextw[0]+'_'+nextw[1]
-    nextfil = nextw[-1]
-    #nextprop, nextfil = nextweight.split('_')
-    print '----------------------------------'
-    print 'initialize function ', nextweight
-    print function
-
-
-    wg = calculate_weight( property = nextprop, filter=nextfil, kind = kind, suffix=suffix, plot=plot, 
-                              function = function,
-                    path =path, catalog = cat1, sysMap= sysMap, 
-                    weight=True, raTag ='RA', decTag='DEC', nside=nside)
-
-    print 'store weight ', nextweight
-    os.system('mkdir '+path+'/weights/')
-    fitsname = path+'/weights/wg_'+nextweight.lower()+'_'+kind+'.fits'
-    print 'save weight to fits', fitsname
-    fitsio.write( fitsname, wg, clobber=True )
-    weightDic[nextweight] = wg
-    
-    
-    if suffix == 'no_weight': suffix = 'wg_'+nextweight.lower()
-    else : suffix = suffix+'_'+nextweight.lower()
-    print 'suffix = ', suffix
-    all_weight = np.multiply( all_weight, weightDic[nextweight] )
-
-    sys_ngal(cat1 = cat1, cat2=cat2, rand1 = rand1, rand2 = rand2, sysmap = sysMap, 
-             FullArea = FullArea, properties = properties, kind=kind, nbins = 15,
-             pixelmask = None, reweight = all_weight, 
-             suffix=suffix, outdir=path)
 
 
     

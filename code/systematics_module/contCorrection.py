@@ -260,7 +260,9 @@ def doVisualization_ngal(property = None, nside = 1024, kind = 'SPT', suffix='',
         #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
         if property == 'NSTARS_allband': ax[i].set_xlim(0.0, 2.0)
         if property == 'NSTARS': ax[i].set_xlim(0.0, 1000)
-        if property == 'GE' : ax[i].set_xscale('log')
+        if property == 'GE' : 
+            ax[i].set_xscale('log')
+            #ax[i].set_xlim(0.004, 0.2)
     fig.suptitle('systematic test ({})'.format(kind))
     os.system('mkdir '+outdir)
     figname = outdir+'systematic_'+property+'_'+kind+'_'+suffix+'.png'

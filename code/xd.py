@@ -163,7 +163,8 @@ class XDGMM(object):
             logL_next = self.logL(X, Xerr)
             t1 = time()
             
-            sys.stdout.write("\r" + 'expected time: {:0.2f} s,  process: {:0.2f} % '.format((t1-t0) * (self.n_iter - i), i * 1./self.n_iter * 100.))
+            sys.stdout.write("\r" + 'expected time: {:0.2f} min,  process: {:0.2f} %,  iteration {}/{}'\
+                .format((t1-t0) * (self.n_iter - i)/60., i * 1./self.n_iter * 100., i, self.n_iter))
             sys.stdout.flush()
             
             if self.verbose:
@@ -796,7 +797,7 @@ def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=10
 
 
 
-def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, nbins=100, prefix= 'default' ):
+def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, nbins=100, prefix= 'default', outdir='./'):
     
     if labels == None:
         print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
@@ -822,7 +823,7 @@ def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, 
         
         axes[i].legend(loc='best')
 
-    filename = "figure/"+prefix+"diagnostic_histograms_1d.png"
+    filename = outdir+"/"+prefix+"diagnostic_histograms_1d.png"
     print "writing output plot to: "+filename
     fig.savefig(filename)
     #plt.close(fig)

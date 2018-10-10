@@ -155,16 +155,19 @@ def getLowerHPind(Map, nside = 4096, nside2 = 8):
     return Goldnside2
 
 
-def getGoodRegionIndices(catalog=None, badHPInds=None, nside=4096,band=None, raTag = 'ra', decTag = 'dec'):
+def getGoodRegionIndices(catalog=None, badHPInds=None, nside=4096, band=None, raTag = 'ra', decTag = 'dec'):
     hpInd = hpRaDecToHEALPixel(catalog[raTag], catalog[decTag], nside=nside, nest= True)
     keep = ~np.in1d(hpInd, badHPInds)
     return keep
 
-def spatialcheck(data, label = None, convert = None, suffix = '', dir='./'):
+
+
+def spatialcheck(data, label = None, convert = None, zaxis = None, zlabel = None, suffix = '', dir='./'):
     
-    
-    fig, ax = plt.subplots(1,1,figsize = (7,7))
-    if len(data) > 20 :
+    jj = 0
+    #fig, ax = plt.subplots(1,1,figsize = (7,7))
+    fig, ax = plt.subplots()
+    if len(data) > 100 :
             print "Warning : Be careful when you put more than 20 data"
             data = [data]
 
@@ -200,7 +203,14 @@ def spatialcheck(data, label = None, convert = None, suffix = '', dir='./'):
         
         ra2 = ra.copy()
         ra2[ra > 180] = ra[ra > 180]-360
-        ax.plot(ra2, dec, '.', alpha = 0.3, label = l )
+        if zaxis is None : 
+            if jj == 0 : ax.plot(ra2, dec, '.', alpha = 0.2, label = l , color = 'grey')
+            else : ax.plot(ra2, dec, '.', alpha = 0.3, label = l )
+        else : 
+            sc = ax.scatter( ra2, dec, c=zaxis)
+            fig.colorbar( sc, ax=ax, label=zlabel  )
+        jj += 1
+
     
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
@@ -212,7 +222,7 @@ def spatialcheck(data, label = None, convert = None, suffix = '', dir='./'):
 
 
 
-def doVisualization_z( cats = None, labels = None, suffix = 'test', zlabel = 'DESDM_ZP' ):
+def doVisualization_z( cats = None, labels = None, suffix = 'test', zlabel = 'DESDM_ZP', outdir = './' ):
     
     import matplotlib.pyplot as plt
     z_bin = np.linspace(1e-5, 1.0, 200)
@@ -223,8 +233,8 @@ def doVisualization_z( cats = None, labels = None, suffix = 'test', zlabel = 'DE
     fig, axes = plt.subplots( len(cats), 1, figsize = (6, 5*(len(cats)) ))
     for i in range(1, len(cats)):
         #axes[i].hist( photoz_des['DESDM_ZP'], bins = z_bin,facecolor = 'green', normed = True, label = 'cmass')
-        N1, _,_ = axes[i-1].hist( cats[0][zlabel], bins = z_bin, facecolor = 'green', alpha = 0.7, normed = 1, label = labels[0])
-        N2, _,_ = axes[i-1].hist( cats[i][zlabel], bins = z_bin, facecolor = 'red', alpha = 0.35, normed = 1, label = labels[i])
+        N1, _,_ = axes[i-1].hist( cats[0][zlabel], bins = z_bin, alpha = 0.5, normed = 1, label = labels[0])
+        N2, _,_ = axes[i-1].hist( cats[i][zlabel], bins = z_bin, alpha = 0.5, normed = 1, label = labels[i])
         axes[i-1].set_xlabel(zlabel)
         axes[i-1].set_ylabel('N(z)')
         #ax.set_yscale('log')
@@ -233,7 +243,7 @@ def doVisualization_z( cats = None, labels = None, suffix = 'test', zlabel = 'DE
     axes[0].set_title('\nredshift histogram')
 
     axes[-1].remove()
-    figname ='figure/hist_z_'+suffix+'.png'
+    figname =outdir+'hist_z_'+suffix+'.png'
     fig.savefig(figname)
     print 'saving fig to ',figname
 
@@ -375,17 +385,18 @@ def changeColumnName( cat, name = None, rename = None ):
     cat.dtype.names = tuple(catcolumn)
     return cat
 
-def appendColumn(cat, name = None, value = None):
+def appendColumn(cat, name = None, value = None, dtypes=None):
     import numpy.lib.recfunctions as rf  
-    cat = rf.append_fields(cat, name, value)
+    cat = rf.append_fields(cat, name, value, dtypes=dtypes)
     return cat
 
 
 def AddingReddening(cat):
     import numpy.lib.recfunctions as rf   
-    from suchyta_utils.y1a1_slr_shiftmap import SLRShift
+    #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
+    from y1a1_slr_shiftmap import SLRShift
     zpfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
-    slrshift = SLRShift(zpfile, fill_periphery=True, balrogprint=None)
+    slrshift = SLRShift(zpfile, fill_periphery=True)
     offsets_g = slrshift.get_zeropoint_offset('g',cat['RA'],cat['DEC'],interpolate=True)
     offsets_r = slrshift.get_zeropoint_offset('r',cat['RA'],cat['DEC'],interpolate=True)
     offsets_i = slrshift.get_zeropoint_offset('i',cat['RA'],cat['DEC'],interpolate=True)
@@ -410,6 +421,135 @@ def AddingReddening(cat):
     """
     return cat
 
+
+def RemovingSLRReddening(cat):
+
+
+    if 'SLR_SHIFT_G' not in cat.dtype.names : 
+        import numpy.lib.recfunctions as rf   
+        #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
+        from y1a1_slr_shiftmap import SLRShift
+        zpfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
+        slrshift = SLRShift(zpfile, fill_periphery=True)
+        offsets_g = slrshift.get_zeropoint_offset('g',cat['RA'],cat['DEC'],interpolate=True)
+        offsets_r = slrshift.get_zeropoint_offset('r',cat['RA'],cat['DEC'],interpolate=True)
+        offsets_i = slrshift.get_zeropoint_offset('i',cat['RA'],cat['DEC'],interpolate=True)
+        offsets_z = slrshift.get_zeropoint_offset('z',cat['RA'],cat['DEC'],interpolate=True)
+
+        offsets = [ offsets_g, offsets_r, offsets_i, offsets_z  ]
+        from pandas import DataFrame, concat
+        nametag = ['SLR_SHIFT_'+f for f in ['G', 'R', 'I', 'Z'] ]
+        catnametag = cat.dtype.names
+        try : 
+            offsetsdf = DataFrame( offsets, index = nametag ).T
+            cat = DataFrame(cat, index = catnametag)
+            #del cat['index']
+            print 'concatenate two ndarrays'
+            cat = concat([cat, offsetsdf], axis=1)
+            print 'dataframe to recordarray'
+            cat = cat.to_records()
+        
+        except ValueError :
+            print "Big-endian buffer not supported on little-endian compiler"
+            print "Doing byte swapping"
+            
+            #offsetsdf = np.array(offsetsdf).byteswap().newbyteorder()
+            cat = np.array(cat).byteswap().newbyteorder()
+            offsetsdf = DataFrame( offsets, index = nametag ).T
+            cat = DataFrame(cat)
+
+            print 'concatenate two ndarrays'
+            cat = concat([cat, offsetsdf], axis=1)
+            print 'dataframe to recordarray'
+            cat = cat.to_records()
+            cat.dtype.names = [str(x) for x in cat.dtype.names]
+            
+            #matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes, left_index=left_index)
+
+
+    print 'Removing SLR Shift '
+    for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
+        print '  removing SLR from ', mag
+        for b in ['G', 'R', 'I', 'Z']:
+            cat[mag + '_'+b] = cat[mag + '_'+b] - cat['SLR_SHIFT'+ '_'+b]
+
+    """
+    cat = rf.append_fields(cat, 'SLR_SHIFT_G', offsets_g)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_R', offsets_r)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_I', offsets_i)
+    cat = rf.append_fields(cat, 'SLR_SHIFT_Z', offsets_z)
+    """
+    return cat
+
+
+def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
+    import numpy.lib.recfunctions as rf
+    import pandas as pd
+
+    band = ['G', 'R', 'I', 'Z']
+
+    print 'Using SFD98 nside 512 healpix map'
+    print 'Bands :',  band
+    print 'NSIDE = 512'
+    print 'coefficients = ', coeff
+
+    #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
+    #sfdfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
+    
+    #sysMap_ge = calling_sysMap( properties=['GE'], kind=kind, nside=512 )
+    gepath = '/n/des/lee.5922/data/2mass_cat/'
+    from systematics import loadSystematicMaps
+    sysMap_ge = loadSystematicMaps( property = 'GE', filter = 'g', nside = 512 , kind = kind, path = gepath)
+    if kind is 'STRIPE82': sysMap_ge = sysMap_ge[sysMap_ge['DEC'] > -30]
+    elif kind is 'SPT': sysMap_ge = sysMap_ge[sysMap_ge['DEC'] < -30]
+    
+    #import copy
+    #cat_hp = copy.deepcopy(cat)
+
+    cat_hp = cat
+
+
+
+    hpind = hpRaDecToHEALPixel(cat_hp['RA'], cat_hp['DEC'], nside=  512, nest= False)
+
+    #cat_hp.dtype.names = [str(x) for x in cat_hp.dtype.names]
+    cat_hp = changeColumnName(cat_hp, name = 'HPIX', rename = 'PIXEL')
+    cat_hp['PIXEL'] = hpind
+    
+    sfdmap = changeColumnName( sysMap_ge, name = 'SIGNAL', rename = 'SFD98' )
+
+
+    try : 
+
+        cat_Data = pd.DataFrame(cat_hp)
+        sfdData = pd.DataFrame(sfdmap)
+        matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
+                           suffixes = ['','_sys'], left_index=False, right_index=False)
+    except ValueError :
+        print "Big-endian buffer not supported on little-endian compiler"
+        print "Doing byte swapping ...."
+
+        cat_hp = np.array(cat_hp).byteswap().newbyteorder()
+        #sfdmap = np.array(sfdmap).byteswap().newbyteorder()
+        cat_Data = pd.DataFrame(cat_hp)
+        sfdData = pd.DataFrame(sfdmap)
+        
+
+        #print cat_Data.keys()
+        #print sfdData.keys()
+        matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
+                           suffixes = ['','_sys'], left_index=False, right_index=False)
+        
+    matched_arr = matched.to_records(index=False)
+    matched_arr.dtype.names = [str(x) for x in matched_arr.dtype.names]
+
+    print 'Adding SFD98 Shift '
+    for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
+        print '  Adding SFD to ', mag
+        for i,b in enumerate(band):
+            matched_arr[mag + '_'+b] = matched_arr[mag + '_'+b] - matched_arr['SFD98'] * coeff[i]    
+
+    return matched_arr
 
 
 
