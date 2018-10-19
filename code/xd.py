@@ -134,8 +134,9 @@ class XDGMM(object):
         # initialize components via a few steps of GMM
         # this doesn't take into account errors, but is a fast first-guess
         
-        gmm = GMM(self.n_components, n_iter=10, covariance_type='full',
-                  random_state=self.random_state).fit(X)
+        if init_params is None : 
+            gmm = GMM(self.n_components, n_iter=10, covariance_type='full',
+                      random_state=self.random_state).fit(X)
         
         
         #print gmm.weights_
@@ -145,6 +146,10 @@ class XDGMM(object):
             filename = init_params
             #fix_mu, fix_alpha, fix_V = getCMASSparam(filename = 'pickle/gold_st82_20_XD_dmass.pkl')
             fix_mu, fix_alpha, fix_V = getCMASSparam(filename = filename)
+
+            gmm = GMM(self.n_components, n_iter=1, covariance_type='full',
+                        random_state=self.random_state).fit(X)
+
             gmm.means_ = fix_mu
             gmm.covars_ = fix_V
             gmm.weights_= fix_alpha
@@ -153,6 +158,9 @@ class XDGMM(object):
         self.mu = gmm.means_
         self.alpha = gmm.weights_
         self.V = gmm.covars_
+        self.n_components = len(self.V)
+        print 'n components : ',self.n_components
+
 
         logL = self.logL(X, Xerr)
         
@@ -163,12 +171,12 @@ class XDGMM(object):
             logL_next = self.logL(X, Xerr)
             t1 = time()
             
-            sys.stdout.write("\r" + 'expected time: {:0.2f} min,  process: {:0.2f} %,  iteration {}/{}'\
-                .format((t1-t0) * (self.n_iter - i)/60., i * 1./self.n_iter * 100., i, self.n_iter))
-            sys.stdout.flush()
+            #sys.stdout.write("\r" + 'total expected time: {:0.2f} min,  process: {:0.2f} %,  iteration {}/{}      '\
+            #    .format((t1-t0) * (self.n_iter - i)/60., i * 1./self.n_iter * 100., i, self.n_iter))
+            #sys.stdout.flush()
             
             if self.verbose:
-                print("%i: log(L) = %.5g" % (i + 1, logL_next))
+                print("%i: log(L) = %.10g" % (i + 1, logL_next))
                 print("    (%.2g sec)" % (t1 - t0))
               
             if logL_next < logL + self.tol:
@@ -183,7 +191,12 @@ class XDGMM(object):
                     break 
                 pass
 
-        sys.stdout.write("\r" + 'expected time: {:0.2f} s,  process: {:0.2f} % \n'.format(0, 100))
+        #sys.stdout.write("\r" + 'expected time: {:0.2f} s,  process: {:0.2f} %       \n'.format(0, 100))
+        #sys.stdout.write("\r" + 'expected time: {:0.2f} min,  process: {:0.2f} %,  iteration {}/{}      /n'\
+        #        .format((t1-t0) * (self.n_iter - i)/60., i * 1./self.n_iter * 100., i, self.n_iter))
+
+        sys.stdout.write("\r" + 'elapsed time: {:0.2f} min,  total iteration {}                                 \n'\
+                .format((t1-t0) * i/60., i))
         
         return self
 
@@ -638,16 +651,30 @@ def logsumexp(arr, axis=None):
 
 
 
-def mixing_color(data, suffix = '', sdss = None, cmass = None ):
+def mixing_color(data, suffix = '', sdss = None, cmass = None, 
+    mag = ['MAG_MODEL', 'MAG_DETMODEL'], 
+    err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'], 
+    no_zband = True  ):
     
     filter = ['G', 'R', 'I', 'Z']
-    mag = ['MAG_MODEL', 'MAG_DETMODEL']
+
+    
+    #mag = ['MAG_MODEL', 'MAG_DETMODEL']
     magtag = [ m+'_'+f+suffix for m in mag for f in filter ]
     del magtag[0], magtag[2]
-    err = [ 'MAGERR_MODEL','MAGERR_DETMODEL']
+    #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL']
     errtag = [ e+'_'+f for e in err for f in filter ]
     del errtag[0], errtag[2]
     
+    if no_zband : 
+        print 'No z_band!'
+        magtag = magtag[:-1]
+        errtag = errtag[:-1]
+        #print magtag
+    #print magtag
+    #print errtag
+
+
     X = [ data[mt] for mt in magtag ]
     Xerr = [ data[mt] for mt in errtag ]
     #reddeningtag = 'XCORR_SFD98'
@@ -656,13 +683,16 @@ def mixing_color(data, suffix = '', sdss = None, cmass = None ):
     Xerr = np.vstack(Xerr).T
     # mixing matrix
     W = np.array([
-                  [1, 0, 0, 0, 0, 0],
-                  [0, 1, 0, 0, 0, 0],    # i cmag
+                  [1, 0, 0, 0, 0, 0],    # r mag
+                  [0, 1, 0, 0, 0, 0],    # i mag
                   [0, 0, 1, -1, 0, 0],   # g-r
                   [0, 0, 0, 1, -1, 0],   # r-i
                   [0, 0, 0, 0, 1, -1]])  # i-z
 
+    if no_zband : W = W[:-1,:-1]
+
     X = np.dot(X, W.T)
+
 
     Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
     Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
@@ -672,17 +702,21 @@ def mixing_color(data, suffix = '', sdss = None, cmass = None ):
 
 
     
-def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init_params = None, suffix='', n_cl = None ):
+def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init_params = None, suffix='', n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
     from astroML.decorators import pickle_results
     
     @pickle_results(pickleFileName, verbose = True)
-    def compute_XD(X, Xcov, init_params = None, n_iter=500, verbose=False, n_cl = None):
+    def compute_XD(X, Xcov, init_params = None, n_iter=500, verbose=False, n_cl = None, tol=1E-5):
+        if init_params != None : 
+            n_cl = 10
+
         if n_cl is None : 
             n_pickleFilename = pickleFileName+'.n_cluster'
-            n_cluster,_,_= _FindOptimalN( np.arange(2, 50, 2), X, pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
-        if n_cl is not None : n_cluster = n_cl
-        print 'n_cluster : ', n_cluster
-        clf= XDGMM(n_cluster, n_iter=n_iter, tol=1E-5, verbose=verbose)
+            n_cl,_,_= _FindOptimalN( np.arange(2, 50, 2), X, pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
+
+        #print 'n_cluster : ', n_cl
+
+        clf= XDGMM(n_cl, n_iter=n_iter, tol=tol, verbose=verbose)
         clf.fit(X, Xcov, init_params = init_params)
         return clf
 
@@ -692,8 +726,8 @@ def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init
         pickle = pickle.load(f)
         clf = pickle['retval']
     else:
-        X, Xcov = mixing_color(data, suffix = suffix)
-        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl)
+        X, Xcov = mixing_color(data, suffix = suffix, no_zband=True)
+        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, n_iter = n_iter, tol=tol, verbose=verbose)
     return clf
     
     
@@ -797,7 +831,7 @@ def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=10
 
 
 
-def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, nbins=100, prefix= 'default', outdir='./'):
+def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, weight = [None,None], nbins=100, prefix= 'default', outdir='./'):
     
     if labels == None:
         print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
@@ -812,13 +846,14 @@ def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, 
         for i in xrange(ndim):
             ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
-    fig,axes = plt.subplots(nrows=1, ncols= ndim, figsize= (6*ndim, 5) )
-    
+    fig,axes = plt.subplots(nrows=1, ncols= ndim, figsize= (5*ndim, 4) )
+   
+    #print weight[0], weight[1].size, data1[:,0].size 
     for i in xrange(ndim):
-        xbins = np.linspace(ranges[i][0],ranges[i][1],100)
-        axes[i].hist(true[:,i],bins=xbins,normed=True, label=name[1], color='blue')
-        axes[i].hist(data1[:,i],bins=xbins,normed=True,alpha=0.5,label=name[0], color = 'red')
-        axes[i].set_xlabel(labels[i])
+        xbins = np.linspace(ranges[i][0],ranges[i][1], nbins)
+        axes[i].hist(true[:,i],bins=xbins,normed=True, label=name[1], color='blue', weights=weight[1])
+        axes[i].hist(data1[:,i],bins=xbins,normed=True,alpha=0.5,label=name[0], color = 'red', weights=weight[0])
+        axes[i].set_xlabel(labels[i], fontsize = 15)
         #axes[i].hist(data2[:,i],bins=xbins,normed=True,alpha=0.5,label='data2')
         
         axes[i].legend(loc='best')
@@ -1491,19 +1526,27 @@ def resampleWithPth__( des ):
 
 
 
-def resampleWithPth( des, pstart = 0.01, pmax = 1.0 ):
+def resampleWithPth( des, pstart = 0.01, pmax = 1.0, pbins = 201 ):
     
     pmin = 0.1
     pmax = pmax # should be adjused with different samples
     p1stbin = 0.1
     
-    pth_bin, step = np.linspace(pstart, 1.0, 200, endpoint = True, retstep = True)
-    pcenter = pth_bin + step/2.
     
+    #pth_bin, step = np.linspace(pstart, 1.0, pbins, endpoint = True, retstep = True)
+    #pcenter = pth_bin[:-1] + step/2.
+    
+    pbinsmall, steps = np.linspace(0, 0.01, 101,retstep=1 )
+    pbinbig, stepb = np.linspace(0.01, 1, 199, retstep=1 )
+    pth_bin = np.hstack([pbinsmall, pbinbig[1:]])
+    pcenters = pbinsmall[:-1] + steps/2.
+    pcenterb = pbinbig[:-1] + stepb/2.
+    pcenter = np.hstack([pcenters, pcenterb[1:]])
+
     # ellipse
-    pcurve = (pmax-pmin) * np.sqrt( 1 - (pcenter - 1)**2 * 1./(1-p1stbin)**2 ) + pmin
-    pcurve[ pcenter < pmin ] = 0.0
-    pcurve[ np.argmax(pcurve)+1:] = pmax
+    #pcurve = (pmax-pmin) * np.sqrt( 1 - (pcenter - 1)**2 * 1./(1-p1stbin)**2 ) + pmin
+    #pcurve[ pcenter < pmin ] = 0.0
+    #pcurve[ np.argmax(pcurve)+1:] = pmax
     
     # straight
     #pcurve2 = np.zeros(pth_bin.size)
@@ -1512,29 +1555,29 @@ def resampleWithPth( des, pstart = 0.01, pmax = 1.0 ):
     #pcurve2[:pcurve_front.size] = pcurve_front
     #pcurve2[pcurve_front.size:] = pmax
 
-    ellipse_dmass = [None for i in range(pth_bin.size-1)]
-    straight_dmass = [None for i in range(pth_bin.size-1)]
-    el_fraction, st_fraction = np.zeros(pth_bin.size-1),  np.zeros(pth_bin.size-1)
+    straight_dmass = [None for i in range(pcenter.size)]
+    st_fraction = np.zeros(pcenter.size)
     
     desInd = np.digitize( des['EachProb_CMASS'], bins= pth_bin )
     
-    for i in range(pth_bin.size-1):
+    for i in range(pcenter.size):
         #mask = (des['EachProb_CMASS'] >= pth_bin[i]) & (des['EachProb_CMASS'] < pth_bin[i]+step)
         #cat = des[mask]
         cat = des[ desInd == i+1]
         
         try :
-            ellipse_dmass[i] = np.random.choice( cat, size = int(np.around(pcurve[i] * cat.size)) )
+            #ellipse_dmass[i] = np.random.choice( cat, size = int(np.around(pcurve[i] * cat.size)) )
             #straight_dmass[i] = np.random.choice( cat, size = int(np.around(pcurve2[i] * cat.size)) )
             straight_dmass[i] = np.random.choice( cat, size = int(np.around(pn( pcenter[i] ) * cat.size)) )
+            #print pth_bin[i], pcenter[i]
             #print pn(pcenter[i]) 
-            el_fraction[i] = ellipse_dmass[i].size * 1./cat.size
+            #el_fraction[i] = ellipse_dmass[i].size * 1./cat.size
             st_fraction[i] = straight_dmass[i].size * 1./cat.size
         
         except ValueError:
-            ellipse_dmass[i] = np.random.choice( des, size = 0)
+            #ellipse_dmass[i] = np.random.choice( des, size = 0)
             straight_dmass[i] = np.random.choice( des, size = 0)
-            el_fraction[i] = 0
+            #el_fraction[i] = 0
             st_fraction[i] = 0
 
         #fraction.append( np.sum(mask) * 1./des.size )
@@ -1547,7 +1590,7 @@ def resampleWithPth( des, pstart = 0.01, pmax = 1.0 ):
     straight_dmass[i] = np.random.choice( cat, size = int(np.around(pmax * cat.size)) )
     #print pth_bin[i], pth_bin[i]+step, 0.75, dmass[i].size * 1./cat.size, dmass[i].size
     """
-    ellipse_dmass = np.hstack(ellipse_dmass)
+    #ellipse_dmass = np.hstack(ellipse_dmass)
     straight_dmass = np.hstack(straight_dmass)
     
     # plotting selection prob----------
@@ -1575,6 +1618,6 @@ def resampleWithPth( des, pstart = 0.01, pmax = 1.0 ):
     fig.savefig('figure/selection_prob')
     print 'figure to ', 'figure/selection_prob.png'
     """
-    return straight_dmass, ellipse_dmass
+    return straight_dmass, None
 
 

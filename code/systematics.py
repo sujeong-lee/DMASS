@@ -13,6 +13,53 @@ from utils import *
 from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 
 
+def brelchisqr(xi, xi2, invcov, brelsqr):
+    DiffVector = xi2 - brelsqr*xi
+    chi2 = np.dot( np.dot( DiffVector , invcov), DiffVector )
+    return chi2
+
+def find_nearest(array, value, brell):
+    
+    ind_min = array.argmin()
+    array1 = np.asarray(array[:ind_min])
+    idx1 = (np.abs(array1 - value)).argmin()
+    
+    array2 = np.asarray(array[ind_min:])
+    idx2 = (np.abs(array2 - value)).argmin()
+    
+    return brell[:ind_min][idx1], brell[ind_min], brell[ind_min:][idx2]
+
+
+def brel_chisqr_fitting(xi1, xi2, Fisher, verbose=False):
+    
+    brelsqr = np.linspace(0.8, 1.2, 5000)   
+    brelarr = np.sqrt(brelsqr) 
+    chisqr_result = np.zeros(brelsqr.size)
+    
+    i=0
+    for b in brelsqr:
+        chisqr_result[i] = brelchisqr(xi1, xi2, Fisher, b)
+        i+=1   
+        
+    minarg = chisqr_result.argmin()
+    chisqr_min = chisqr_result.min()
+    brel = np.sqrt(brelsqr[minarg])
+    
+    b_cmass = 2.0
+    db = b_cmass * (1. - 1./brel)
+    
+       
+    b_cmass = 2.0
+
+    br1, brmin, br2 = find_nearest( chisqr_result, chisqr_min + 1,brelarr )
+    err_brel = np.abs(br1-br2)/2.
+    err_db = err_brel *b_cmass
+    if verbose : print 'err db, db / br1, brmin, br2 :', err_db, db, br1, brmin, br2  
+    #return err_db, db, chisqr_result
+    return err_brel, brmin, chisqr_result
+    
+    
+
 def excludeBadRegions(des, balrogObs, balrogTruthMatched, balrogTruth, band=None):
     path = '/n/des/lee.5922/data/balrog_cat/'
     eliMap = hp.read_map(path +'y1a1_gold_1.0.2_wide_badmask_4096.fit', nest=True)

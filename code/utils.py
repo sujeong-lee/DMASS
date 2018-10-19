@@ -382,7 +382,7 @@ def changeColumnName( cat, name = None, rename = None ):
     catcolumn = list(cat.dtype.names)
     ind = catcolumn.index(name)
     catcolumn[ind] = rename
-    cat.dtype.names = tuple(catcolumn)
+    cat.dtype.names = list(catcolumn)
     return cat
 
 def appendColumn(cat, name = None, value = None, dtypes=None):
@@ -482,7 +482,133 @@ def RemovingSLRReddening(cat):
     return cat
 
 
+
+def AddingSLRReddening(cat):
+
+
+    print 'Adding SLR Shift '
+    for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
+        print '  Adding SLR from ', mag
+        for b in ['G', 'R', 'I', 'Z']:
+            cat[mag + '_'+b] = cat[mag + '_'+b] + cat['SLR_SHIFT'+ '_'+b]
+
+    return cat
+
+
 def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
+    import numpy.lib.recfunctions as rf
+    import pandas as pd
+
+    band = ['G', 'R', 'I', 'Z']
+
+    if 'EBV' not in cat.dtype.names :   
+     
+        print 'Using SFD98 nside 4096 healpix map'
+        print 'Bands :',  band
+        #print 'NSIDE = 4096'
+        print 'coefficients = ', coeff
+        nside = 4096
+
+        #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
+        #sfdfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
+        mapname = '/n/des/lee.5922/data/systematic_maps/ebv_sfd98_fullres_nside_4096_nest_equatorial.fits'
+        #mapname = '/n/des/lee.5922/data/systematic_maps/ebv_lenz17_nside_4096_nest_equatorial.fits'
+        reddening_ring = hp.read_map(mapname)
+        hpIndices = np.arange(reddening_ring.size)
+        #goodmask = hp.mask_good(reddening_ring)
+        #goldmask = 
+
+        goodIndices = hpIndices #hpIndices[goodmask]
+        clean_map = reddening_ring #reddening_ring[goodmask]
+
+        sysMap = np.zeros((clean_map.size, ), dtype=[('PIXEL', 'i4'), ('EBV', 'f8'), ('RA', 'f8'), ('DEC', 'f8')])
+        sysMap['PIXEL'] = goodIndices
+        sysMap['EBV'] = clean_map
+        
+        sys_ra, sys_dec = hpHEALPixelToRaDec(goodIndices, nside = nside)
+        sysMap['RA'] = sys_ra
+        sysMap['DEC'] = sys_dec
+
+        from cmass_modules.Cuts import keepGoodRegion
+        sysMap = keepGoodRegion(sysMap)
+        if kind is 'STRIPE82': sysMap = sysMap[sysMap['DEC'] > -30]
+        elif kind is 'SPT': sysMap = sysMap[sysMap['DEC'] < -30]
+
+
+        cat_hp = cat
+        hpind = hpRaDecToHEALPixel(cat_hp['RA'], cat_hp['DEC'], nside= 4096, nest= False)
+        #cat_hp.dtype.names = [str(x) for x in cat_hp.dtype.names]
+        cat_hp = changeColumnName(cat_hp, name = 'HPIX', rename = 'PIXEL')
+        cat_hp['PIXEL'] = hpind
+        
+        #sfdmap = changeColumnName( sysMap_ge, name = 'SIGNAL', rename = 'SFD98' )
+
+
+        try : 
+
+            cat_Data = pd.DataFrame(cat_hp)
+            sfdData = pd.DataFrame(sysMap)
+            matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
+                               suffixes = ['','_sys'], left_index=False, right_index=False)
+        except ValueError :
+            print "Big-endian buffer not supported on little-endian compiler"
+            print "Doing byte swapping ...."
+
+            cat_hp = np.array(cat_hp).byteswap().newbyteorder()
+            #sfdmap = np.array(sfdmap).byteswap().newbyteorder()
+            cat_Data = pd.DataFrame(cat_hp)
+            sfdData = pd.DataFrame(sysMap)
+            
+
+            #print cat_Data.keys()
+            #print sfdData.keys()
+            matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
+                               suffixes = ['','_sys'], left_index=False, right_index=False)
+            
+        matched_arr = matched.to_records(index=False)
+        matched_arr.dtype.names = [str(x) for x in matched_arr.dtype.names]
+
+
+    else : matched_arr = cat
+
+    print 'Adding SFD98 Shift '
+    print 'Bands :',  band
+    print 'coefficients = ', coeff
+
+    for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
+        print '  Adding SFD to ', mag
+        for i,b in enumerate(band):
+            matched_arr[mag + '_'+b] = matched_arr[mag + '_'+b] - matched_arr['EBV'] * coeff[i]    
+
+    return matched_arr
+
+
+
+def RemovingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
+    import numpy.lib.recfunctions as rf
+    import pandas as pd
+
+    band = ['G', 'R', 'I', 'Z']
+
+    print 'Removing SFD98 Shift '
+    print 'Bands :',  band
+    print 'coefficients = ', coeff
+
+    correction_tag = 'EBV'
+
+    if 'EBV' not in cat.dtype.names : 
+        correction_tag = 'SFD98'
+
+    for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
+        print '  Removing SFD to ', mag
+        for i,b in enumerate(band):
+            cat[mag + '_'+b] = cat[mag + '_'+b] + cat[correction_tag] * coeff[i]    
+
+    return cat
+
+
+
+def _AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
     import numpy.lib.recfunctions as rf
     import pandas as pd
 
@@ -495,7 +621,7 @@ def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
 
     #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
     #sfdfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
-    
+    sfdmap = '/n/des/lee.5922/data/systematic_maps/ebv_sfd98_fullres_nside_4096_nest_equatorial.fits'
     #sysMap_ge = calling_sysMap( properties=['GE'], kind=kind, nside=512 )
     gepath = '/n/des/lee.5922/data/2mass_cat/'
     from systematics import loadSystematicMaps

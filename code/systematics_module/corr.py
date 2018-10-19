@@ -624,6 +624,8 @@ def _acf(data, rand, weight = None, nbins = 20, min_sep = 2.5/60., max_sep = 250
         #weight_data = data['WEIGHT']#*data['WEIGHT_SYSTOT']*( data['WEIGHT_CP'] + data['WEIGHT_NOZ'] - 1.)
         #weight_rand = rand['WEIGHT']
 
+    #print weight_data.size
+    #print rand.size
     
     cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w = weight_data, ra_units='deg', dec_units='deg')
     cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w = weight_rand, ra_units='deg', dec_units='deg')
@@ -649,7 +651,42 @@ def _acf(data, rand, weight = None, nbins = 20, min_sep = 2.5/60., max_sep = 250
     
     xi, varxi = dd.calculateXi(rr,dr)
     
-    return dd.meanr, xi, varxi
+    return dd.meanr, xi, np.sqrt(varxi)
+    #return dd, dr, rr
+
+def angular_correlation_poisson(data, rand, weight_data = None, weight_rand = None, 
+    nbins = 20, min_sep = 2.5/60., max_sep = 250/60., dir = './', suffix=''):
+    # cmass and balrog : all systematic correction except obscuration should be applied before passing here
+    
+    import treecorr
+    
+    cat = treecorr.Catalog(ra=data['RA'], dec=data['DEC'], w = weight_data, ra_units='deg', dec_units='deg')
+    cat_rand = treecorr.Catalog(ra=rand['RA'], dec=rand['DEC'], is_rand=True, w = weight_rand, ra_units='deg', dec_units='deg')
+
+    #nbins = 20
+    #bin_size = 0.5
+    #min_sep = 2.5/60.
+    #max_sep = 250/60.
+    sep_units = 'degree'
+
+    dd = treecorr.NNCorrelation(nbins = nbins, max_sep = max_sep, min_sep= min_sep, sep_units=sep_units)
+    dr = treecorr.NNCorrelation(nbins = nbins, max_sep = max_sep, min_sep= min_sep, sep_units=sep_units)
+    rr = treecorr.NNCorrelation(nbins = nbins, max_sep = max_sep, min_sep= min_sep, sep_units=sep_units)
+    
+    dd.process(cat)
+    dr.process(cat,cat_rand)
+    rr.process(cat_rand)
+    
+    xi, varxi = dd.calculateXi(rr,dr)
+    errxi = np.sqrt(varxi)
+
+    filename = dir+'/acf_auto'+suffix+'.txt'
+    header = 'r, xi, jkerr'
+    DAT = np.column_stack((dd.meanr, xi, errxi ))
+    np.savetxt( filename, DAT, delimiter=' ', header=header )
+    #np.savetxt(dir+'/acf_auto'+suffix+'.cov', xi_cov, header=''+str(r))
+    #np.savetxt(dir+'/acf_auto'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
+    print "saving data file to : ",filename
 
 
 def angular_correlation(data = None, rand = None, njack = 30, nbins=20, min_sep = 2.5/60, max_sep=250/60., weight = None, mpi=True, suffix = '', out = None, dir = './'):
@@ -658,7 +695,8 @@ def angular_correlation(data = None, rand = None, njack = 30, nbins=20, min_sep 
     from suchyta_utils import jk
     print 'calculate angular correlation function'
     #r, xi, xierr = _acf( data, rand, weight = weight )
-    
+    #
+    #os.system('rm -rf ./jkregion.txt')
     jkfile = './jkregion.txt'
 
     raTag, decTag = 'RA', 'DEC'

@@ -9,6 +9,22 @@ import fitsio
 from fitsio import FITS, FITSHDR
 
 
+def SearchFitsByName(path = None, keyword = None, columns = None):
+    import os, sys
+    
+    print '\n--------------------------------\n Existing catalog\n--------------------------------'
+    
+    tables = []
+    for i in os.listdir(path):
+        if os.path.isfile(os.path.join(path,i)) and keyword in i:
+            tables.append(path+i)
+            print i
+            sys.stdout.flush()
+
+    #data = esutil.io.read(tables, columns = columns, combine = True)
+    return tables
+
+
 def SearchAndCallFits(path = None, keyword = None, columns = None):
     import os, sys
     

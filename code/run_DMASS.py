@@ -81,7 +81,7 @@ def train_st82(params, param_file):
                'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y']
 
     gold_st82 = io.SearchAndCallFits(path = path, columns = columns, keyword = 'Y1A1_GOLD_STRIPE82_v2')
-    gold_st82 = gold_st82[gold_st82['MODEST_CLASS'] == 1]
+    gold_st82 = gold_st82[(gold_st82['MODEST_CLASS'] == 1)&(gold_st82['FLAGS_GOLD'] == 0 )]
     gold_st82 = Cuts.keepGoodRegion(gold_st82)
 
 
@@ -92,7 +92,7 @@ def train_st82(params, param_file):
             gold_st82 = AddingSFD98Reddening(gold_st82, kind='STRIPE82')
 
     # flags and color cut
-    mask_all = (gold_st82['FLAGS_GOLD'] == 0 )&(priorCut_test(gold_st82))
+    mask_all = priorCut_test(gold_st82)
     gold_st82 = gold_st82[mask_all]
 
     # calling BOSS cmass and applying dmass goodregion mask ----------------------------
@@ -141,8 +141,28 @@ def train_st82(params, param_file):
     n_cmass, n_no = None, None
     if 'n_cmass' in params : n_cmass = params['n_cmass']  
     if 'n_no' in params : n_no = params['n_no'] 
-    clf_cmass = XD_fitting( data = clean_cmass_data_des, pickleFileName = cmass_pickle, n_cl = n_cmass )                 
-    clf_no = XD_fitting( data = nocmass, pickleFileName = no_pickle , n_cl = n_no)
+
+
+    init_params_cmass = None
+    init_params_no = None
+    if 'continue' in params : 
+        if params['continue'] : 
+            init_params_cmass = cmass_pickle
+            cmass_pickle = cmass_pickle+'.update'
+            params['cmass_pickle'] = params['cmass_pickle'] + '.update'
+
+            init_params_no = no_pickle
+            no_pickle = no_pickle +'.update'
+            params['no_pickle'] = params['no_pickle'] + '.update'
+
+            print 'resuming from the existing pkl files'
+            print cmass_pickle
+            print no_pickle
+
+    clf_cmass = XD_fitting( data = clean_cmass_data_des, pickleFileName = cmass_pickle, 
+        n_cl = n_cmass, n_iter = 10000, tol = 1E-5, verbose = True, init_params= init_params_cmass)                 
+    clf_no = XD_fitting( data = nocmass, pickleFileName = no_pickle , 
+        n_cl = n_no, n_iter = 10000, tol = 1E-5, verbose = True, init_params = init_params_no)
 
     
     print '\n--------------------------\n Fitting End\n---------------------------'
@@ -163,30 +183,35 @@ def main_st82(params):
     if 'num_mock' in params : 
         num_mock = params['num_mock']
 
-    columns = ['FLAGS_GOLD', 'FLAGS_BADREGION', 'MAG_MODEL_G', 'MAG_MODEL_R', 'MAG_MODEL_I', 'MAG_MODEL_Z',\
-               'MAG_DETMODEL_G', 'MAG_DETMODEL_R', 'MAG_DETMODEL_I', 'MAG_DETMODEL_Z', 'MAGERR_DETMODEL_G',\
-               'MAGERR_DETMODEL_R', 'MAGERR_DETMODEL_I', 'MAGERR_DETMODEL_Z', 'MAGERR_MODEL_G', 'MAGERR_MODEL_R',\
-               'MAGERR_MODEL_I', 'MAGERR_MODEL_Z', 'MAG_AUTO_G', 'MAG_AUTO_R', 'MAG_AUTO_I', 'MAG_AUTO_Z', 'RA',\
-               'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP', \
-               'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y']
+    if os.path.exists(out_catname): 
+        print 'probability catalog already exists. Use this for sampling.'
+        pass
 
-    gold_st82 = io.SearchAndCallFits(path = input_path, columns = columns, keyword = input_keyword)
-    gold_st82 = gold_st82[gold_st82['MODEST_CLASS'] == 1]
-    gold_st82 = Cuts.keepGoodRegion(gold_st82)
+    else : 
+        columns = ['FLAGS_GOLD', 'FLAGS_BADREGION', 'MAG_MODEL_G', 'MAG_MODEL_R', 'MAG_MODEL_I', 'MAG_MODEL_Z',\
+                   'MAG_DETMODEL_G', 'MAG_DETMODEL_R', 'MAG_DETMODEL_I', 'MAG_DETMODEL_Z', 'MAGERR_DETMODEL_G',\
+                   'MAGERR_DETMODEL_R', 'MAGERR_DETMODEL_I', 'MAGERR_DETMODEL_Z', 'MAGERR_MODEL_G', 'MAGERR_MODEL_R',\
+                   'MAGERR_MODEL_I', 'MAGERR_MODEL_Z', 'MAG_AUTO_G', 'MAG_AUTO_R', 'MAG_AUTO_I', 'MAG_AUTO_Z', 'RA',\
+                   'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP',
+                   'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y']
 
-    if 'SFD98' in params : 
-        if params['SFD98'] : 
-            print 'change reddening corrections from SLR to SFD98'
-            gold_st82 = RemovingSLRReddening(gold_st82)
-            gold_st82 = AddingSFD98Reddening(gold_st82, kind='STRIPE82')
+        gold_st82 = io.SearchAndCallFits(path = input_path, columns = columns, keyword = input_keyword)
+        gold_st82 = gold_st82[ (gold_st82['MODEST_CLASS'] == 1) & (gold_st82['FLAGS_GOLD'] == 0 )]
+        gold_st82 = Cuts.keepGoodRegion(gold_st82)
 
-    # flags and color cut
-    mask_all = (gold_st82['FLAGS_GOLD'] == 0 )&(priorCut_test(gold_st82))
-    gold_st82 = gold_st82[mask_all]
-    
+        if 'SFD98' in params : 
+            if params['SFD98'] : 
+                print 'change reddening corrections from SLR to SFD98'
+                gold_st82 = RemovingSLRReddening(gold_st82)
+                gold_st82 = AddingSFD98Reddening(gold_st82, kind='STRIPE82')
 
-    clf_cmass = XD_fitting( None, pickleFileName = cmass_pickle)               
-    clf_no = XD_fitting( None, pickleFileName = no_pickle)
+        # flags and color cut
+        mask_all = priorCut_test(gold_st82)
+        gold_st82 = gold_st82[mask_all]
+        
+
+        clf_cmass = XD_fitting( None, pickleFileName = cmass_pickle)               
+        clf_no = XD_fitting( None, pickleFileName = no_pickle)
     
     # assign membership prob ----------------------------------
     if os.path.exists(out_catname): gold_st82 = fitsio.read(out_catname)
@@ -198,14 +223,16 @@ def main_st82(params):
         fitsio.write(out_catname, gold_st82, clobber=True)
         
     # resampling with assigned membership probability -------------------
+
+    """
     print '\n--------------------------------\n resampling\n--------------------------------'
 
     print 'make '+str(num_mock)+' catalogs'
     for ii in range( num_mock ):
-        dmass, _ = resampleWithPth( gold_st82, pstart = 0.01, pmax = 1.0 )
+        dmass, _ = resampleWithPth( gold_st82, pstart = 0.0, pmax = 1.0 )
         print 'dmass sample size ', out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass.size
         fitsio.write(out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass, clobber=True)
-
+    """
 
 def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt' ):
 
@@ -326,12 +353,12 @@ def main_spt(params):
     out_resampled_cat = output_dir + params['out_resampled_cat']
     input_path = params['input_cat_dir']
     input_keyword = params['input_cat_keyword']
-    njack = 10
+    njack = 8
     num_mock = 1
     if 'num_mock' in params : 
         num_mock = params['num_mock']
 
-    jkoutname = out_catname+'_jk{:03}.fits'.format(1)
+    jkoutname = out_catname # +'_jk{:03}.fits'.format(1)
     if os.path.exists(jkoutname): 
         print 'probability catalog already exists. Use this for sampling.'
         pass
@@ -364,66 +391,94 @@ def main_spt(params):
         # dmass from spt
         #rabin = np.linspace(des_spt['RA'].min(), des_spt['RA'].max(), 15)
         #ind_map = np.digitize(des_spt['RA'], bins = rabin)
-        ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir )
-    
-    
-    #des_spt_list = []
+        #print 'before', des_spt.size
+        #des_spt_list = []
 
-    #if 'SFD98' in params : 
-    #    if params['SFD98'] : 
-    #        print 'change reddening corrections from SLR to SFD98'
-    #        des_spt = RemovingSLRReddening(des_spt)
-    #        des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+
+
+        if 'SFD98' in params : 
+            if params['SFD98'] : 
+                print 'change reddening corrections from SLR to SFD98'
+                des_spt = RemovingSLRReddening(des_spt )
+                des_spt = des_spt[priorCut_test(des_spt)]
+                des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+
+                """
+                indarray = np.arange( des_spt.size )
+                split_indarray = np.array_split(indarray, 5)
+
+
+                des_spt_corrected = []
+                for si in split_indarray:
+                    des_spt_i = des_spt[si] 
+                    des_spt_i = RemovingSLRReddening(des_spt_i )
+                    des_spt_i = des_spt_i[priorCut_test(des_spt_i)]
+                    des_spt_i = AddingSFD98Reddening(des_spt_i, kind='SPT')
+                    #des_spt_i = des_spt_i[priorCut_test(des_spt_i)]
+                    des_spt_corrected.append(des_spt_i)
+
+                des_spt = np.hstack( des_spt_corrected )
+                des_spt_corrected = None
+                """
+
+        ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir )
         
-        #dmass_spt = []
+
     prob_spt = []
+
+    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'])
+    if len(jkoutnames) == 0 : 
+            
+        for i in range(njack):
+
+            outname = out_catname+'_jk{:03}.fits'.format(i+1)
+            if os.path.exists(outname): ts = fitsio.read(outname)
+            else : 
+                des_spt_i = des_spt[ind_map == i]
+                ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
+                fitsio.write(outname, ts)
+                print 'prob cat save to ', outname
+                
+            prob_spt.append(ts)
+            ts = None
+    
+    else : 
+        prob_spt = [fitsio.read(jko) for jko in jkoutnames] 
+
+    """
     for i in range(njack):
 
         outname = out_catname+'_jk{:03}.fits'.format(i+1)
         if os.path.exists(outname): ts = fitsio.read(outname)
         else : 
             des_spt_i = des_spt[ind_map == i]
-            if 'SFD98' in params : 
-                if params['SFD98'] : 
-                    print 'change reddening corrections from SLR to SFD98'
-                    des_spt_i = RemovingSLRReddening(des_spt_i)
-                    des_spt_i = AddingSFD98Reddening(des_spt_i, kind='SPT')
-                    des_spt_i = des_spt[priorCut_test(des_spt)]
-                else : des_spt_i = des_spt[priorCut_test(des_spt)]
-
-            else : des_spt_i = des_spt[priorCut_test(des_spt)]
-
             ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
             fitsio.write(outname, ts)
             
         prob_spt.append(ts)
         ts = None
-
+    """
     prob_spt = np.hstack(prob_spt)
 
 
-
+    """
     print 'make '+str(num_mock)+' catalogs'
     for ii in range( num_mock ):
 
-        dmass_spt, _ = resampleWithPth( prob_spt, pstart = 0.01, pmax = 1.0 )
+        dmass_spt, _ = resampleWithPth( prob_spt, pstart = 0.0, pmax = 1.0 )
         #dmass_spt.append(dm)
         #outname = out_catname.split('.')[0]+'_jk{:03}.fits'.format(i+1)
             
         if ii == 0 :
             print 'jk sample size :', dmass_spt.size
-            print 'prob cat save to ', outname
+            #print 'prob cat save to ', outname
         #des_spt = np.hstack(des_spt_list)
-       #dmass_spt = np.hstack(dmass_spt)
+        #dmass_spt = np.hstack(dmass_spt)
         #fitsio.write(out_resampled_cat, dmass_spt)
         fitsio.write(out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt)
-        print 'dmass mock saved to ', out_resampled_cat+'_{:04}.fits'.format(ii+1)
+        print 'dmass mock saved to ', out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt.size
     
-    # resampling
-    #dmass_spt, _ = resampleWithPth( des_spt, pstart = 0.01, pmax = 1.0 )
-    
-    #save dmass
-    #fitsio.write(out_resampled_cat, dmass_spt)
+    """
     
 if __name__=='__main__':
 

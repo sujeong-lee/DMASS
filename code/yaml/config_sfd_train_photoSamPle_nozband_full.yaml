@@ -3,17 +3,19 @@
 ############################################### 
 
 #debug : True
-fitting : False
+fitting : True
+continue : True
 random_sampling : False
-output_dir : output/sfd_train_photo_SamPle_full2/
+output_dir : output/sfd_train_photo_SamPle_nozband_full/
 train_sample : /n/des/lee.5922/data/cmass_cat/cmass-dr12v4-S-Reid-full.dat.fits
 cmass_pickle : gold_st82_XD_cmass.pkl
 no_pickle : gold_st82_XD_no.pkl
 num_mock : 10
 cmass_fraction : cmassfrac
-n_cmass : 8 
-n_no : 26
+n_cmass : 
+n_no : 25 
 SFD98 : True
+
 
 cat_area : st82
 input_cat_dir : /n/des/lee.5922/data/gold_cat/
