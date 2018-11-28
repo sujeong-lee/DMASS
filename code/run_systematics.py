@@ -26,17 +26,18 @@ def fitting_allSP( suffix, properties = None, kind = 'SPT', inputdir = None, plo
 
     filters = ['g', 'r', 'i', 'z']
 
-    fitting_SP( property = ['DEPTH', 'EXPTIME', 'AIRMASS', 'FWHM'], filter=filters, kind = kind, 
+    print 'all linear function'
+    fitting_SP( property = ['DEPTH', 'EXPTIME', 'AIRMASS', 'FWHM', 'SKYBRITE'], filter=filters, kind = kind, 
                suffix=suffix, plot=plot, function = 'linear',
                     path = inputdir )
 
-    fitting_SP( property = ['SKYBRITE'], filter= ['g', 'r', 'z'], kind = kind, 
-               suffix=suffix, plot=plot, function = 'sqrt',
-                    path = inputdir )
+    #fitting_SP( property = ['SKYBRITE'], filter= ['g', 'r', 'i', 'z'], kind = kind, 
+    #           suffix=suffix, plot=plot, function = 'sqrt',
+    #                path = inputdir )
 
-    fitting_SP( property = ['SKYBRITE'], filter=['i'], kind = kind, 
-               suffix=suffix, plot=plot, function = 'errftn',
-                path = inputdir )
+    #fitting_SP( property = ['SKYBRITE'], filter=['i'], kind = kind, 
+    #           suffix=suffix, plot=plot, function = 'errftn',
+    #            path = inputdir )
     
     if 'NSTARS_allband' in properties : 
     	fitting_SP( property = ['NSTARS_allband'], filter=['g'], kind = kind, 
@@ -99,69 +100,6 @@ def calling_sysMap( properties=None, kind='SPT', nside=4096, path = None ):
 
 
 
-def maskingCatalogSP(catalog=None, sysMap=None):
-    
-    
-    exp_i_hpind = sysMap['sys_EXPTIME_i_SPT']['PIXEL'][(sysMap['sys_EXPTIME_i_SPT']['SIGNAL'] < 500)]
-    fwhm_r_hpind = sysMap['sys_FWHM_r_SPT']['PIXEL'][(sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 4.5)]
-    #ge_hpind = sysMap['sys_GE_g_SPT']['PIXEL'][(sysMap['sys_GE_g_SPT']['SIGNAL'] < 0.09)]
-    #ge_hpind = sysMap['sys_GE_g_SPT']['PIXEL'][(sysMap['sys_GE_g_SPT']['SIGNAL'] < 100000)]
-    #skybrite_g_hpind = sysMap['sys_SKYBRITE_g_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 170)]
-    #skybrite_i_hpind = sysMap['sys_SKYBRITE_i_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 1400)]
-    skybrite_g_hpind = sysMap['sys_SKYBRITE_g_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 1700000)]
-    skybrite_i_hpind = sysMap['sys_SKYBRITE_i_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 14000000)]  
-    
-    all_mask1 = np.zeros( hp.nside2npix(4096), dtype=bool )
-    all_mask2 = np.zeros( hp.nside2npix(4096),dtype=bool )
-    all_mask3 = np.zeros( hp.nside2npix(4096),dtype=bool )
-    all_mask4 = np.zeros( hp.nside2npix(4096),dtype=bool )
-    
-    all_mask512 = np.zeros( hp.nside2npix(512),dtype=bool )
-    
-    all_mask1[exp_i_hpind] = 1
-    all_mask2[fwhm_r_hpind] = 1
-    all_mask3[skybrite_g_hpind] = 1
-    all_mask4[skybrite_i_hpind] = 1
-    
-    #all_mask512[ge_hpind] = 1
-    all_mask512 = np.ones( hp.nside2npix(512),dtype=bool )
-    all_mask4096 = all_mask1 * all_mask2 * all_mask3* all_mask4
-
-
-    all_ind4096 = np.arange( hp.nside2npix(4096) )
-    all_ind512 = np.arange( hp.nside2npix(512) )
-    goodindices4096 = all_ind4096[all_mask4096]
-    goodindices512 = all_ind512[all_mask512]
-  
-    
-    #goodindices = np.hstack([exp_i_hpind, fwhm_r_hpind, ge_hpind])
-    
-    #exp_mask =  (sysMap['sys_EXPTIME_i_SPT']['SIGNAL'] < 500) &  (sysMap['sys_EXPTIME_r_SPT']['SIGNAL'] < 500)
-    #fwhm_mask = ((sysMap['sys_FWHM_g_SPT']['SIGNAL'] < 500) & (sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 500) 
-    #            & (sysMap['sys_FWHM_i_SPT']['SIGNAL'] < 500) & (sysMap['sys_FWHM_z_SPT']['SIGNAL'] < 500))
-
-    fwhm_mask = (sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 4.5) 
-    skybrite_mask = (sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 160) & (sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 1400) \
-    &(sysMap['sys_SKYBRITE_z_SPT']['SIGNAL'] < 3000) 
-    
-    #ge_mask = (sysMap['sys_GE_g_SPT']['SIGNAL'] < 0.08)  
-    #all_mask = fwhm_mask*exp_mask*skybrite_mask
-    #print 'exp mask ', 1. - np.sum(exp_mask) *1./exp_mask.size
-    #print 'fwhm mask', 1. - np.sum(fwhm_mask) *1./fwhm_mask.size
-    #print 'skybrite mask', 1. - np.sum(skybrite_mask) *1./skybrite_mask.size
-    #print 'all mask', 1. - np.sum(fwhm_mask*exp_mask*skybrite_mask) *1./fwhm_mask.size   
-
-    catHpInd4096 = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=4096, nest=False)
-    catHpInd512 = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=512, nest=False)
-    HpIdxInsys_mask4096 = np.in1d(catHpInd4096, goodindices4096)
-    HpIdxInsys_mask512 = np.in1d(catHpInd512, goodindices512)
-    
-    HpIdxInsys_mask = HpIdxInsys_mask4096 * HpIdxInsys_mask512
-    
-    print HpIdxInsys_mask.size, np.sum(HpIdxInsys_mask)
-    print 'mask ', np.sum(HpIdxInsys_mask) * 1./catalog.size
-    return catalog[HpIdxInsys_mask]
-
 
 def sys_iteration( nextweight=None, suffix=None, all_weight = None, 
                   cat1=None, cat2=None, rand1 = None, rand2=None,
@@ -199,11 +137,192 @@ def sys_iteration( nextweight=None, suffix=None, all_weight = None,
     print 'suffix = ', suffix
     all_weight = np.multiply( all_weight, weightDic[nextweight] )
 
-    sys_ngal(cat1 = cat1, cat2=cat2, rand1 = rand1, rand2 = rand2, sysmap = sysMap, 
+    extremesys_mask_cat1 = maskingCatalogSP(catalog=cat1, sysMap=sysMap, maskonly=True) 
+    extremesys_mask_cat2 = maskingCatalogSP(catalog=cat2, sysMap=sysMap, maskonly=True) 
+    extremesys_mask_rand1 = maskingCatalogSP(catalog=rand1, sysMap=sysMap, maskonly=True) 
+    extremesys_mask_rand2 = maskingCatalogSP(catalog=rand2, sysMap=sysMap, maskonly=True) 
+
+    sys_ngal(cat1 = cat1[extremesys_mask_cat1], cat2=cat2[extremesys_mask_cat2], 
+             rand1 = rand1[extremesys_mask_rand1], rand2 = rand2[extremesys_mask_rand2], sysmap = sysMap, 
              FullArea = FullArea, properties = properties, kind=kind, nbins = 15,
              pixelmask = None, reweight = all_weight, 
              suffix=suffix, outdir=path)
 
+
+def plot_sysweight(property = None, nside = 1024, kind = 'SPT', suffix1='', suffix2='', inputdir1 = '.', inputdir2 = '.', outdir='./', hist=False):
+
+    #import matplotlib.pyplot as plt
+    #import numpy as np
+    from systematics import SysMapBadRegionMask, loadSystematicMaps, MatchHPArea, chisquare_dof, ReciprocalWeights
+    from systematics_module.corr import angular_correlation
+    
+    
+    filters = ['g', 'r', 'i', 'z']
+    #filters = ['g']
+    
+    
+    if property is 'NSTARS_allband' :
+        nside = 1024
+        filters = ['g']
+    if property is 'GE':
+        nside = 512
+        filters = ['g']
+        
+    fig, ax = plt.subplots(2, 2, figsize = (15, 10))
+    ax = ax.ravel()
+
+    for i, filter in enumerate(filters):
+        filename1 = inputdir1+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix1+'.txt'
+        filename2 = inputdir2+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix2+'.txt'
+        #print filename
+        data1 = np.loadtxt(filename1)
+        data2 = np.loadtxt(filename2)
+        bins, Cdensity, Cerr, Cf_area, _, _, _ = [data1[:,j] for j in range(data1[0].size)]
+        bins, Bdensity, Berr, Bf_area, _, _, _ = [data2[:,j] for j in range(data2[0].size)]
+        Cf_area = Cf_area * 1./Cf_area.max()/5.
+
+        #zeromaskC, zeromaskB = ( Cdensity != 0.0 )*( Cerr != 0.0 ), (Bdensity != 0.0 )*( Berr != 0.0 )
+        zeromaskC = ( Cdensity != 0.0 ) 
+        zeromaskB = ( Bdensity != 0.0 )
+        #Cdensity, Cbins, Cerr, Cf_area = Cdensity, bins, Cerr, Cf_area #Cdensity[zeromaskC], bins[zeromaskC], Cerr[zeromaskC]
+        #C_jkerr = C_jkerr[zeromaskC]
+        #Bdensity, Bbins, Berr = Bdensity, bins, Berr #Bdensity[zeromaskB],bins[zeromaskB],Berr[zeromaskB]
+        #B_jkerr = B_jkerr[zeromaskB]
+
+        #fitting
+        #Cchi, Cchidof = chisquare_dof( bins[zeromaskC], Cdensity[zeromaskC], Cerr[zeromaskC] )
+        #Bchi, Bchidof = chisquare_dof( bins[zeromaskB], Bdensity[zeromaskB], Berr[zeromaskB] )
+    
+        nCbins = np.sum(zeromaskC)
+        nBbins = np.sum(zeromaskB)
+        Cchi = np.sum( (Cdensity[zeromaskC] - 1.0 * np.ones(nCbins) )**2/Cerr[zeromaskC]**2 )
+        Bchi = np.sum( (Bdensity[zeromaskB] - 1.0 * np.ones(nBbins) )**2/Berr[zeromaskB]**2 )
+
+        #ax[i].errorbar(bins[zeromaskC] , Cdensity[zeromaskC], yerr = Cerr[zeromaskC], 
+        #    color = 'grey', fmt = '.-', capsize=3, label='no weight, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+        ax[i].plot(bins[zeromaskC] , Cdensity[zeromaskC], color = 'grey', label='no weight, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+        ax[i].errorbar(bins[zeromaskB]*1.0 , Bdensity[zeromaskB], yerr = Berr[zeromaskB], 
+            color = 'red', fmt= '.-', capsize=3, label='weighted, chi2/dof={:>2.2f}/{:3.0f}'.format(Bchi, nBbins) )
+
+        #ax[i].bar(Bbins+(bins[1]-bins[0])*0.1, Bf_area[zeromaskB]+0.7, (bins[1]-bins[0]) ,color = 'red', alpha=0.3 )
+        ax[i].set_xlabel('{}_{} (mean)'.format(property, filter))
+        ax[i].set_ylabel('n_gal/n_tot '+str(nside))
+
+        ymin, ymax = 0.7, 1.3
+        if kind is 'SPT' : ymin, ymax = 0.7, 1.3
+        ax[i].set_ylim(ymin, ymax)
+        if hist : ax[i].bar(bins[zeromaskC], Cf_area[zeromaskC]+ymin,(bins[1]-bins[0]) ,color = 'grey', alpha = 0.1 )
+
+        #ax[i].set_xlim(8.2, 8.55)
+        ax[i].axhline(1.0,linestyle='--',color='grey')
+        #ax[i].legend(loc = 'best')
+        
+        #if property == 'FWHM' : ax[i].set_ylim(0.6, 1.4)
+        #if property == 'AIRMASS': ax[i].set_ylim(0.0, 2.0)
+        #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
+        if property is 'GE': ax[i].set_xscale('log')
+        if property == 'NSTARS': ax[i].set_xlim(0.0, 2.0)
+
+    fig.suptitle('systematic test ({})'.format(kind))
+    os.system('mkdir '+outdir)
+    figname = outdir+'comparison_systematic_'+property+'_'+kind+'_'+suffix2+'.pdf'
+    fig.savefig(figname)
+    print "saving fig to ", figname
+
+    return 0
+
+
+def plot_sysweight_one(property = None, filter = 'g', nside = 1024, kind = 'SPT', xlabel =None, ylabel = 'averaged Ng',
+    suffix1='', suffix2='', inputdir1 = '.', inputdir2 = '.', outdir='./', hist=False):
+
+    #import matplotlib.pyplot as plt
+    #import numpy as np
+    from systematics import SysMapBadRegionMask, loadSystematicMaps, MatchHPArea, chisquare_dof, ReciprocalWeights
+    from systematics_module.corr import angular_correlation
+    
+    
+    #filters = ['g', 'r', 'i', 'z']
+    #filters = ['g']
+    
+    #xlabel = property + '  ' + filter
+    print xlabel
+    if property is 'NSTARS_allband' :
+        nside = 1024
+        #xxlabel = property
+        #xxlabel = 'stellar density'
+        #filters = 'g'
+    if property is 'GE':
+        nside = 512
+        #xxlabel = property
+        #xxlabel = 'galactic extinction'
+        #filters = 'g'
+        
+    #fig, ax = plt.subplots(2, 2, figsize = (15, 10))
+    fig, ax = plt.subplots()
+    #ax = ax.ravel()
+
+    #for i, filter in enumerate(filters):
+
+    filename1 = inputdir1+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix1+'.txt'
+    filename2 = inputdir2+'/systematic_'+property+'_'+filter+'_'+kind+'_'+suffix2+'.txt'
+    #print filename
+    data1 = np.loadtxt(filename1)
+    data2 = np.loadtxt(filename2)
+    bins, Cdensity, Cerr, Cf_area, _, _, _ = [data1[:,j] for j in range(data1[0].size)]
+    bins, Bdensity, Berr, Bf_area, _, _, _ = [data2[:,j] for j in range(data2[0].size)]
+    Cf_area = Cf_area * 1./Cf_area.max()/5.
+
+    #zeromaskC, zeromaskB = ( Cdensity != 0.0 )*( Cerr != 0.0 ), (Bdensity != 0.0 )*( Berr != 0.0 )
+    zeromaskC = ( Cdensity != 0.0 ) 
+    zeromaskB = ( Bdensity != 0.0 )
+    #Cdensity, Cbins, Cerr, Cf_area = Cdensity, bins, Cerr, Cf_area #Cdensity[zeromaskC], bins[zeromaskC], Cerr[zeromaskC]
+    #C_jkerr = C_jkerr[zeromaskC]
+    #Bdensity, Bbins, Berr = Bdensity, bins, Berr #Bdensity[zeromaskB],bins[zeromaskB],Berr[zeromaskB]
+    #B_jkerr = B_jkerr[zeromaskB]
+
+    #fitting
+    #Cchi, Cchidof = chisquare_dof( bins[zeromaskC], Cdensity[zeromaskC], Cerr[zeromaskC] )
+    #Bchi, Bchidof = chisquare_dof( bins[zeromaskB], Bdensity[zeromaskB], Berr[zeromaskB] )
+
+    nCbins = np.sum(zeromaskC)
+    nBbins = np.sum(zeromaskB)
+    Cchi = np.sum( (Cdensity[zeromaskC] - 1.0 * np.ones(nCbins) )**2/Cerr[zeromaskC]**2 )
+    Bchi = np.sum( (Bdensity[zeromaskB] - 1.0 * np.ones(nBbins) )**2/Berr[zeromaskB]**2 )
+
+    #ax[i].errorbar(bins[zeromaskC] , Cdensity[zeromaskC], yerr = Cerr[zeromaskC], 
+    #    color = 'grey', fmt = '.-', capsize=3, label='no weight, chi2/dof={:>2.2f}/{:3.0f}'.format(Cchi, nCbins) )
+    ax.plot(bins[zeromaskC] , Cdensity[zeromaskC], color = '#006ED5', ls = '-')
+    ax.errorbar(bins[zeromaskB]*1.0 , Bdensity[zeromaskB], yerr = Berr[zeromaskB], 
+        color = 'k', fmt= '--o', capsize=5 )
+
+    #ax[i].bar(Bbins+(bins[1]-bins[0])*0.1, Bf_area[zeromaskB]+0.7, (bins[1]-bins[0]) ,color = 'red', alpha=0.3 )
+    ax.set_xlabel(xlabel, fontsize = 25)
+    ax.set_ylabel(ylabel, fontsize=25)
+
+    ymin, ymax = 0.7, 1.3
+    if kind is 'SPT' : ymin, ymax = 0.7, 1.3
+    ax.set_ylim(ymin, ymax)
+    if hist : ax.bar(bins[zeromaskC], Cf_area[zeromaskC]+ymin,(bins[1]-bins[0]) ,color = 'grey', alpha = 0.1 )
+
+    #ax[i].set_xlim(8.2, 8.55)
+    ax.axhline(1.0,linestyle='--',color='grey')
+    #ax[i].legend(loc = 'best')
+    
+    #if property == 'FWHM' : ax[i].set_ylim(0.6, 1.4)
+    #if property == 'AIRMASS': ax[i].set_ylim(0.0, 2.0)
+    #if property == 'SKYSIGMA': ax[i].set_xlim(12, 18)
+    if property is 'GE': ax.set_xscale('log')
+    if property == 'NSTARS': ax.set_xlim(0.0, 2.0)
+
+    #fig.suptitle('systematic test ({})'.format(kind))
+    os.system('mkdir '+outdir)
+    ax.tick_params(labelsize = 20)
+    figname = outdir+'comparison_systematic_'+property+'_'+filter+'.pdf'
+    fig.tight_layout()
+    fig.savefig(figname)
+    print "saving fig to ", figname
+
+    return 0
 
 
 def generating_randoms():

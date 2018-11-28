@@ -162,24 +162,24 @@ def getGoodRegionIndices(catalog=None, badHPInds=None, nside=4096, band=None, ra
 
 
 
-def spatialcheck(data, label = None, convert = None, zaxis = None, zlabel = None, suffix = '', dir='./'):
+def spatialcheck(data, label = None, convert = None, ratag='RA',dectag='DEC', zaxis = None, zlabel = None, suffix = '', dir='./'):
     
     jj = 0
     #fig, ax = plt.subplots(1,1,figsize = (7,7))
-    fig, ax = plt.subplots()
-    if len(data) > 100 :
+    fig, ax = plt.subplots(figsize = (10,8))
+    if len(data) > 1000 :
             print "Warning : Be careful when you put more than 20 data"
             data = [data]
 
-    if label is None: label = ['data_'+str(i+1) for i in range(0,len(data))]
+    if label is None: label = [None for i in range(0,len(data))]
     for d, l in zip(data, label):
         
         #rows = np.random.choice(np.arange(d.size), size = 500 )
         #d = d[rows]
         
         try:
-            ra = d['RA']
-            dec = d['DEC']
+            ra = d[ratag]
+            dec = d[dectag]
         
         except ValueError:
 
@@ -204,14 +204,14 @@ def spatialcheck(data, label = None, convert = None, zaxis = None, zlabel = None
         ra2 = ra.copy()
         ra2[ra > 180] = ra[ra > 180]-360
         if zaxis is None : 
-            if jj == 0 : ax.plot(ra2, dec, '.', alpha = 0.2, label = l , color = 'grey')
-            else : ax.plot(ra2, dec, '.', alpha = 0.3, label = l )
+            if jj == 0 : ax.plot(ra2, dec, '.', alpha = 0.2, label = l , color = 'grey', markersize= 3)
+            else : ax.plot(ra2, dec, '.', alpha = 0.3, label = l, markersize = 3 )
         else : 
             sc = ax.scatter( ra2, dec, c=zaxis)
             fig.colorbar( sc, ax=ax, label=zlabel  )
         jj += 1
 
-    
+    #ax.axvline(x = 0, lw = 1, color = 'k')
     ax.set_xlabel('RA')
     ax.set_ylabel('DEC')
     #ax.set_xlim(0,360)
@@ -897,21 +897,31 @@ def uniform_random_on_sphere(data, size = None, z=False ):
 
 ##### JK SAMPLING -------------------------------------------------------------------------------
 
-def construct_jk_catalog( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt', suffix = '' ):
+def construct_jk_catalog( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt', suffix = '' , retind = False):
 
-    km, jfile = GenerateRegions(cat, cat['RA'], cat['DEC'], jfile, njack, jtype)
+    import os
+    os.system('mkdir '+root)
+    km, jfile = GenerateRegions(cat, cat['RA'], cat['DEC'], root+jfile, njack, jtype)
     ind = AssignIndex(cat, cat['RA'], cat['DEC'], km)
     #ind_rand = AssignIndex(rand, rand['RA'], rand['DEC'], km)
     
-    catlist = []
-    for i in range(njack):
-        mask = (ind == i)
-        catlist.append(cat[mask])
-        #mask_rand = (ind_rand == i)
-        #_constructing_input_file(cat[mask], rand[mask_rand], root = root, suffix = suffix)
-        
-    #os.remove(jkfile)   
-    return catlist
+
+    if retind : 
+        if 'JKindex' in cat.dtype.names : cat['JKindex'] = ind
+        else : cat = appendColumn(cat, name = 'JKindex', value = ind, dtypes=None)
+        return cat
+
+    else : 
+        catlist = []
+        for i in range(njack):
+            mask = (ind == i)
+            catlist.append(cat[mask])
+            #mask_rand = (ind_rand == i)
+            #_constructing_input_file(cat[mask], rand[mask_rand], root = root, suffix = suffix)
+            
+        #os.remove(jkfile)  
+
+        return catlist
 
 def GenerateRegions(jarrs, jras, jdecs, jfile, njack, jtype):
 

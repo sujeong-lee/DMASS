@@ -106,7 +106,7 @@ def pixfracMask( catalog, nside = 4096 ):
 
 
 
-def callingEliGoldMask( nside = 4096 ):
+def callingOldY1BAOLSSMask( nside = 4096 ):
     
     # calling gold mask ----------------------------------------------------------------
     import healpy as hp
@@ -114,12 +114,14 @@ def callingEliGoldMask( nside = 4096 ):
     from systematics import hpHEALPixelToRaDec
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
-    path = '/n/des/lee.5922/data/systematic_maps/'
+    #path = '/n/des/lee.5922/data/systematic_maps/'
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
-    LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits')
-    frac_cut = (LSSGoldmask['FRAC'] >= 0.8)
-    LSSGoldmask = LSSGoldmask[frac_cut]
+    #maskname = '/n/des/lee.5922/data/gold_cat/mask/DES_Y1A1_LSSBAO_v1.0_MASK_HPIX4096RING.fits'
+    maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    LSSGoldmask = fitsio.read(maskname)
+    #frac_cut = (LSSGoldmask['FRAC'] >= 0.8)
+    #LSSGoldmask = LSSGoldmask[frac_cut]
 
     #path = '/n/des/lee.5922/data/balrog_cat/'
     #LSSGoldmask =  fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
@@ -144,17 +146,74 @@ def callingEliGoldMask( nside = 4096 ):
     
     ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) & (fraction > 0.8))[0]
     # healpixify the catalog.
+    """
 
-    GoldMask = np.zeros((ind_good_ring.size, ), dtype=[('PIXEL', 'i4'), ('RA', 'f8'), ('DEC', 'f8')])
-    GoldMask['PIXEL'] = ind_good_ring
-    #GoldMask['FRAC'] = fraction[ind_good_ring]
-    sys_ra, sys_dec = hpHEALPixelToRaDec(ind_good_ring, nside = nside)
+    #if 'RA' not in LSSGoldmask.dtype.names : 
+    GoldMask = np.zeros((LSSGoldmask.size, ), dtype=[('PIXEL', 'i4'), ('FRAC', 'f8'),('RA', 'f8'), ('DEC', 'f8')])
+    GoldMask['PIXEL'] = LSSGoldmask['PIXEL']
+    GoldMask['FRAC'] = LSSGoldmask['FRAC']
+    sys_ra, sys_dec = hpHEALPixelToRaDec(LSSGoldmask['PIXEL'], nside = nside)
     GoldMask['RA'] = sys_ra
     GoldMask['DEC'] = sys_dec
-    """
+    
     """ should consider cut-off ?? """
     # ----------------------------------------------------------------
-    return LSSGoldmask
+    return GoldMask
+    #return GoldMask
+
+def callingEliGoldMask( nside = 4096 ):
+    
+    # calling gold mask ----------------------------------------------------------------
+    import healpy as hp
+    import numpy as np
+    from systematics import hpHEALPixelToRaDec
+    # 25 is the faintest object detected by DES
+    # objects larger than 25 considered as Noise
+    #path = '/n/des/lee.5922/data/systematic_maps/'
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
+    #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    #maskname = '/n/des/lee.5922/data/gold_cat/mask/DES_Y1A1_LSSBAO_v1.0_MASK_HPIX4096RING.fits'
+    maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    LSSGoldmask = fitsio.read(maskname)
+    #frac_cut = (LSSGoldmask['FRAC'] >= 0.8)
+    #LSSGoldmask = LSSGoldmask[frac_cut]
+
+    #path = '/n/des/lee.5922/data/balrog_cat/'
+    #LSSGoldmask =  fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
+    #ind_good_ring2 = LSSGoldmask['PIXEL']
+    
+    
+    """
+    path = '/n/des/lee.5922/data/balrog_cat/'
+    goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
+    badmask = path+'y1a1_gold_1.0.2_wide_badmask_4096.fit'
+    # Note that the masks here in in equatorial, ring format.
+    gdmask = hp.read_map(goodmask)
+    bdmask = hp.read_map(badmask)
+    fraction = hp.read_map(path+'Y1A1_WIDE_frac_combined_griz_o.4096_t.32768_EQU.fits')
+
+    
+    if nside != 4096:
+        print "if resolution is degraded, pixel fraction column would not work properly "
+        gdmask = hp.ud_grade(gdmask, nside_out = nside )
+        bdmask = hp.ud_grade(bdmask, nside_out = nside )
+        fraction = hp.ud_grade(fraction, nside_out = nside )
+    
+    ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) & (fraction > 0.8))[0]
+    # healpixify the catalog.
+    """
+
+    #if 'RA' not in LSSGoldmask.dtype.names : 
+    GoldMask = np.zeros((LSSGoldmask.size, ), dtype=[('PIXEL', 'i4'), ('FRAC', 'f8'),('RA', 'f8'), ('DEC', 'f8')])
+    GoldMask['PIXEL'] = LSSGoldmask['PIXEL']
+    GoldMask['FRAC'] = LSSGoldmask['FRAC']
+    sys_ra, sys_dec = hpHEALPixelToRaDec(LSSGoldmask['PIXEL'], nside = nside)
+    GoldMask['RA'] = sys_ra
+    GoldMask['DEC'] = sys_dec
+    
+    """ should consider cut-off ?? """
+    # ----------------------------------------------------------------
+    return GoldMask
     #return GoldMask
 
 
@@ -442,8 +501,8 @@ def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096,
         #if filter == 'z' : max = 26
     if property == 'EXPTIME': 
         #pass
-        bin_num = bin_num*2
-        #max = 600    
+        #bin_num = bin_num
+        max = 800    
     #if property == 'DEPTH':
     if property == 'GE' : 
         log = True
@@ -701,6 +760,70 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
             print 'saving fig to ', figname
 
 
+def maskingCatalogSP(catalog=None, sysMap=None, maskonly=False):
+    
+    
+    exp_i_hpind = sysMap['sys_EXPTIME_i_SPT']['PIXEL'][(sysMap['sys_EXPTIME_i_SPT']['SIGNAL'] < 500000000)]
+    fwhm_r_hpind = sysMap['sys_FWHM_r_SPT']['PIXEL'][(sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 4.5)]
+    #ge_hpind = sysMap['sys_GE_g_SPT']['PIXEL'][(sysMap['sys_GE_g_SPT']['SIGNAL'] < 0.09)]
+    #ge_hpind = sysMap['sys_GE_g_SPT']['PIXEL'][(sysMap['sys_GE_g_SPT']['SIGNAL'] < 100000)]
+    #skybrite_g_hpind = sysMap['sys_SKYBRITE_g_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 170)]
+    #skybrite_i_hpind = sysMap['sys_SKYBRITE_i_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 1400)]
+    skybrite_g_hpind = sysMap['sys_SKYBRITE_g_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 1700000)]
+    skybrite_i_hpind = sysMap['sys_SKYBRITE_i_SPT']['PIXEL'][(sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 14000000)]  
+    
+    all_mask1 = np.zeros( hp.nside2npix(4096), dtype=bool )
+    all_mask2 = np.zeros( hp.nside2npix(4096),dtype=bool )
+    all_mask3 = np.zeros( hp.nside2npix(4096),dtype=bool )
+    all_mask4 = np.zeros( hp.nside2npix(4096),dtype=bool )
+    
+    all_mask512 = np.zeros( hp.nside2npix(512),dtype=bool )
+    
+    all_mask1[exp_i_hpind] = 1
+    all_mask2[fwhm_r_hpind] = 1
+    all_mask3[skybrite_g_hpind] = 1
+    all_mask4[skybrite_i_hpind] = 1
+    
+    #all_mask512[ge_hpind] = 1
+    all_mask512 = np.ones( hp.nside2npix(512),dtype=bool )
+    all_mask4096 = all_mask1 * all_mask2 * all_mask3* all_mask4
+
+
+    all_ind4096 = np.arange( hp.nside2npix(4096) )
+    all_ind512 = np.arange( hp.nside2npix(512) )
+    goodindices4096 = all_ind4096[all_mask4096]
+    goodindices512 = all_ind512[all_mask512]
+  
+    
+    #goodindices = np.hstack([exp_i_hpind, fwhm_r_hpind, ge_hpind])
+    
+    #exp_mask =  (sysMap['sys_EXPTIME_i_SPT']['SIGNAL'] < 500) &  (sysMap['sys_EXPTIME_r_SPT']['SIGNAL'] < 500)
+    #fwhm_mask = ((sysMap['sys_FWHM_g_SPT']['SIGNAL'] < 500) & (sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 500) 
+    #            & (sysMap['sys_FWHM_i_SPT']['SIGNAL'] < 500) & (sysMap['sys_FWHM_z_SPT']['SIGNAL'] < 500))
+
+    fwhm_mask = (sysMap['sys_FWHM_r_SPT']['SIGNAL'] < 4.5) 
+    skybrite_mask = (sysMap['sys_SKYBRITE_g_SPT']['SIGNAL'] < 160) & (sysMap['sys_SKYBRITE_i_SPT']['SIGNAL'] < 1400) \
+    &(sysMap['sys_SKYBRITE_z_SPT']['SIGNAL'] < 3000) 
+    
+    #ge_mask = (sysMap['sys_GE_g_SPT']['SIGNAL'] < 0.08)  
+    #all_mask = fwhm_mask*exp_mask*skybrite_mask
+    #print 'exp mask ', 1. - np.sum(exp_mask) *1./exp_mask.size
+    #print 'fwhm mask', 1. - np.sum(fwhm_mask) *1./fwhm_mask.size
+    #print 'skybrite mask', 1. - np.sum(skybrite_mask) *1./skybrite_mask.size
+    #print 'all mask', 1. - np.sum(fwhm_mask*exp_mask*skybrite_mask) *1./fwhm_mask.size   
+
+    catHpInd4096 = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=4096, nest=False)
+    catHpInd512 = hpRaDecToHEALPixel(catalog['RA'], catalog['DEC'], nside=512, nest=False)
+    HpIdxInsys_mask4096 = np.in1d(catHpInd4096, goodindices4096)
+    HpIdxInsys_mask512 = np.in1d(catHpInd512, goodindices512)
+    
+    HpIdxInsys_mask = HpIdxInsys_mask4096 * HpIdxInsys_mask512
+    
+    print HpIdxInsys_mask.size, np.sum(HpIdxInsys_mask)
+    print 'mask ', np.sum(HpIdxInsys_mask) * 1./catalog.size
+    if maskonly : return HpIdxInsys_mask
+    else : return catalog[HpIdxInsys_mask]
+
 
 def calculate_weight( property = None, filter=None, kind = None, suffix='', plot=False, function = None,
                 path = '../data_txt/systematics/', catalog = None, sysMap= None, 
@@ -708,7 +831,9 @@ def calculate_weight( property = None, filter=None, kind = None, suffix='', plot
 
    
     import scipy
-        
+     
+      
+
     #for p in property :
     p = property
     f = filter
@@ -793,7 +918,10 @@ def calculate_weight( property = None, filter=None, kind = None, suffix='', plot
         HpIdxInSys_mask = np.in1d(catHpInd, sysMap_i['PIXEL'])
         wg[HpIdxInSys_mask] = 1./C_predict[i]
         #print np.sum(HpIdxInSys_mask), 1./C_predict[i], sysMap_i['PIXEL'].size
-                        
+       
+    extremesys_mask = maskingCatalogSP(catalog=catalog, sysMap=sysMap, maskonly=True) 
+    wg[~extremesys_mask] = 0  
+    print 'cutting out ', np.sum(~extremesys_mask)              
     return wg
 
 

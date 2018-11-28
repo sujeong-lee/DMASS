@@ -78,7 +78,7 @@ def train_st82(params, param_file):
                'MAGERR_DETMODEL_R', 'MAGERR_DETMODEL_I', 'MAGERR_DETMODEL_Z', 'MAGERR_MODEL_G', 'MAGERR_MODEL_R',\
                'MAGERR_MODEL_I', 'MAGERR_MODEL_Z', 'MAG_AUTO_G', 'MAG_AUTO_R', 'MAG_AUTO_I', 'MAG_AUTO_Z', 'RA',\
                'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP',\
-               'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y']
+               'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y', 'EBV']
 
     gold_st82 = io.SearchAndCallFits(path = path, columns = columns, keyword = 'Y1A1_GOLD_STRIPE82_v2')
     gold_st82 = gold_st82[(gold_st82['MODEST_CLASS'] == 1)&(gold_st82['FLAGS_GOLD'] == 0 )]
@@ -145,8 +145,11 @@ def train_st82(params, param_file):
 
     init_params_cmass = None
     init_params_no = None
+    tol = 1E-5
     if 'continue' in params : 
         if params['continue'] : 
+            tol = float(params['tol'])
+
             init_params_cmass = cmass_pickle
             cmass_pickle = cmass_pickle+'.update'
             params['cmass_pickle'] = params['cmass_pickle'] + '.update'
@@ -160,9 +163,9 @@ def train_st82(params, param_file):
             print no_pickle
 
     clf_cmass = XD_fitting( data = clean_cmass_data_des, pickleFileName = cmass_pickle, 
-        n_cl = n_cmass, n_iter = 10000, tol = 1E-5, verbose = True, init_params= init_params_cmass)                 
+        n_cl = n_cmass, n_iter = 10000, tol = tol, verbose = True, init_params= init_params_cmass)                 
     clf_no = XD_fitting( data = nocmass, pickleFileName = no_pickle , 
-        n_cl = n_no, n_iter = 10000, tol = 1E-5, verbose = True, init_params = init_params_no)
+        n_cl = n_no, n_iter = 10000, tol = tol, verbose = True, init_params = init_params_no)
 
     
     print '\n--------------------------\n Fitting End\n---------------------------'
@@ -176,7 +179,7 @@ def main_st82(params):
     cmass_pickle = output_dir + params['cmass_pickle']
     no_pickle = output_dir + params['no_pickle']
     out_catname = output_dir + params['out_catname']
-    out_resampled_cat = output_dir + params['out_resampled_cat']
+    #out_resampled_cat = output_dir + params['out_resampled_cat']
     input_path = params['input_cat_dir']
     input_keyword = params['input_cat_keyword']
     num_mock = 1
@@ -193,7 +196,7 @@ def main_st82(params):
                    'MAGERR_DETMODEL_R', 'MAGERR_DETMODEL_I', 'MAGERR_DETMODEL_Z', 'MAGERR_MODEL_G', 'MAGERR_MODEL_R',\
                    'MAGERR_MODEL_I', 'MAGERR_MODEL_Z', 'MAG_AUTO_G', 'MAG_AUTO_R', 'MAG_AUTO_I', 'MAG_AUTO_Z', 'RA',\
                    'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP',
-                   'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y']
+                   'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y', 'EBV']
 
         gold_st82 = io.SearchAndCallFits(path = input_path, columns = columns, keyword = input_keyword)
         gold_st82 = gold_st82[ (gold_st82['MODEST_CLASS'] == 1) & (gold_st82['FLAGS_GOLD'] == 0 )]
@@ -350,7 +353,7 @@ def main_spt(params):
     cmass_pickle = output_dir + params['cmass_pickle']
     no_pickle = output_dir + params['no_pickle']
     out_catname = output_dir + params['out_catname']
-    out_resampled_cat = output_dir + params['out_resampled_cat']
+    #out_resampled_cat = output_dir + params['out_resampled_cat']
     input_path = params['input_cat_dir']
     input_keyword = params['input_cat_keyword']
     njack = 8
@@ -524,10 +527,17 @@ if __name__=='__main__':
         train_st82(params, param_file)
     #else : params['cmass_fraction']    
 
-    f = open( output_dir+params['cmass_fraction'], 'r')
-    cmassfrac = float(f.read())
-    params['cmass_fraction'] = cmassfrac
-    
+    try :
+        float(params['cmass_fraction'])
+        #print 'input cmass fraction ', params['cmass_fraction']
+
+    except ValueError:
+        #if type(params['cmass_fraction']) == 'str' : 
+        f = open( output_dir+params['cmass_fraction'], 'r')
+        cmassfrac = float(f.read())
+        params['cmass_fraction'] = cmassfrac
+
+        #pass
 
     if 'cat_area' in params : 
         if params['cat_area'] in ['st82', 'stripe82']: main_st82(params)

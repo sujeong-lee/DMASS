@@ -7,6 +7,9 @@ from astroML.decorators import pickle_results
 from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 import matplotlib
 matplotlib.use('Agg')
+#from matplotlib import rc
+#rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+#rc('text', usetex=True)
 import matplotlib.pyplot as plt
 import numpy.lib.recfunctions as rf
 from numpy import linalg
@@ -159,7 +162,8 @@ class XDGMM(object):
         self.alpha = gmm.weights_
         self.V = gmm.covars_
         self.n_components = len(self.V)
-        print 'n components : ',self.n_components
+        print 'n components =',self.n_components
+        print 'tolerance =', self.tol
 
 
         logL = self.logL(X, Xerr)
@@ -831,8 +835,9 @@ def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=10
 
 
 
-def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, weight = [None,None], nbins=100, prefix= 'default', outdir='./'):
-    
+def doVisualization_1d( true, data1, labels = None, ranges = None, name = None, weight = [None,None], nbins=100, prefix= 'default', outdir='./'):
+
+
     if labels == None:
         print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
@@ -846,20 +851,23 @@ def doVisualization_1d( data1, true, labels = None, ranges = None, name = None, 
         for i in xrange(ndim):
             ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
-    fig,axes = plt.subplots(nrows=1, ncols= ndim, figsize= (5*ndim, 4) )
+    fig,axes = plt.subplots(nrows=1, ncols= ndim, figsize= (4*ndim, 4) )
    
     #print weight[0], weight[1].size, data1[:,0].size 
     for i in xrange(ndim):
         xbins = np.linspace(ranges[i][0],ranges[i][1], nbins)
-        axes[i].hist(true[:,i],bins=xbins,normed=True, label=name[1], color='blue', weights=weight[1])
-        axes[i].hist(data1[:,i],bins=xbins,normed=True,alpha=0.5,label=name[0], color = 'red', weights=weight[0])
-        axes[i].set_xlabel(labels[i], fontsize = 15)
+        axes[i].hist(true[:,i],bins=xbins,normed=True, label=name[0], weights=weight[0], alpha = 0.5, color ='grey')
+        axes[i].hist(data1[:,i],bins=xbins,normed=True,alpha=1.0,label=name[1], weights=weight[1], histtype='step', color='k', lw=1)
+        axes[i].set_xlabel(labels[i], fontsize = 20)
         #axes[i].hist(data2[:,i],bins=xbins,normed=True,alpha=0.5,label='data2')
-        
-        axes[i].legend(loc='best')
+        axes[i].get_yaxis().set_visible(False)
+        axes[i].tick_params(labelsize=15)
+        axes[i].legend(loc='best',fontsize = 15)
 
-    filename = outdir+"/"+prefix+"diagnostic_histograms_1d.png"
+    filename = outdir+"/"+prefix+"diagnostic_histograms_1d.pdf"
     print "writing output plot to: "+filename
+    fig.tight_layout()
+    fig.subplots_adjust(wspace=0.05, hspace=0.5);
     fig.savefig(filename)
     #plt.close(fig)
 
@@ -1371,15 +1379,15 @@ def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, suffix
     denominator = numerator + np.exp(no_logprob_a) * (1. - cmass_fraction)
     
     denominator_zero = denominator == 0
-    EachProb_CMASS = np.zeros( numerator.shape )
-    EachProb_CMASS[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+    CMASS_PROB = np.zeros( numerator.shape )
+    CMASS_PROB[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
 
     try:
-        test = rf.append_fields(test, 'EachProb_CMASS', EachProb_CMASS)
+        test = rf.append_fields(test, 'CMASS_PROB', CMASS_PROB)
         #test = rf.append_fields(test, 'cmassLogLikelihood', cmass_logprob_a)
         #test = rf.append_fields(test, 'noLogLikelihood', no_logprob_a)
     except ValueError:
-        test['EachProb_CMASS'] = EachProb_CMASS
+        test['CMASS_PROB'] = CMASS_PROB
         #test['cmassLogLikelihood'] = cmass_logprob_a
         #test['noLogLikelihood'] = no_logprob_a
         
