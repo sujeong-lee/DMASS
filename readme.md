@@ -17,17 +17,17 @@ scikit-learn
 multiprocessing
 
 
-# Install
+### Install
 
 ```git clone https://github.com/sujeong-lee/CMASS.git```
 
 
-# Configuration setting 
+### Configuration setting 
 
 See `example.yaml`
 
 
-# Run
+### Run
 
 1) Obtain a gaussian mixture model : 
 - Set `Fitting : True` in yaml configuration file 
@@ -38,7 +38,7 @@ See `example.yaml`
 - type `python run_DMASS.py example.yaml`
 
 
-# Input catalogs (DES side) should have the columns below
+### Input catalogs (DES side) should have the columns below
 ```
 'FLAGS_GOLD', 'FLAGS_BADREGION', 'MAG_MODEL_G', 'MAG_MODEL_R', 'MAG_MODEL_I', 'MAG_MODEL_Z',
 'MAG_DETMODEL_G', 'MAG_DETMODEL_R', 'MAG_DETMODEL_I', 'MAG_DETMODEL_Z', 'MAGERR_DETMODEL_G',
