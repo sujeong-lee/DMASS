@@ -455,7 +455,7 @@ def _GalaxyDensity_Systematics( catalog, sysMap, rand = None, weight = None, nsi
 
 def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096, 
 			       raTag = 'RA', decTag='DEC', property = 'NSTARS', filter='g', 
-			       FullArea = None, nbins=20, reweight = None, pixelmask = None):
+			       FullArea = None, nbins=20, reweight = None, reweight_rand=None, pixelmask = None):
     #property ='AIRMASS', filter='g', nside = 128, raTag = 'RA', decTag='DEC'):
     """
     pixelmask : should be 1d, same size with sysMap one band
@@ -469,30 +469,38 @@ def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096,
     catHpInd = hpRaDecToHEALPixel(catalog[raTag], catalog[decTag], nside=nside, nest= False)
     randHpInd = hpRaDecToHEALPixel(rand[raTag], rand[decTag], nside=nside, nest= False)
     
-    P = 1e+4
-    n_bar = 3.0e-4
+    #P = 1e+4
+    #n_bar = 3.0e-4
     log = False
     
     bin_num = nbins
     min = np.min(sysMap['SIGNAL'])
     max = np.max(sysMap['SIGNAL'])
     
-    
-    if property == 'NSTARS_allband': max = 2.0
+    if property == 'DEPTH':
+        if filter == 'g' : min=23.0
+        if filter == 'r' : min=23.0
+        if filter == 'i' : min = 22.5
+        if filter == 'z' : min = 21.5
+    if property == 'NSTARS_allband': 
+        max = 2.0
     if property == 'AIRMASS':
-        if filter == 'z' : min = 1.0
-    if property == 'FWHM' : pass
+        if filter == 'z' : 
+            min = 1.0
+    if property == 'FWHM' : 
+        #pass
         #bin_num = bin_num * 2
         #if filter == 'g' : max = 6.0
-        #if filter == 'r' : max = 5.5
+        if filter == 'r' : max = 4.6
         #if filter == 'i' : max = 4.5
         #if filter == 'z' : max = 4.5
-    if property == 'SKYBRITE' : pass
+    if property == 'SKYBRITE' : 
+        pass
         #bin_num = bin_num * 2
-        #if filter == 'g' : max = 150
-        #if filter == 'r' : max = 450
-        #if filter == 'i' : max = 1200
-        #if filter == 'z' : max = 3000
+        if filter == 'g' : max = 225
+        if filter == 'r' : max = 500  # no random galaxies after 500
+        #if filter == 'i' : max = 1500
+        if filter == 'z' : max = 3200
     if property == 'SKYSIGMA' : pass
         #bin_num = bin_num * 2
         #if filter == 'g' : max = 6.5
@@ -544,7 +552,7 @@ def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096,
 
     bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = min, max = max, bin_num = bin_num, log=log )
     
-    w_FKP = 0.32607782  #1./( 1 + n_bar * P ), cmass sgc mean(wfkp)
+    w_FKP = 1.0 #0.32607782  #1./( 1 + n_bar * P ), cmass sgc mean(wfkp)
     galaxy_density_list = []
     f_area = []
     #Ngal = np.zeros(len(binned_cat))
@@ -554,46 +562,56 @@ def GalaxyDensity_Systematics( catalog, sysMap, rand = None, nside = 4096,
     
     
     if reweight is None : reweight = np.ones(catalog.size)
-     
+    if reweight_rand is None : reweight_rand = np.ones(rand.size)
+
     for i, sys_i in enumerate(binned_cat):
         
         HpIdxInsys_i_mask = np.in1d(catHpInd, sys_i['PIXEL'])
         Npix = len(np.unique(sys_i['PIXEL']))
         ngal = np.sum(reweight[HpIdxInsys_i_mask]) 
+
+        if np.sum(HpIdxInsys_i_mask) == 0 : ngal = 0
+
         Ngal.append( ngal )
         area_i = hp.nside2pixarea(nside, degrees = True) * Npix
 
         #if ngal == 0 : area_i = 0
-        f_area.append(area_i * 1./FullArea)
+        #f_area.append(area_i * 1./FullArea)
 
              
         #if rand is not None:
         randHpIdxInsys_i_mask = np.in1d(randHpInd, sys_i['PIXEL'])
-        Nrand.append(np.sum(randHpIdxInsys_i_mask))# * np.sum(w_re_rand[randHpIdxInsys_i_mask])  
-        #print Ngal[i], Nrand[i]
+        nrand = np.sum(reweight_rand[randHpIdxInsys_i_mask])
+        Nrand.append(nrand)# * np.sum(w_re_rand[randHpIdxInsys_i_mask])  
+        #print np.sum(HpIdxInsys_i_mask), Ngal[i], Nrand[i]
      
+        #print 'ngal, nrand :', ngal, nrand
+
     Ngal = np.array(Ngal)
     Nrand = np.array(Nrand)
     f_area = Ngal * 1./Ngal.max()
 
-    HpIdxInsys_mask = np.in1d(catHpInd, sysMap['PIXEL'])
-    randHpIdxInsys_mask = np.in1d(randHpInd, sysMap['PIXEL'])
+    #HpIdxInsys_mask = np.in1d(catHpInd, sysMap['PIXEL'])
+    #randHpIdxInsys_mask = np.in1d(randHpInd, sysMap['PIXEL'])
     
     #Ngal_total = np.sum(Ngal)
     #Nrand_total = np.sum(Nrand)
-    Ngal_total = np.sum(reweight[HpIdxInsys_mask])
-    Nrand_total = np.sum(randHpIdxInsys_mask)
+    Ngal_total = np.sum(reweight) #np.sum(reweight[HpIdxInsys_mask])
+    Nrand_total = np.sum(reweight_rand) #np.sum(reweight_rand[randHpIdxInsys_i_mask])
 
+    #print 'Ngal_total', Ngal_total, ' Nrand_total', Nrand_total
     #f_area = Ngal * 1./Ngal_total
 
+    Nrand_norm = Nrand * (Ngal_total * 1./Nrand_total)
     #try:
-    Ngal_avg = Ngal *1./Nrand
-    ratio = Ngal_total * 1./Nrand_total
-    norm_galaxy_density = Ngal_avg *1./ratio # (Ngal * 1./Nrand ) * ( Nrand_total * 1./ (Ngal_total) )   
-    norm_galaxy_density[Nrand == 0] = 0.0
-    err = 1./np.sqrt(Ngal * w_FKP) * norm_galaxy_density
-    #nanmask = np.ma.masked_invalid(err).mask
-    err[Ngal == 0] = 0.0
+    #Ngal_avg = Ngal *1./Nrand
+    #ratio = Ngal_total * 1./Nrand_total
+    norm_galaxy_density =  Ngal * 1./Nrand_norm #Ngal_avg *1./ratio # (Ngal * 1./Nrand ) * ( Nrand_total * 1./ (Ngal_total) )   
+    norm_galaxy_density[Nrand == 0] = np.nan #0.0
+    #err = 1./np.sqrt(Ngal * w_FKP) * norm_galaxy_density
+    #err = 1./np.sqrt(Nrand_norm) * norm_galaxy_density
+    err = np.sqrt(Ngal) * 1./Nrand_norm   # Poisson err of number counts
+    err[Nrand == 0] = np.nan #0.0
 
     return np.array(bin_center), np.array(norm_galaxy_density), np.array(err), np.array(f_area)
 
@@ -917,11 +935,15 @@ def calculate_weight( property = None, filter=None, kind = None, suffix='', plot
     for i, sysMap_i in enumerate(binned_cat):
         HpIdxInSys_mask = np.in1d(catHpInd, sysMap_i['PIXEL'])
         wg[HpIdxInSys_mask] = 1./C_predict[i]
+        print bin_center[i], C_predict[i]
+
+    print C_predict 
+    #stop
         #print np.sum(HpIdxInSys_mask), 1./C_predict[i], sysMap_i['PIXEL'].size
        
-    extremesys_mask = maskingCatalogSP(catalog=catalog, sysMap=sysMap, maskonly=True) 
-    wg[~extremesys_mask] = 0  
-    print 'cutting out ', np.sum(~extremesys_mask)              
+    #extremesys_mask = maskingCatalogSP(catalog=catalog, sysMap=sysMap, maskonly=True) 
+    #wg[~extremesys_mask] = 0  
+    #print 'masked out ', np.sum(~extremesys_mask)              
     return wg
 
 
@@ -975,8 +997,11 @@ def plotting_significance( property = None, filter=None, kind = None, suffix='',
 
 def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, nside=4096, FullArea = None, 
              nbins = 10, properties = None, kind='SPT', suffix='', 
-             outdir='../data_txt/systemtaics/', pixelmask = None, reweight=None):
+             outdir='../data_txt/systemtaics/', pixelmask = None, 
+             reweight_cat1=None, reweight_rand1=None, reweight_cat2=None, reweight_rand2=None ):
     
+    print '\nsys_ngal : '
+    print 'the number of bins=', nbins
     from systematics import ReciprocalWeights, jksampling, GalaxyDensity_Systematics
     for p in properties:
         if p is 'NSTARS_allband':
@@ -1000,12 +1025,14 @@ def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, 
         for j,f in enumerate(filter):
 
             mapname = 'sys_'+p+'_'+f+'_'+kind #+'_masked'
-            bins, Bdensity, Berr, Bf_area = GalaxyDensity_Systematics(cat1, sysmap[mapname], rand = rand1, nside = nside,\
-                                                                        property = p, filter = f, nbins=nbins, FullArea = FullArea,\
-                                                                        pixelmask = pixelmask, reweight=reweight)
-            bins, Rdensity, Rerr, Rf_area = GalaxyDensity_Systematics(cat2, sysmap[mapname], rand = rand2, nside = nside,\
-                                                                        property = p, filter = f, nbins=nbins, FullArea = FullArea,\
-                                                                        pixelmask = pixelmask)
+            bins, Bdensity, Berr, Bf_area = \
+            GalaxyDensity_Systematics(cat1, sysmap[mapname], rand = rand1, nside = nside,\
+                                    property = p, filter = f, nbins=nbins, FullArea = FullArea,\
+                                    pixelmask = pixelmask, reweight=reweight_cat1, reweight_rand=reweight_rand1)
+            bins, Rdensity, Rerr, Rf_area = \
+            GalaxyDensity_Systematics(cat2, sysmap[mapname], rand = rand2, nside = nside,\
+                                    property = p, filter = f, nbins=nbins, FullArea = FullArea,\
+                                    pixelmask = pixelmask, reweight=reweight_cat2, reweight_rand=reweight_rand2)
             #print Rdensity
             #bins = bins/np.sum(sysMap['SIGNAL']) *len(sysMap)
             #B_jkerr = jksampling(clean_dmass, MaskDic[mapname], property = p, nside = nside, njack = 30, raTag = 'RA', decTag = 'DEC' )

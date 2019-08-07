@@ -29,6 +29,7 @@ def convertRaDecToThetaPhi(ra, dec):
     phi =  ra * np.pi / 180.0
     return theta, phi
 
+
 def separation(ra1, dec1, ra2, dec2):
     return np.sqrt( ((ra1 - ra2)*np.cos(dec1))**2 + (dec1-dec2)**2 )
 
@@ -46,8 +47,39 @@ def hpHEALPixelToRaDec( hpPixel, nside = 256 ):
     return [ra, dec]
 
 
-def HealPixifyCatalogs(catalog=None, healConfig=None, ratag='ra', dectag = 'dec'):
-    HealInds = hpRaDecToHEALPixel( catalog[ratag],catalog[dectag], nside= healConfig['out_nside'], nest= False)
+def convertRaDecToGalactic( ra=None, dec=None ):
+
+    import astropy
+    import astropy.coordinates
+
+    skycoords = astropy.coordinates.SkyCoord(
+        ra=ra, dec=dec, unit="deg",frame="fk5")
+
+    l = skycoords.galactic.l.deg
+    b = skycoords.galactic.b.deg
+    return l,b
+
+
+def convertGalacticToRaDec( l=None, b=None ):
+
+    import astropy
+    import astropy.coordinates
+
+    skycoords = astropy.coordinates.SkyCoord(
+        l=l, b=b, unit="deg",frame="galactic")
+    ra = skycoords.fk5.ra.deg
+    dec = skycoords.fk5.dec.deg
+    return ra, dec
+
+def hpHEALPixelGalacticToRaDec( hpPixel, nside = 256 ):
+    theta, phi = hp.pix2ang(nside, hpPixel)
+    l,b = GetRaDec(phi,theta)
+    ra,dec = convertGalacticToRaDec( l=l, b=b )
+    return [ra, dec]
+
+
+def HealPixifyCatalogs(catalog=None, healConfig=None, ratag='RA', dectag = 'DEC'):
+    HealInds = hpRaDecToHEALPixel( catalog[ratag],catalog[dectag], nside= healConfig['out_nside'], nest= healConfig['nest'])
     if 'HEALIndex' in catalog.dtype.fields:
         healCat = catalog.copy()
         healCat['HEALIndex'] = HealInds
@@ -204,8 +236,8 @@ def spatialcheck(data, label = None, convert = None, ratag='RA',dectag='DEC', za
         ra2 = ra.copy()
         ra2[ra > 180] = ra[ra > 180]-360
         if zaxis is None : 
-            if jj == 0 : ax.plot(ra2, dec, '.', alpha = 0.2, label = l , color = 'grey', markersize= 3)
-            else : ax.plot(ra2, dec, '.', alpha = 0.3, label = l, markersize = 3 )
+            if jj == 0 : ax.plot(ra2, dec, '.', alpha = 0.2, label = l , color = 'grey', markersize= 5)
+            else : ax.plot(ra2, dec, '.', alpha = 0.3, label = l, markersize = 5 )
         else : 
             sc = ax.scatter( ra2, dec, c=zaxis)
             fig.colorbar( sc, ax=ax, label=zlabel  )
@@ -387,7 +419,11 @@ def changeColumnName( cat, name = None, rename = None ):
 
 def appendColumn(cat, name = None, value = None, dtypes=None):
     import numpy.lib.recfunctions as rf  
-    cat = rf.append_fields(cat, name, value, dtypes=dtypes)
+
+    if name in cat.dtype.names:
+        cat[name] = value
+    else : 
+        cat = rf.append_fields(cat, name, value, dtypes=dtypes)
     return cat
 
 
@@ -723,7 +759,7 @@ def matchCatalogsbyPosition(cat1, cat2):
     return cat1[m1], cat2[m2]
 
 
-def mergeCatalogsUsingPandas(des=None, gold=None, how = 'right', key='COADD_OBJECTS_ID', suffixes = ['','_GOLD'], left_index=False, right_index = False):
+def mergeCatalogsUsingPandas(des=None, gold=None, how = 'right', key=None, left_key = None, right_key = None, suffixes = ['','_GOLD'], left_index=False, right_index = False):
     import pandas as pd
 
     try :
@@ -739,17 +775,20 @@ def mergeCatalogsUsingPandas(des=None, gold=None, how = 'right', key='COADD_OBJE
         gold = np.array(gold).byteswap().newbyteorder()
         desData = pd.DataFrame(des)
         goldData = pd.DataFrame(gold)
-        matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes, left_index=left_index)
+        matched = pd.merge(desData, goldData, on=key, left_on = left_key, right_on = right_key, how=how, suffixes = suffixes, left_index=left_index)
 
     matched_arr = matched.to_records(index=False)
     # This last step is necessary because Pandas converts strings to Objects when eating structured arrays.
     # And np.recfunctions flips out when it has one.
+
+    """
     oldDtype = matched_arr.dtype.descr
     newDtype = oldDtype
     for thisOldType,i in zip(oldDtype, xrange(len(oldDtype) )):
         if 'O' in thisOldType[1]:
             newDtype[i] = (thisOldType[0], 'S12')
     matched_arr = np.array(matched_arr,dtype=newDtype)
+    """
     return matched_arr
 
 

@@ -53,6 +53,14 @@ def train_st82(params, param_file):
     train_sample_filename = params['train_sample']
     cmass_pickle = output_dir + params['cmass_pickle']
     no_pickle = output_dir + params['no_pickle']
+
+    try:
+        train_path = params['train_path']
+        train_keyword = params['train_keyword']
+    except : 
+        train_path = '/n/des/lee.5922/data/gold_cat/'
+        train_keyword = 'Y1A1_GOLD_STRIPE82_v2'
+
     #out_catname = params['out_catname']
     #out_resampled_cat = params['out_resampled_cat']
     #input_path = params['input_cat_dir']
@@ -72,7 +80,7 @@ def train_st82(params, param_file):
 
     
     # calling stripe82 gold catalogue -----------------------------
-    path = '/n/des/lee.5922/data/gold_cat/'
+    #path =  train_path #'/n/des/lee.5922/data/gold_cat/'
     columns = ['FLAGS_GOLD', 'FLAGS_BADREGION', 'MAG_MODEL_G', 'MAG_MODEL_R', 'MAG_MODEL_I', 'MAG_MODEL_Z',\
                'MAG_DETMODEL_G', 'MAG_DETMODEL_R', 'MAG_DETMODEL_I', 'MAG_DETMODEL_Z', 'MAGERR_DETMODEL_G',\
                'MAGERR_DETMODEL_R', 'MAGERR_DETMODEL_I', 'MAGERR_DETMODEL_Z', 'MAGERR_MODEL_G', 'MAGERR_MODEL_R',\
@@ -80,7 +88,7 @@ def train_st82(params, param_file):
                'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP',\
                'SLR_SHIFT_G', 'SLR_SHIFT_R', 'SLR_SHIFT_I', 'SLR_SHIFT_Z', 'SLR_SHIFT_Y', 'EBV']
 
-    gold_st82 = io.SearchAndCallFits(path = path, columns = columns, keyword = 'Y1A1_GOLD_STRIPE82_v2')
+    gold_st82 = io.SearchAndCallFits(path = train_path, columns = columns, keyword = train_keyword )
     gold_st82 = gold_st82[(gold_st82['MODEST_CLASS'] == 1)&(gold_st82['FLAGS_GOLD'] == 0 )]
     gold_st82 = Cuts.keepGoodRegion(gold_st82)
 
