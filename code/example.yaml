@@ -12,7 +12,7 @@ random_sampling : True
 ## Use this option for debugging.
 output_dir : output/example/  
 ## output directory. All output results will be stored here. 
-train_cmass_sample : /n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South.fits.gz
+train_cmass_sample : /n/des/lee.5922/data/cmass_cat/cmass-dr12v4-S-Reid-full.dat.fits
 ## true CMASS catalog that overlaps with DES. Only positions will be used.
 train_des_path : /n/des/lee.5922/data/gold_cat/ 
 train_des_keyword : Y1A1_GOLD_STRIPE82_v2
