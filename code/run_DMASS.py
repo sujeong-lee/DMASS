@@ -50,13 +50,13 @@ def train_st82(params, param_file):
     # calling params 
     output_dir = params['output_dir']
     #cmass_fraction = params['cmass_fraction']
-    train_sample_filename = params['train_sample']
+    train_sample_filename = params['train_cmass_sample']
     cmass_pickle = output_dir + params['cmass_pickle']
     no_pickle = output_dir + params['no_pickle']
 
     try:
-        train_path = params['train_path']
-        train_keyword = params['train_keyword']
+        train_path = params['train_des_path']
+        train_keyword = params['train_des_keyword']
     except : 
         train_path = '/n/des/lee.5922/data/gold_cat/'
         train_keyword = 'Y1A1_GOLD_STRIPE82_v2'
@@ -541,15 +541,15 @@ if __name__=='__main__':
 
     except ValueError:
         #if type(params['cmass_fraction']) == 'str' : 
-        f = open( output_dir+params['cmass_fraction'], 'r')
+        f = open( params['cmass_fraction'], 'r')
         cmassfrac = float(f.read())
         params['cmass_fraction'] = cmassfrac
 
         #pass
 
     if 'cat_area' in params : 
-        if params['cat_area'] in ['st82', 'stripe82']: main_st82(params)
-        elif params['cat_area'] =='spt' : main_spt(params)
+        if params['cat_area'] in ['st82', 'stripe82', 'ST82', 'STRIPE82']: main_st82(params)
+        elif params['cat_area'] in ['spt', 'SPT'] : main_spt(params)
         #elif params['cat_area'] =='all' : 
         #    main_st82(params)
         #    main(params)

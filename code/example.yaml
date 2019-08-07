@@ -1,0 +1,45 @@
+############################################### 
+#   Extreme Deconvolution yaml settings
+############################################### 
+
+fitting : False
+## if set True, the code takes the 4-dimensional distribution 
+## of [mag r, mag i, g-r, r-i] and performs the extreme deconvolution, 
+## saves the fitted result as pickle. 
+## if set False, skips the fitting process and calls the stored pickle files.
+random_sampling : True
+## if set True, uses 10% of the input galaxies for fitting to save the running time. 
+## Use this option for debugging.
+output_dir : output/example/  
+## output directory. All output results will be stored here. 
+train_cmass_sample : /n/des/lee.5922/data/cmass_cat/galaxy_DR12v5_CMASS_South.fits.gz
+## true CMASS catalog that overlaps with DES. Only positions will be used.
+train_des_path : /n/des/lee.5922/data/gold_cat/ 
+train_des_keyword : Y1A1_GOLD_STRIPE82_v2
+## path and name of the des catalog that includes stripe82.  
+cmass_pickle : gold_st82_XD_cmass.pkl 
+## Fitted gaussian mixtures for CMASS - means, amplitudes, and covariance matrix.
+no_pickle : gold_st82_XD_no.pkl
+## Fitted gaussian mixtures for non-CMASS 
+cmass_fraction : output/example/cmassfrac 
+## if you know the fraction of CMASS in the training region (i.e CMASS in DES Y1 Stripe82)
+## put the number here. Otherwise the code calculates the fraction automatically 
+## during the fitting process and saves the number as file. 
+
+
+#n_cmass : 5
+#n_no : 20
+## the number of Gaussian mixutres for fitting. If you don't specify numbers, 
+## the code will find the optimal number of mixtures through BIC. 
+
+
+cat_area : 'spt'
+## 'spt' or 'ST82'
+input_cat_dir : /n/des/lee.5922/data/gold_cat/ 
+## directory containing targeted DES catalogs  
+input_cat_keyword : Y1A1_GOLD_00
+## keyword for targeted DES catalog if you have multiple catalogs to run
+out_catname : gold_spt_prob.fits
+## output catalog that contains CMASS membership probability
+out_resampled_cat : dmass_spt.fits
+## not be used now. 
