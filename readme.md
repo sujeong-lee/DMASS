@@ -4,6 +4,7 @@
 
 ### requirements
 
+```
 Python 2.7 or higher
 astropy
 astroML
@@ -15,6 +16,7 @@ yaml
 fitsio 
 scikit-learn
 multiprocessing
+```
 
 
 ### Install
