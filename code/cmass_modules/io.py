@@ -52,7 +52,7 @@ def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = No
                 print i
                 sys.stdout.flush()
 
-    elif no_ieyword is not None : 
+    elif no_keyword is not None : 
         tables = []
         for i in os.listdir(path):
             if os.path.isfile(os.path.join(path,i)) and keyword in i:
