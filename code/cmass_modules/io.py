@@ -9,18 +9,30 @@ import fitsio
 from fitsio import FITS, FITSHDR
 
 
-def SearchFitsByName(path = None, keyword = None, columns = None):
+def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = None):
     import os, sys
     
     print '\n--------------------------------\n Existing catalog\n--------------------------------'
     
-    tables = []
-    for i in os.listdir(path):
-        if os.path.isfile(os.path.join(path,i)) and keyword in i:
-            tables.append(path+i)
-            print i
-            sys.stdout.flush()
+    if no_keyword is None : 
+        tables = []
+        for i in os.listdir(path):
+            if os.path.isfile(os.path.join(path,i)) and keyword in i:
+                tables.append(path+i)
+                print i
+                sys.stdout.flush()
 
+    else : 
+        tables = []
+        for i in os.listdir(path):
+            if os.path.isfile(os.path.join(path,i)) and keyword in i:
+                if no_keyword not in i:
+                    tables.append(path+i)
+                    print i
+                    sys.stdout.flush()
+
+                else: pass
+                
     #data = esutil.io.read(tables, columns = columns, combine = True)
     return tables
 
@@ -30,15 +42,25 @@ def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = No
     
     print '\n--------------------------------\n calling catalog\n--------------------------------'
     
-    tables = []
-    for i in os.listdir(path):
-        if os.path.isfile(os.path.join(path,i)) and keyword in i:
-            if no_keyword not in i:
+    if no_keyword is None : 
+        tables = []
+        for i in os.listdir(path):
+            if os.path.isfile(os.path.join(path,i)) and keyword in i:
+                #if no_keyword not in i:
                 tables.append(path+i)
                 print i
                 sys.stdout.flush()
-                
-            else: pass
+
+    else : 
+        tables = []
+        for i in os.listdir(path):
+            if os.path.isfile(os.path.join(path,i)) and keyword in i:
+                if no_keyword not in i:
+                    tables.append(path+i)
+                    print i
+                    sys.stdout.flush()
+
+                else: pass
 
     data = esutil.io.read(tables, columns = columns, combine = True)
     return data
