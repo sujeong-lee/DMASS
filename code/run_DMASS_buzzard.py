@@ -448,7 +448,7 @@ def main_spt(params):
 
     prob_spt = []
 
-    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'])
+    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'], no_keyword=['BPZ', 'rmp'])
     if len(jkoutnames) == 0 : 
             
         for i in range(njack):
