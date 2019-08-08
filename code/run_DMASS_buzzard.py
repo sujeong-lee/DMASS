@@ -396,7 +396,7 @@ def main_spt(params):
                 des_spt = des_spt[randind]
                 print 'debug setting'
             else : 
-                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ.fits')
                 print 'debug else'
 
         # calling spt des_gold ---------------------------------------------
