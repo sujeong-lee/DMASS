@@ -49,6 +49,7 @@ See `example.yaml`
 'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP'
 ```
 
-### Input train CMASS catalog can be downloaded from https://drive.google.com/open?id=1ZtlhFoaict_I4PDvI0rkPupYv6i8STLZ
+### Input train CMASS catalog can be downloaded from 
+https://drive.google.com/open?id=1ZtlhFoaict_I4PDvI0rkPupYv6i8STLZ
 
 
