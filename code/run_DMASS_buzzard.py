@@ -624,6 +624,6 @@ if __name__=='__main__':
         #elif params['cat_area'] =='all' : 
         #    main_st82(params)
         #    main(params)
-    else : main_spt(params)
+    else : main_buzzard(params)
 
     transcript.stop()
