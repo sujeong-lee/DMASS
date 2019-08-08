@@ -39,7 +39,8 @@ def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = Non
 
 def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = None):
     import os, sys
-    
+    print no_keyword
+    stop
     print '\n--------------------------------\n calling catalog\n--------------------------------'
     
     if no_keyword is None : 

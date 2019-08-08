@@ -395,8 +395,9 @@ def main_spt(params):
                 randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
                 des_spt = des_spt[randind]
             else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+            print 'not none'
         # calling spt des_gold ---------------------------------------------
-        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='.BPZ.fits')
+        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ.fits')
 
 
         #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
