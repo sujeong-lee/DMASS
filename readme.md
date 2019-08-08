@@ -40,7 +40,7 @@ See `example.yaml`
 - type `python run_DMASS.py example.yaml`
 
 
-### Input catalogs (DES side) should have the columns below
+### Train DMASS catalog should have the columns below
 ```
 'FLAGS_GOLD', 'FLAGS_BADREGION', 'MAG_MODEL_G', 'MAG_MODEL_R', 'MAG_MODEL_I', 'MAG_MODEL_Z',
 'MAG_DETMODEL_G', 'MAG_DETMODEL_R', 'MAG_DETMODEL_I', 'MAG_DETMODEL_Z', 'MAGERR_DETMODEL_G',
@@ -48,5 +48,7 @@ See `example.yaml`
 'MAGERR_MODEL_I', 'MAGERR_MODEL_Z', 'MAG_AUTO_G', 'MAG_AUTO_R', 'MAG_AUTO_I', 'MAG_AUTO_Z', 'RA',
 'DEC', 'COADD_OBJECTS_ID', 'MODEST_CLASS', 'HPIX', 'DESDM_ZP'
 ```
-Magnitudes should be SFD98 corrected. 
+
+### Input train CMASS catalog can be downloaded from https://drive.google.com/open?id=1ZtlhFoaict_I4PDvI0rkPupYv6i8STLZ
+
 
