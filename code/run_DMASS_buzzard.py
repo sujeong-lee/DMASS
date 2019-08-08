@@ -374,6 +374,8 @@ def main_spt(params):
     #out_resampled_cat = output_dir + params['out_resampled_cat']
     input_path = params['input_cat_dir']
     input_keyword = params['input_cat_keyword']
+    no_keyword = params['no_keyword']
+
     njack = 2
     num_mock = 1
     if 'num_mock' in params : 
@@ -391,20 +393,14 @@ def main_spt(params):
             if params['debug'] : 
                 print 'debugging mode : small sample for the fast calculation.'
                 input_keyword = 'Y1A1_GOLD_000001'
-                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
                 randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
                 des_spt = des_spt[randind]
-                print 'debug setting'
             else : 
-                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ.fits')
-                print 'debug else'
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
 
         # calling spt des_gold ---------------------------------------------
-        else : 
-            des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ.fits')
-            print 'no debug'
-
-        stop
+        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
 
 
         #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
