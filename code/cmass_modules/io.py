@@ -39,8 +39,8 @@ def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = Non
 
 def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = None):
     import os, sys
-    print no_keyword
-    stop
+    print keyword, no_keyword
+
     print '\n--------------------------------\n calling catalog\n--------------------------------'
     
     if no_keyword is None : 
@@ -53,7 +53,6 @@ def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = No
                 sys.stdout.flush()
 
     elif no_ieyword is not None : 
-        print "not none"
         tables = []
         for i in os.listdir(path):
             if os.path.isfile(os.path.join(path,i)) and keyword in i:
