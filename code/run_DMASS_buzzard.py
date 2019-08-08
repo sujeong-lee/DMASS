@@ -376,7 +376,7 @@ def main_spt(params):
     input_keyword = params['input_cat_keyword']
     no_keyword = params['no_keyword']
 
-    njack = 2
+    njack = 20
     num_mock = 1
     if 'num_mock' in params : 
         num_mock = params['num_mock']
