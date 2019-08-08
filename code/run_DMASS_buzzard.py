@@ -621,7 +621,7 @@ if __name__=='__main__':
     if 'cat_area' in params : 
         if params['cat_area'] in ['st82', 'stripe82', 'ST82', 'STRIPE82']: main_st82(params)
         elif params['cat_area'] in ['spt', 'SPT'] : main_spt(params)
-    else params['cat_area'] in ['buzzard'] : main_buzzard(params)
+        elif params['cat_area'] in ['buzzard'] : main_buzzard(params)
         #elif params['cat_area'] =='all' : 
         #    main_st82(params)
         #    main(params)
