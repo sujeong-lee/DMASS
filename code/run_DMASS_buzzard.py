@@ -527,31 +527,6 @@ def main_buzzard(params):
     if 'num_mock' in params : 
         num_mock = params['num_mock']
 
-    """
-    jkoutname = out_catname # +'_jk{:03}.fits'.format(1)
-    if os.path.exists(jkoutname): 
-        print 'probability catalog already exists. Use this for sampling.'
-        pass
-    else : 
-        print 'jkoutfile doesnt exist'
-        print jkoutname
-    """
-        """
-        if 'debug' in params : 
-            if params['debug'] : 
-                print 'debugging mode : small sample for the fast calculation.'
-                input_keyword = 'Y1A1_GOLD_000001'
-                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
-                randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
-                des_spt = des_spt[randind]
-            else : 
-                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
-        """
-
-
-        # calling spt des_gold ---------------------------------------------
-        #else : 
-
 
     clf_cmass = XD_fitting( None, pickleFileName = cmass_pickle)               
     clf_no = XD_fitting( None, pickleFileName = no_pickle)
