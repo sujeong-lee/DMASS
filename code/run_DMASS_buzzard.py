@@ -396,7 +396,7 @@ def main_spt(params):
                 des_spt = des_spt[randind]
             else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
         # calling spt des_gold ---------------------------------------------
-        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ')
 
 
         #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
@@ -448,16 +448,8 @@ def main_spt(params):
 
     prob_spt = []
 
-    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'], no_keyword='BPZ')
+    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'])
     
-    jkoutnames2 = []
-    for i in jkoutnames:
-        if 'BPZ' or 'rmp' in i: pass
-        else : 
-            jkoutnames2.append(i)
-            print i
-
-    jkoutnames = jkoutnames2
 
     if len(jkoutnames) == 0 : 
             
