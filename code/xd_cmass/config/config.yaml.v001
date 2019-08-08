@@ -1,0 +1,30 @@
+############################################### 
+#   Extreme Deconvolution yaml settings
+############################################### 
+
+#debug : True
+fitting : True
+continue : True
+random_sampling : False
+output_dir : output/sfd_train_photo_SamPle_nozband_ran10_3_full_tol1e5/
+train_sample : /n/des/lee.5922/data/cmass_cat/cmass-dr12v4-S-Reid-full.dat.fits
+cmass_pickle : ../sfd_train_photo_SamPle_nozband_ran10_3/gold_st82_XD_cmass_full_tol1e5.pkl
+no_pickle : ../sfd_train_photo_SamPle_nozband_ran10_3/gold_st82_XD_no_full_tol1e5.pkl
+num_mock : 1
+cmass_fraction : ../sfd_train_photo_SamPle_nozband_ran10_3/cmassfrac
+n_cmass : 
+n_no : 
+SFD98 : True
+
+#cat_area : st82
+#input_cat_dir : /n/des/lee.5922/data/gold_cat/
+#input_cat_keyword : Y1A1_GOLD_STRIPE82_v2_0000
+#out_catname : gold_st82_prob.fits
+#out_resampled_cat : dmass_st82
+
+
+cat_area : spt
+input_cat_dir : /n/des/lee.5922/data/gold_cat/
+input_cat_keyword : Y1A1_GOLD_slr_ebv_00
+out_catname : gold_spt_prob
+out_resampled_cat : dmass_spt
