@@ -394,16 +394,18 @@ def main_spt(params):
                 des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
                 randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
                 des_spt = des_spt[randind]
-            else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+                print 'debug setting'
+            else : 
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
+                print 'debug else'
 
         # calling spt des_gold ---------------------------------------------
-
         else : 
-            print 'none'
-            no_keyword = 'BPZ.fits'
-            des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
+            des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword='BPZ.fits')
+            print 'no debug'
 
         stop
+
 
         #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
         #des_spt = Cuts.keepGoodRegion(des_spt)
