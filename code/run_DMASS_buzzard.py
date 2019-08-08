@@ -397,9 +397,11 @@ def main_spt(params):
             else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
 
         # calling spt des_gold ---------------------------------------------
-        print 'none'
-        no_keyword = 'BPZ.fits'
-        else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
+
+        else : 
+            print 'none'
+            no_keyword = 'BPZ.fits'
+            des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
 
         stop
 
