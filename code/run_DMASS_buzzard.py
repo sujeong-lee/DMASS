@@ -507,7 +507,86 @@ def main_spt(params):
         print 'dmass mock saved to ', out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt.size
     
     """
-    
+  
+
+
+def main_buzzard(params):
+      
+    output_dir = params['output_dir']
+    cmass_fraction = params['cmass_fraction']
+    cmass_pickle = output_dir + params['cmass_pickle']
+    no_pickle = output_dir + params['no_pickle']
+    out_catname = output_dir + params['out_catname']
+    #out_resampled_cat = output_dir + params['out_resampled_cat']
+    input_path = params['input_cat_dir']
+    input_keyword = params['input_cat_keyword']
+    no_keyword = params['no_keyword']
+
+    njack = 20
+    num_mock = 1
+    if 'num_mock' in params : 
+        num_mock = params['num_mock']
+
+    """
+    jkoutname = out_catname # +'_jk{:03}.fits'.format(1)
+    if os.path.exists(jkoutname): 
+        print 'probability catalog already exists. Use this for sampling.'
+        pass
+    else : 
+        print 'jkoutfile doesnt exist'
+        print jkoutname
+    """
+        """
+        if 'debug' in params : 
+            if params['debug'] : 
+                print 'debugging mode : small sample for the fast calculation.'
+                input_keyword = 'Y1A1_GOLD_000001'
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
+                randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
+                des_spt = des_spt[randind]
+            else : 
+                des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
+        """
+
+
+        # calling spt des_gold ---------------------------------------------
+        #else : 
+
+
+    clf_cmass = XD_fitting( None, pickleFileName = cmass_pickle)               
+    clf_no = XD_fitting( None, pickleFileName = no_pickle)
+
+
+    #des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
+    des_spt_filename_list = io.SearchFitsByName(path = input_path, columns = None, keyword = input_keyword, no_keyword=no_keyword)
+
+
+    for des_spt_filename in des_spt_filename_list:
+        #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
+        #des_spt = Cuts.keepGoodRegion(des_spt)
+        #des_spt = des_spt[des_spt['DEC'] < -3]
+        #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
+
+        des_spt = fitsio.read(des_spt_filename)
+        mask_y1a1 = (priorCut_test(des_spt))
+        des_spt = des_spt[mask_y1a1]
+
+        if 'SFD98' in params : 
+            if params['SFD98'] : 
+                print 'change reddening corrections from SLR to SFD98'
+                des_spt = RemovingSLRReddening(des_spt )
+                des_spt = des_spt[priorCut_test(des_spt)]
+                des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+
+        outcat = des_spt_filename.split('/')[-1]
+        #print outcat
+        outname = output_dir+'/'+'DMASS.'+outcat
+        des_spt_prob = assignCMASSProb(des_spt , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
+        fitsio.write(outname, des_spt_prob)
+        print 'prob cat save to ', outname
+
+
+
 if __name__=='__main__':
 
 
