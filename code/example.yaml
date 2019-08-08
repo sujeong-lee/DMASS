@@ -23,7 +23,7 @@ train_cmass_sample : cmass-dr12v4-S-Reid-full.dat.fits
 train_des_path : /n/des/lee.5922/data/gold_cat/ 
 train_des_keyword : Y1A1_GOLD_STRIPE82_v2
 ## path and name of the des catalog that includes stripe82.  
-## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df
+## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df (No SFD98 corrected. Set SFD98:True)
 
 
 cmass_pickle : gold_st82_XD_cmass.pkl 
@@ -41,7 +41,7 @@ n_no :
 ## the code will find the optimal number of mixtures through BIC. 
 
 ## Option for converting SLR corrected magnitudes to SFD98 corrected magnitudes.
-SFD98 : False
+SFD98 : True
 ## if train_des_catalog or target des catalog does not have SFD98 corrected magnitudes, set this option 'True'. 
 
 
@@ -52,7 +52,7 @@ input_cat_dir : /n/des/lee.5922/data/gold_cat/
 input_cat_keyword : Y1A1_GOLD_slr_ebv_00  
 ## Target catalog's magnitudes should have SFD98 corrected magnitudes. 
 ## keyword for targeted DES catalog if you have multiple catalogs to run
-## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df
+## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df  (SFD98 corrected. Set SFD98:False)
 out_catname : gold_spt_prob
 ## output catalog that contains CMASS membership probability
 out_resampled_cat : dmass_spt
