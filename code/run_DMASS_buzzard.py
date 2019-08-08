@@ -514,8 +514,8 @@ def main_buzzard(params):
       
     output_dir = params['output_dir']
     cmass_fraction = params['cmass_fraction']
-    cmass_pickle = output_dir + params['cmass_pickle']
-    no_pickle = output_dir + params['no_pickle']
+    cmass_pickle = params['cmass_pickle']
+    no_pickle = params['no_pickle']
     out_catname = output_dir + params['out_catname']
     #out_resampled_cat = output_dir + params['out_resampled_cat']
     input_path = params['input_cat_dir']
