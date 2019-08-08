@@ -454,6 +454,7 @@ def main_spt(params):
     for i in jkoutnames:
         if 'BPZ' or 'rmp' in i: pass
         else : jkoutnames2.append(i)
+    jkoutnames = jkoutnames2
 
     if len(jkoutnames) == 0 : 
             
