@@ -16,7 +16,7 @@ from numpy import linalg
 #from __future__ import print_function, division
 #from ..utils import logsumexp, log_multivariate_gaussian, check_random_state
 from multiprocessing import Process, Queue
-from sklearn.mixture import GMM
+from sklearn.mixture import GaussianMixture
 
 def getCMASSparam(filename = None ):
     
@@ -675,8 +675,8 @@ def mixing_color(data, suffix = '', sdss = None, cmass = None,
         magtag = magtag[:-1]
         errtag = errtag[:-1]
         #print magtag
-    #print magtag
-    #print errtag
+    print magtag
+    print errtag
 
 
     X = [ data[mt] for mt in magtag ]
@@ -1003,7 +1003,7 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
         for i in range(len(N)):
             sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
             sys.stdout.flush()
-            models[i] = GMM(n_components=N[i], n_iter=n_iter,
+            models[i] = GaussianMixture(n_components=N[i], n_iter=n_iter,
                             covariance_type=covariance_type)
             models[i].fit(Xdata)
         return models
