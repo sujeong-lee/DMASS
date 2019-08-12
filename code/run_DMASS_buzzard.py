@@ -539,7 +539,7 @@ def main_buzzard(params):
 
     if 'hpix' in params : 
         if params['hpix'] : 
-            prob_spt = []
+            #prob_spt = []
             des_spt = esutil.io.read(des_spt_filename_list[0], upper=True)
             #ind_map = des_spt['HPIX']
             #valid_hpix = list(set(ind_map))
@@ -547,19 +547,23 @@ def main_buzzard(params):
             valid_hpix = list(set(ind_map))
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
+                if hp > 625:
 
-                outname = out_catname+'_hpix{:03}.fits'.format(hp)
-                #if os.path.exists(outname): ts = fitsio.read(outname)
-                #else : 
-                des_spt_i = des_spt[ind_map == hp]
-                #if des_spt_i.size == 0: pass
-                #else : 
-                ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
-                fitsio.write(outname, ts)
-                print 'prob cat save to ', outname
-                
-                prob_spt.append(ts)
-                ts = None
+                    outname = out_catname+'_hpix{:03}.fits'.format(hp)
+                    #if os.path.exists(outname): ts = fitsio.read(outname)
+                    #else : 
+                    des_spt_i = des_spt[ind_map == hp]
+                    #if des_spt_i.size == 0: pass
+                    #else : 
+                    ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
+                    fitsio.write(outname, ts)
+                    print 'prob cat save to ', outname
+                    
+                    #prob_spt.append(ts)
+                    ts = None
+                else : 
+                    print 'prob cat save to ', outname
+                    pass
         else : pass
 
 
