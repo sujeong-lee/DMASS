@@ -542,14 +542,14 @@ def main_buzzard(params):
         #des_spt = des_spt[des_spt['DEC'] < -3]
         #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
 
-        des_spt = fitsio.read(des_spt_filename)
+        des_spt = esutil.io.read(des_spt_filename, upper=True)
         mask_y1a1 = (priorCut_test(des_spt))
         des_spt = des_spt[mask_y1a1]
 
         if 'SFD98' in params : 
             if params['SFD98'] : 
                 print 'change reddening corrections from SLR to SFD98'
-                des_spt = RemovingSLRReddening(des_spt )
+                des_spt = RemovingSLRReddening(des_spt)
                 des_spt = des_spt[priorCut_test(des_spt)]
                 des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
 
