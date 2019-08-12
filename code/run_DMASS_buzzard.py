@@ -546,7 +546,7 @@ def main_buzzard(params):
             ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= False)
             valid_hpix = list(set(ind_map))
             print '# of healpix pixels :', len(valid_hpix)
-            for hp in ind_map:
+            for hp in valid_hpix:
 
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
                 #if os.path.exists(outname): ts = fitsio.read(outname)
@@ -560,6 +560,7 @@ def main_buzzard(params):
                 
                 prob_spt.append(ts)
                 ts = None
+        else : pass
 
 
     else : 
