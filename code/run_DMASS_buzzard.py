@@ -541,10 +541,12 @@ def main_buzzard(params):
         if params['hpix'] : 
             prob_spt = []
             des_spt = esutil.io.read(des_spt_filename_list[0], upper=True)
-            ind_map = des_spt['HPIX']
+            #ind_map = des_spt['HPIX']
+            #valid_hpix = list(set(ind_map))
+            ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= False)
             valid_hpix = list(set(ind_map))
             print '# of healpix pixels :', len(valid_hpix)
-            for hp in valid_hpix:
+            for hp in ind_map:
 
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
                 #if os.path.exists(outname): ts = fitsio.read(outname)
