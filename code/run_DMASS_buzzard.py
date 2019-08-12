@@ -536,29 +536,58 @@ def main_buzzard(params):
     des_spt_filename_list = io.SearchFitsByName(path = input_path, columns = None, keyword = input_keyword, no_keyword=no_keyword)
 
 
-    for des_spt_filename in des_spt_filename_list:
-        #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
-        #des_spt = Cuts.keepGoodRegion(des_spt)
-        #des_spt = des_spt[des_spt['DEC'] < -3]
-        #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
 
-        des_spt = esutil.io.read(des_spt_filename, upper=True)
-        mask_y1a1 = (priorCut_test(des_spt))
-        des_spt = des_spt[mask_y1a1]
+    if 'hpix' in params : 
+        if params['hpix'] : 
+            prob_spt = []
+            des_spt = fitsio.read(des_spt_filename_list[0])
+            ind_map = des_spt['HPIX']
+            valid_hpix = list(set(ind_map))
+            print '# of healpix pixels :', len(valid_hpix)
+            for hp in valid_hpix:
 
-        if 'SFD98' in params : 
-            if params['SFD98'] : 
-                print 'change reddening corrections from SLR to SFD98'
-                des_spt = RemovingSLRReddening(des_spt)
-                des_spt = des_spt[priorCut_test(des_spt)]
-                des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+                outname = out_catname+'_hpix{:03}.fits'.format(hp+1)
+                #if os.path.exists(outname): ts = fitsio.read(outname)
+                #else : 
+                des_spt_i = des_spt[ind_map == hp]
+                #if des_spt_i.size == 0: pass
+                #else : 
+                ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
+                fitsio.write(outname, ts)
+                print 'prob cat save to ', outname
+                
+                prob_spt.append(ts)
+                ts = None
 
-        outcat = des_spt_filename.split('/')[-1]
-        #print outcat
-        outname = output_dir+'/'+'DMASS.'+outcat
-        des_spt_prob = assignCMASSProb(des_spt , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
-        fitsio.write(outname, des_spt_prob)
-        print 'prob cat save to ', outname
+
+    else : 
+        for des_spt_filename in des_spt_filename_list:
+            #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
+            #des_spt = Cuts.keepGoodRegion(des_spt)
+            #des_spt = des_spt[des_spt['DEC'] < -3]
+            #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
+
+            des_spt = esutil.io.read(des_spt_filename, upper=True)
+            mask_y1a1 = (priorCut_test(des_spt))
+            des_spt = des_spt[mask_y1a1]
+
+            if 'SFD98' in params : 
+                if params['SFD98'] : 
+                    print 'change reddening corrections from SLR to SFD98'
+                    des_spt = RemovingSLRReddening(des_spt)
+                    des_spt = des_spt[priorCut_test(des_spt)]
+                    des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+
+            outcat = des_spt_filename.split('/')[-1]
+            #print outcat
+            outname = output_dir+'/'+'DMASS.'+outcat
+            des_spt_prob = assignCMASSProb(des_spt , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
+            fitsio.write(outname, des_spt_prob)
+            print 'prob cat save to ', outname
+
+
+
+
 
 
 
