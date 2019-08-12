@@ -547,9 +547,11 @@ def main_buzzard(params):
             valid_hpix = list(set(ind_map))
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
+                outname = out_catname+'_hpix{:03}.fits'.format(hp)
+                
                 if hp > 625:
 
-                    outname = out_catname+'_hpix{:03}.fits'.format(hp)
+                    #outname = out_catname+'_hpix{:03}.fits'.format(hp)
                     #if os.path.exists(outname): ts = fitsio.read(outname)
                     #else : 
                     des_spt_i = des_spt[ind_map == hp]
