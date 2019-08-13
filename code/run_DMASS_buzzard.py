@@ -542,7 +542,7 @@ def main_buzzard(params):
             #prob_spt = []
             des_spt = esutil.io.read(des_spt_filename_list[0], upper=True)
             #des_spt = esutil.io.read(des_spt_filename, upper=True)
-            mask_y1a1 = (priorCut_test(des_spt)) & (gold_st82['FLAGS_GOLD'] == 0 )
+            mask_y1a1 = (priorCut_test(des_spt)) & (des_spt['FLAGS_GOLD'] == 0 )
             des_spt = des_spt[mask_y1a1]
 
             #ind_map = des_spt['HPIX']
