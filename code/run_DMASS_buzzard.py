@@ -549,7 +549,7 @@ def main_buzzard(params):
             for hp in valid_hpix:
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
                 
-                if hp > 625:
+                if hp < 528:
 
                     #outname = out_catname+'_hpix{:03}.fits'.format(hp)
                     #if os.path.exists(outname): ts = fitsio.read(outname)
