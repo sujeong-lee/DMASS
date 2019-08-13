@@ -541,6 +541,10 @@ def main_buzzard(params):
         if params['hpix'] : 
             #prob_spt = []
             des_spt = esutil.io.read(des_spt_filename_list[0], upper=True)
+            #des_spt = esutil.io.read(des_spt_filename, upper=True)
+            mask_y1a1 = (priorCut_test(des_spt)) & (gold_st82['FLAGS_GOLD'] == 0 )
+            des_spt = des_spt[mask_y1a1]
+
             #ind_map = des_spt['HPIX']
             #valid_hpix = list(set(ind_map))
             ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= True)
@@ -548,6 +552,7 @@ def main_buzzard(params):
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
+
                 #if hp > 625:
                 if os.path.exists(outname):
                     print 'prob exists ', outname
