@@ -548,8 +548,13 @@ def main_buzzard(params):
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
-                
-                if hp > 625:
+
+                #if hp > 625:
+                if os.path.exists(outname):
+                    print 'prob exists ', outname
+                    pass
+
+                else : 
 
                     #outname = out_catname+'_hpix{:03}.fits'.format(hp)
                     #if os.path.exists(outname): ts = fitsio.read(outname)
@@ -557,15 +562,16 @@ def main_buzzard(params):
                     des_spt_i = des_spt[ind_map == hp]
                     #if des_spt_i.size == 0: pass
                     #else : 
+                    #if os.path.exists(outname):
                     ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
                     fitsio.write(outname, ts)
                     print 'prob cat save to ', outname
                     
                     #prob_spt.append(ts)
                     ts = None
-                else : 
-                    print 'prob cat save to ', outname
-                    pass
+                #else : 
+                #    print 'prob cat save to ', outname
+                #    pass
         else : pass
 
 
