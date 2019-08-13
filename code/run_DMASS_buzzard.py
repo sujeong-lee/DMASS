@@ -543,7 +543,7 @@ def main_buzzard(params):
             des_spt = esutil.io.read(des_spt_filename_list[0], upper=True)
             #ind_map = des_spt['HPIX']
             #valid_hpix = list(set(ind_map))
-            ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= False)
+            ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= True)
             valid_hpix = list(set(ind_map))
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
