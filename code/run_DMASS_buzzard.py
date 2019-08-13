@@ -548,7 +548,6 @@ def main_buzzard(params):
             print '# of healpix pixels :', len(valid_hpix)
             for hp in valid_hpix:
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
-
                 #if hp > 625:
                 if os.path.exists(outname):
                     print 'prob exists ', outname
