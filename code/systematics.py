@@ -118,7 +118,8 @@ def callingOldY1BAOLSSMask( nside = 4096 ):
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
     #maskname = '/n/des/lee.5922/data/gold_cat/mask/DES_Y1A1_LSSBAO_v1.0_MASK_HPIX4096RING.fits'
-    maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    #maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    maskname = 'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
     LSSGoldmask = fitsio.read(maskname)
     #frac_cut = (LSSGoldmask['FRAC'] >= 0.8)
     #LSSGoldmask = LSSGoldmask[frac_cut]
@@ -173,7 +174,8 @@ def callingEliGoldMask( nside = 4096 ):
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v2_il22_seeil4.0_nside4096ring_redlimcut.fits')
     #LSSGoldmask = fitsio.read(path+'Y1LSSmask_v1_il22seeil4.04096ring_redlimcut.fits')
     #maskname = '/n/des/lee.5922/data/gold_cat/mask/DES_Y1A1_LSSBAO_v1.0_MASK_HPIX4096RING.fits'
-    maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    #maskname = '/n/des/lee.5922/data/systematic_maps/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
+    maskname = 'Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits'
     LSSGoldmask = fitsio.read(maskname)
     #frac_cut = (LSSGoldmask['FRAC'] >= 0.8)
     #LSSGoldmask = LSSGoldmask[frac_cut]
