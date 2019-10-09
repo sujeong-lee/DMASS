@@ -5,7 +5,7 @@
 debug : False
 continue : False
 ## If set True, fittig is resumed from the existing fitting model.
-fitting : False
+fitting : True
 ## if set True, the code takes the 4-dimensional distribution 
 ## of [mag r, mag i, g-r, r-i] and performs the extreme deconvolution, 
 ## saves the fitted result as pickle. 
