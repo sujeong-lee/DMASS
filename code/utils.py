@@ -919,9 +919,15 @@ def uniform_random_on_sphere(data, size = None, z=False ):
     #data = np.asarray(ra_dec_to_xyz(ra, dec), order='F').T
     #data_R = np.asarray(ra_dec_to_xyz(ra_R, dec_R), order='F').T
     
-    data_R = np.zeros((ra_R.size,), dtype=[('RA', 'float'), ('DEC', 'float'), ('DESDM_ZP', 'float')])
+    
+    
+
+
+    data_R = np.zeros((ra_R.size,), dtype=[('RA', 'float'), ('DEC', 'float'), ('DESDM_ZP', 'float'), ('HPIX', 'int')])
     data_R['RA'] = ra_R
     data_R['DEC'] = dec_R
+    hpind = hpRaDecToHEALPixel(ra_R, dec_R, nside= 4096, nest= True) 
+    data_R['HPIX_NEST'] = hpind
     
     #random redshift distribution
     if z is True:
