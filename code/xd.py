@@ -16,6 +16,7 @@ from numpy import linalg
 #from __future__ import print_function, division
 #from ..utils import logsumexp, log_multivariate_gaussian, check_random_state
 from multiprocessing import Process, Queue
+#from sklearn.mixture import GMM as GaussianMixture
 from sklearn.mixture import GaussianMixture
 
 def getCMASSparam(filename = None ):
@@ -51,13 +52,13 @@ def extreme_fitting( cat, n_comp = 20, xmean=None, xamp=None, xcovar=None, pickl
     if weight is True : weight = cat['CMASS_WEIGHT']
 
     if xmean is None : 
-        from sklearn.mixture import GMM
+        from sklearn.mixture import GaussianMixture
         print 'initial guess'
-        gmm = GMM(n_comp, n_iter= 10, covariance_type='full',
+        gmm = GaussianMixture(n_comp, max_iter= 10, covariance_type='full',
                           random_state=1).fit(ydata)
         xmean = gmm.means_
         xamp = gmm.weights_
-        xcovar = gmm.covars_
+        xcovar = gmm.covariance_
 
         #return xmean, xamp, xcovar
 
@@ -138,7 +139,7 @@ class XDGMM(object):
         # this doesn't take into account errors, but is a fast first-guess
         
         if init_params is None : 
-            gmm = GMM(self.n_components, n_iter=10, covariance_type='full',
+            gmm = GaussianMixture(self.n_components, max_iter=10, covariance_type='full',
                       random_state=self.random_state).fit(X)
         
         
@@ -150,17 +151,17 @@ class XDGMM(object):
             #fix_mu, fix_alpha, fix_V = getCMASSparam(filename = 'pickle/gold_st82_20_XD_dmass.pkl')
             fix_mu, fix_alpha, fix_V = getCMASSparam(filename = filename)
 
-            gmm = GMM(self.n_components, n_iter=1, covariance_type='full',
+            gmm = GaussianMixture(self.n_components, max_iter=1, covariance_type='full',
                         random_state=self.random_state).fit(X)
 
             gmm.means_ = fix_mu
-            gmm.covars_ = fix_V
+            gmm.covariances_ = fix_V
             gmm.weights_= fix_alpha
         
         
         self.mu = gmm.means_
         self.alpha = gmm.weights_
-        self.V = gmm.covars_
+        self.V = gmm.covariances_
         self.n_components = len(self.V)
         print 'n components =',self.n_components
         print 'tolerance =', self.tol
@@ -706,7 +707,10 @@ def mixing_color(data, suffix = '', sdss = None, cmass = None,
 
 
     
-def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init_params = None, suffix='', n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
+def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init_params = None, suffix='', 
+        mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+        err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+        n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
     from astroML.decorators import pickle_results
     
     @pickle_results(pickleFileName, verbose = True)
@@ -730,7 +734,7 @@ def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init
         pickle = pickle.load(f)
         clf = pickle['retval']
     else:
-        X, Xcov = mixing_color(data, suffix = suffix, no_zband=True)
+        X, Xcov = mixing_color(data, mag=mag, err=err, suffix = suffix, no_zband=True)
         clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, n_iter = n_iter, tol=tol, verbose=verbose)
     return clf
     
@@ -1003,7 +1007,7 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
         for i in range(len(N)):
             sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
             sys.stdout.flush()
-            models[i] = GaussianMixture(n_components=N[i], n_iter=n_iter,
+            models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
                             covariance_type=covariance_type)
             models[i].fit(Xdata)
         return models
@@ -1061,7 +1065,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     
     # finding optimal n_cluster
 
-    from sklearn.mixture import GMM
+    #from sklearn.mixture import GMM
     prefix1 = prefix # 'gold_st82_5_'
     prefix2 = prefix #'gold_st82_6_' # has only all likelihood.
     #prefix2 = prefix
