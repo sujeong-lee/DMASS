@@ -52,4 +52,9 @@ See `example.yaml`
 ### Input train CMASS catalog can be downloaded from 
 https://drive.google.com/open?id=1ZtlhFoaict_I4PDvI0rkPupYv6i8STLZ
 
+### Mask for DES catalog can be downloaded from
+https://drive.google.com/open?id=1OCXvsaHtI_x8wkMC9pmjN_n66E-RHJSn
+File should be saved in `DMASS/code/`
+
+
 
