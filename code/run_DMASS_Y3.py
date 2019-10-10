@@ -129,7 +129,7 @@ def train_st82(params, param_file):
     print 'num of non-cmass in des side ', nocmass.size
 
     if params['random_sampling'] : 
-        random_sampling_ind = np.random.choice(np.arange(nocmass.size), size = nocmass.size/10)
+        random_sampling_ind = np.random.choice(np.arange(nocmass.size), size = nocmass.size/100)
         nocmass = nocmass[random_sampling_ind]
         print 'num of randomly sampled non-cmass ', nocmass.size
 
@@ -149,16 +149,16 @@ def train_st82(params, param_file):
     # Fitting ----------------------------------------------
 
     n_cmass, n_no = None, None
+    tol = 1E-5
     if 'n_cmass' in params : n_cmass = params['n_cmass']  
     if 'n_no' in params : n_no = params['n_no'] 
-
+    if 'tol' in params : tol = float(params['tol'])
 
     init_params_cmass = None
     init_params_no = None
-    tol = 1E-5
     if 'continue' in params : 
         if params['continue'] : 
-            tol = float(params['tol'])
+            #tol = float(params['tol'])
 
             init_params_cmass = cmass_pickle
             cmass_pickle = cmass_pickle+'.update'
