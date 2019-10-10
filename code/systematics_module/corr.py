@@ -18,6 +18,23 @@ from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
 
 
 
+def adding_dc(catalog, zlabel = 'Z', dclabel = 'DC', h=0.7, Om0=0.286, Ob0=0.046, Neff=3.046):
+    from astropy.cosmology import FlatLambdaCDM
+    # Cosmology Ibanez
+    #h = 0.7
+    #Om0 = 0.286
+    #Ob0 = 0.046
+    cosmo = FlatLambdaCDM(H0=h*100, Om0=Om0, Ob0=Ob0, Neff=Neff)
+    print 'Calculate comoving distance with cosmology \nH0={}, Om0={}'.format(100*h, Om0)
+
+    r = cosmo.comoving_distance(catalog[zlabel]).value *h
+    #import numpy.lib.recfuctions as rf
+    from numpy.lib import recfunctions as rf
+    print 'Adding Comoving distance column'
+    sys.stdout.flush()
+    catalog = rf.append_fields( catalog, dclabel, data = r )
+    return catalog
+
 
 def rp_pi_counts_to_s( Ncounts, sbin ):
     rp = Ncounts['rpavg']
@@ -43,14 +60,16 @@ def cf_s( DD_counts, DR_counts, RR_counts, sbin, N, Nrand):
 
 def rp_pi_counts_to_smu( Ncounts, sbin, mubin ):
     #rp = Ncounts['rpavg']
-    rp = (Ncounts['rmax']+Ncounts['rmax'])/2.
-    pi = Ncounts['pimax'] - 0.5
+    rp = (Ncounts['rmin']+Ncounts['rmax'])/2.
+    dpi = Ncounts['pimax'][1] - Ncounts['pimax'][0]
+    pi = Ncounts['pimax'] - dpi/2.
+
     npairs = Ncounts['npairs'] * Ncounts['weightavg']
     s = np.sqrt(rp**2 + pi**2)
     mu = pi/s
    
-    new_npairs = np.zeros((sbin.size-1, mubin.size-1))
-    wsqr = np.zeros((sbin.size-1, mubin.size-1))
+    new_npairs = np.zeros((sbin.size-1, mubin.size))
+    wsqr = np.zeros((sbin.size-1, mubin.size))
     for i in range(s.size-1):
         ind_s = np.digitize( s[i], sbin )
         ind_mu = np.digitize( mu[i], mubin )
@@ -59,6 +78,52 @@ def rp_pi_counts_to_smu( Ncounts, sbin, mubin ):
         else : new_npairs[ind_s-1, ind_mu-1] += npairs[i]
 
     return new_npairs
+
+
+def _convert_3d_counts_to_cf(ND1, ND2, NR1, NR2,
+                            D1D2, D1R2, D2R1, R1R2,
+                            estimator='LS'):
+    import numpy as np
+    pair_counts = dict()
+    fields = ['D1D2', 'D1R2', 'D2R1', 'R1R2']
+    arrays = [D1D2, D1R2, D2R1, R1R2]
+    for (field, array) in zip(fields, arrays):
+        try:
+            npairs = array['npairs']* array['weightavg']
+            pair_counts[field] = npairs
+        except IndexError:
+            pair_counts[field] = array
+
+    nbins = len(pair_counts['D1D2'])
+    if (nbins != len(pair_counts['D1R2'])) or \
+       (nbins != len(pair_counts['D2R1'])) or \
+       (nbins != len(pair_counts['R1R2'])):
+        msg = 'Pair counts must have the same number of elements (same bins)'
+        raise ValueError(msg)
+
+    nonzero = pair_counts['R1R2'] > 0
+    if 'LS' in estimator or 'Landy' in estimator:
+        fN1 = np.float(NR1) / np.float(ND1)
+        fN2 = np.float(NR2) / np.float(ND2)
+        cf = np.zeros(nbins)
+        cf[:] = np.nan
+        cf[nonzero] = (fN1 * fN2 * pair_counts['D1D2'][nonzero] -
+                       fN1 * pair_counts['D1R2'][nonzero] -
+                       fN2 * pair_counts['D2R1'][nonzero] +
+                       pair_counts['R1R2'][nonzero]) / pair_counts['R1R2'][nonzero]
+        if len(cf) != nbins:
+            msg = 'Bug in code. Calculated correlation function does not '\
+                  'have the same number of bins as input arrays. Input bins '\
+                  '={0} bins in (wrong) calculated correlation = {1}'.format(
+                      nbins, len(cf))
+            raise RuntimeError(msg)
+    else:
+        msg = "Only the Landy-Szalay estimator is supported. Pass estimator"\
+              "='LS'. (Got estimator = {0})".format(estimator)
+        raise ValueError(msg)
+
+    return cf
+
 
 def cf_smu( DD_counts, DR_counts, RR_counts, sbin, mubin, N, Nrand):        
 
@@ -69,27 +134,74 @@ def cf_smu( DD_counts, DR_counts, RR_counts, sbin, mubin, N, Nrand):
 
     #fN = np.sqrt( np.sum(RR_counts_smu)*1./np.sum(DD_counts_smu) )
  
-    # total weight
-    wd = np.sqrt(np.sum(DD_counts_smu))
-    wdr = np.sqrt(np.sum(DR_counts_smu))
-    wr = np.sqrt(np.sum(RR_counts_smu))
+
+    Ndd = N*N #np.sum(DD_counts['npairs'])
+    Ndr = N*Nrand#np.sum(DR_counts['npairs'])
+    Nrr = Nrand*Nrand #np.sum(RR_counts['npairs'])
 
     # normalization
-    norm_DD = DD_counts_smu * 1./wd**2
-    norm_DR = DR_counts_smu * 1./wdr**2
-    norm_RR = RR_counts_smu * 1./wr**2
+    norm_DD = DD_counts_smu  * Nrr*1./Ndd #**2
+    norm_DR = DR_counts_smu  * Nrr*1./Ndr #**2
+    norm_RR = RR_counts_smu 
 
-    zeromask = (norm_RR == 0.0)
-    norm_RR[zeromask] = 0.0  # to avoid zero divide error. will be excluded at the end.
+    # total weight
+    #wd = np.sqrt(np.sum(DD_counts_smu))
+    #wdr = np.sqrt(np.sum(DR_counts_smu))
+    #wr = np.sqrt(np.sum(RR_counts_smu))
+
+    # normalization
+    #norm_DD = DD_counts_smu * 1./wd**2
+    #norm_DR = DR_counts_smu * 1./wdr**2
+    #norm_RR = RR_counts_smu * 1./wr**2
+
+    zeromask = (RR_counts_smu == 0.0)
+    #norm_RR[zeromask] = 0.0  # to avoid zero divide error. will be excluded at the end.
 
     #xi = (fN**2*norm_DD - 2*fN* norm_DR + norm_RR)/(norm_RR)
     xi = (norm_DD - 2*norm_DR + norm_RR)/(norm_RR)
 
     xi[zeromask] = 0.0
     
-    return xi
+    return xi, norm_DD, norm_DR, norm_RR
 
 
+
+
+def direct_cf_smu( DD_counts, DR_counts, RR_counts, scenter, mubin, N, Nrand):        
+
+
+    """
+    N : weighted total number of galaxies
+    Nrand : weighted total number of randoms
+
+    """
+    #fN = np.float(Nrand)/np.float(N)
+    DD = DD_counts['npairs'] * DD_counts['weightavg'] # rp_pi_counts_to_smu( DD_counts, sbin, mubin )
+    DR = DR_counts['npairs'] * DR_counts['weightavg'] # rp_pi_counts_to_smu( DR_counts, sbin, mubin )
+    RR = RR_counts['npairs'] * RR_counts['weightavg'] # rp_pi_counts_to_smu( RR_counts, sbin, mubin )
+
+    #fN = np.sqrt( np.sum(RR_counts_smu)*1./np.sum(DD_counts_smu) )
+ 
+    #N = DD_counts['npairs']
+    # total weight
+    Ndd = N*N #np.sum(DD_counts['npairs'])
+    Ndr = N*Nrand#np.sum(DR_counts['npairs'])
+    Nrr = Nrand*Nrand #np.sum(RR_counts['npairs'])
+
+    # normalization
+    norm_DD = DD  * Nrr*1./Ndd #**2
+    norm_DR = DR  * Nrr*1./Ndr #**2
+    norm_RR = RR 
+
+    zeromask = (RR == 0.0)
+    #norm_RR[zeromask] = 0.0  # to avoid zero divide error. will be excluded at the end.
+
+    #xi = (fN**2*norm_DD - 2*fN* norm_DR + norm_RR)/(norm_RR)
+    xi = (norm_DD - 2.*norm_DR + norm_RR) *1./(norm_RR)
+
+    xi[zeromask] = 0.0
+    
+    return xi, norm_DD, norm_DR, norm_RR #.reshape( scenter.size, mubin.size)
 
 # Specify that an autocorrelation is wanted
 
@@ -267,6 +379,68 @@ def pickle_data( data = None, root = 'data_txt/pair_counting/', pickle_name = No
 
 
 
+def load_pickle_data_single( root = 'data_txt/pair_counting/', pickle_name = None ):
+    import pickle
+
+    """
+    i = 0
+    _root = root + '_{}/'.format(i) 
+
+    for i in range(100): 
+        _root = root + '_{}/'.format(i) 
+        if os.path.exists(_root) : 
+            print _root, 'exist'
+            i += 1
+        else : break
+
+    #_root = root + '_{}/'.format(i) 
+    """
+
+    _root = root+'/'
+    #if not os.path.exists(_root) : 
+    #    os.makedirs(_root)
+    #if not os.path.exists(dir) : os.mkdir(dir)
+
+    pickle_name_i = pickle_name+'.pkl'
+
+    if os.path.exists(_root+pickle_name_i):
+        print 'Loading stored paircounts... :', _root+pickle_name_i
+        file = open( _root + pickle_name_i)
+        picklefile = pickle.load(file)
+        return picklefile
+    else : return None
+
+
+def pickle_data_single( data = None, root = 'data_txt/pair_counting/', pickle_name = None ):
+    import pickle
+
+    """
+    i = 0
+    _root = root + '_{}/'.format(i) 
+
+    for i in range(100): 
+        _root = root + '_{}/'.format(i) 
+        if os.path.exists(_root) : 
+            print _root, 'exist'
+            i += 1
+        else : break
+
+    #_root = root + '_{}/'.format(i) 
+    """
+
+    _root = root+'/'
+    if not os.path.exists(_root) : 
+        os.makedirs(_root)
+    #if not os.path.exists(dir) : os.mkdir(dir)
+
+    pickle_name_i = pickle_name+'.pkl'
+    print _root+pickle_name_i
+    output = open( _root + pickle_name_i, 'wb')
+    pickle.dump(data, output)
+    output.close()
+
+
+
 
 def _cfz_multipoles( data, rand, weight = None, nthreads = 20, suffix = 'test' ):
     import Corrfunc
@@ -363,6 +537,276 @@ def _cfz_multipoles( data, rand, weight = None, nthreads = 20, suffix = 'test' )
     return sbin_center, np.hstack([xi_monopole, xi_quadrupole])
 
 
+
+def correlation_function_multipoles_rppi_single( data, rand, weight_data = None, weight_rand = None, nthreads = 20, dir = './', 
+    smin=5,smax=200, snbin=40, verbose=True ):
+    import Corrfunc
+
+    cosmology = 2
+
+    # Create the bins array
+
+    #transverse separation
+    rmin = 0.01
+    rmax = 250.0
+    nbins = 500
+    
+    rbins, rstep = np.linspace(rmin, rmax, nbins+1, retstep=True)
+    # Specify the distance to integrate along line of sight
+    pimax = 100.0
+    mumax = 1.0
+    nmubin = 101
+    mubin, mus = np.linspace(0.0, 1.0, nmubin, retstep = True)
+    mucenter = mubin[:-1]+mus/2.
+
+    sbin, step = np.linspace(smin, smax, snbin, retstep=True)
+    sbin_center = sbin[:-1] + step/2.
+
+    RA = data['RA']
+    DEC = data['DEC'].astype(RA.dtype)
+    DC = data['DC'].astype(RA.dtype)
+
+    RAND_RA = rand['RA'].astype(RA.dtype)
+    RAND_DEC = rand['DEC'].astype(RA.dtype)
+    RAND_DC = rand['DC'].astype(RA.dtype)
+    
+
+    #weight_data = None
+    #weight_rand = None
+    N = data.size
+    Nrand = rand.size
+    if weight_data is not None:
+        N = np.sum(weight_data)
+    if weight_rand is not None:
+        Nrand = np.sum(weight_rand)
+
+    if weight_data.dtype != RA.dtype: 
+        weight_data = weight_data.astype(RA.dtype)
+        weight_rand = weight_rand.astype(RA.dtype)
+
+
+    #print '.',
+
+    from Corrfunc.mocks.DDrppi_mocks import DDrppi_mocks
+    import pickle
+
+    DD_counts = load_pickle_data_single( root = dir, pickle_name = 'dd' )
+    DR_counts = load_pickle_data_single( root = dir, pickle_name = 'dr' )
+    RR_counts = load_pickle_data_single( root = dir, pickle_name = 'rr' )
+
+    if DD_counts is None : 
+        DD_counts, apitimeDD = DDrppi_mocks(1, cosmology, nthreads, pimax, rbins, RA, DEC, DC, 
+            weights1=weight_data, verbose=verbose,
+            c_api_timer=True, is_comoving_dist=True, output_rpavg=False, weight_type="pair_product")
+        pickle_data_single( data = DD_counts, root = dir, pickle_name = 'dd' )
+
+    if DR_counts is None : 
+        DR_counts, apitimeDR = DDrppi_mocks(0, cosmology, nthreads, pimax, rbins,
+                                  RA, DEC, DC, weights1=weight_data, 
+                                  RA2=RAND_RA, DEC2=RAND_DEC, CZ2=RAND_DC, weights2=weight_rand
+                                  ,c_api_timer=True, is_comoving_dist=True, verbose=verbose, weight_type="pair_product",
+                                         output_rpavg = False)
+        pickle_data_single( data = DR_counts, root = dir, pickle_name = 'dr' )
+
+    if RR_counts is None : 
+        RR_counts, apitimeRR = DDrppi_mocks(1, cosmology, nthreads, pimax, rbins, 
+                                 RAND_RA, RAND_DEC, RAND_DC, weights1=weight_rand, verbose=verbose
+                                 ,c_api_timer=True, is_comoving_dist=True, output_rpavg=False,weight_type="pair_product")
+        pickle_data_single( data = RR_counts, root = dir, pickle_name = 'rr' )
+
+
+    """
+    from Corrfunc.mocks.DDsmu_mocks import DDsmu_mocks
+    import pickle
+
+    DD_counts, apitimeDD = DDsmu_mocks(1, cosmology, nthreads, mumax, nmubin, sbin, RA, DEC, DC, 
+        weights1=weight_data, verbose=verbose, 
+        c_api_timer=True, is_comoving_dist=True, weight_type="pair_product")
+    pickle_data_single( data = DD_counts, root = dir, pickle_name = 'dd' )
+    DR_counts, apitimeDR = DDsmu_mocks(0, cosmology, nthreads, mumax, nmubin, sbin, 
+                              RA, DEC, DC, weights1=weight_data, 
+                              RA2=RAND_RA, DEC2=RAND_DEC, CZ2=RAND_DC, weights2=weight_rand
+                              ,c_api_timer=True, is_comoving_dist=True, verbose=verbose, weight_type="pair_product")
+    pickle_data_single( data = DR_counts, root = dir, pickle_name = 'dr' )
+    RR_counts, apitimeRR = DDsmu_mocks(1, cosmology, nthreads, mumax, nmubin, sbin, 
+                             RAND_RA, RAND_DEC, RAND_DC, weights1=weight_rand,verbose=verbose 
+                             ,c_api_timer=True, is_comoving_dist=True, weight_type="pair_product")
+    pickle_data_single( data = RR_counts, root = dir, pickle_name = 'rr' )
+    #print '\relapsed time ', apitimeDD + apitimeDR + apitimeRR
+    """
+
+    #for r in RR_counts[10:]: print("{0:10.6f} {1:10.6f} {2:10.6f} {3:10.1f}"
+    #                           " {4:10d} {5:10.6f}".format(r['rmin'], r['rmax'],
+    #                           r['rpavg'], r['pimax'], r['npairs'], r['weightavg']))
+
+    
+    #stop
+    #N = data.size
+    #rand_N = rand.size
+    
+    #smin = 40
+    #smax = 180
+    #snbin = 29
+    
+    #sbin, step = np.linspace(smin, smax, snbin, retstep=True)
+   
+    #sbin_center = sbin[:-1] + step/2.
+    #mubin, mus = np.linspace(0.0, 1.0, 101, retstep = True)
+    #mucenter = mubin[:-1]+mus/2.
+    
+    #xi_smu = Corrfunc.utils.convert_3d_counts_to_cf(N,N,rand_N,rand_N, DD_counts, DR_counts, DR_counts, RR_counts )
+
+
+    #xi_smu, DD, DR, RR = direct_cf_smu( DD_counts, DR_counts, RR_counts, sbin, mubin, N, Nrand)
+    xi_smu, DD, DR, RR = cf_smu( DD_counts, DR_counts, RR_counts, sbin, mubin, N, Nrand)
+    xi_smu_reshape = xi_smu.reshape(sbin_center.size, mubin.size)
+    DAT0 = np.column_stack(( DD, DR, RR, xi_smu ))
+    DATs = np.column_stack(( sbin[:-1], sbin_center, sbin[1:] ))
+    np.savetxt(dir + 'npairs.txt', DAT0, header='DD, DR, RR, xi_smu')
+    np.savetxt(dir + 'sbin.txt', DATs, header='smin, smid, smax (Mpc/h)')
+    np.savetxt(dir + 'mubin.txt', mubin )
+    
+    import scipy
+    legendre0 = np.array([scipy.special.eval_legendre(0,m) for m in mubin]).ravel() 
+    legendre2 = np.array([scipy.special.eval_legendre(2,m) for m in mubin]).ravel() 
+
+    xi_monopole = np.sum(xi_smu_reshape * legendre0.T, axis = 1)/mubin.size
+    xi_quadrupole = 5.0*np.sum(xi_smu_reshape * legendre2.T, axis = 1)/mubin.size
+
+
+    DAT = np.column_stack(( sbin[:-1], sbin_center, sbin[1:], xi_monopole, xi_quadrupole ))
+    np.savetxt(dir + 'cfz_multipole_single.txt', DAT)
+    print 'file saved to ', dir + 'cfz_multipole_single.txt'
+
+
+def correlation_function_multipoles_single( data, rand, weight_data = None, weight_rand = None, nthreads = 20, dir = './', 
+    smin=5,smax=200, snbin=40, verbose=True ):
+    import Corrfunc
+
+    cosmology = 2
+
+    # Create the bins array
+
+    #transverse separation
+    rmin = 0.01
+    rmax = 250.0
+    nbins = 500
+    
+    rbins, rstep = np.linspace(rmin, rmax, nbins+1, retstep=True)
+    # Specify the distance to integrate along line of sight
+    #pimax = 100.0
+    mumax = 1.0
+    nmubin = 101
+    mubin, mus = np.linspace(0.0, 1.0, nmubin, retstep = True)
+    mucenter = mubin[:-1]+mus/2.
+
+    sbin, step = np.linspace(smin, smax, snbin, retstep=True)
+    sbin_center = sbin[:-1] + step/2.
+
+    RA = data['RA']
+    DEC = data['DEC'].astype(RA.dtype)
+    DC = data['DC'].astype(RA.dtype)
+
+    RAND_RA = rand['RA'].astype(RA.dtype)
+    RAND_DEC = rand['DEC'].astype(RA.dtype)
+    RAND_DC = rand['DC'].astype(RA.dtype)
+    
+
+
+    #weight_data = None
+    #weight_rand = None
+    N = data.size
+    Nrand = rand.size
+    if weight_data is not None:
+        N = np.sum(weight_data)
+    if weight_rand is not None:
+        Nrand = np.sum(weight_rand)
+
+        #weight_data = weight[0]
+        #weight_rand = weight[1]
+    #    weight_data = data['WEIGHT_FKP']*data['WEIGHT_SYSTOT']*( data['WEIGHT_CP'] + data['WEIGHT_NOZ'] - 1.)
+    #    weight_rand = rand['WEIGHT_FKP']
+
+
+    if weight_data.dtype != RA.dtype: 
+        weight_data = weight_data.astype(RA.dtype)
+        weight_rand = weight_rand.astype(RA.dtype)
+
+
+    #print '.',
+
+    DD_counts = load_pickle_data_single( root = dir, pickle_name = 'dd' )
+    DR_counts = load_pickle_data_single( root = dir, pickle_name = 'dr' )
+    RR_counts = load_pickle_data_single( root = dir, pickle_name = 'rr' )
+
+    from Corrfunc.mocks.DDsmu_mocks import DDsmu_mocks
+    import pickle
+
+    if DD_counts is None : 
+        DD_counts, apitimeDD = DDsmu_mocks(1, cosmology, nthreads, mumax, nmubin, sbin, RA, DEC, DC, 
+            weights1=weight_data, verbose=verbose, 
+            c_api_timer=True, is_comoving_dist=True, weight_type="pair_product")
+        pickle_data_single( data = DD_counts, root = dir, pickle_name = 'dd' )
+
+    if DR_counts is None : 
+        DR_counts, apitimeDR = DDsmu_mocks(0, cosmology, nthreads, mumax, nmubin, sbin, 
+                                  RA, DEC, DC, weights1=weight_data, 
+                                  RA2=RAND_RA, DEC2=RAND_DEC, CZ2=RAND_DC, weights2=weight_rand
+                                  ,c_api_timer=True, is_comoving_dist=True, verbose=verbose, weight_type="pair_product")
+        pickle_data_single( data = DR_counts, root = dir, pickle_name = 'dr' )
+
+    if RR_counts is None : 
+        RR_counts, apitimeRR = DDsmu_mocks(1, cosmology, nthreads, mumax, nmubin, sbin, 
+                                 RAND_RA, RAND_DEC, RAND_DC, weights1=weight_rand,verbose=verbose 
+                                 ,c_api_timer=True, is_comoving_dist=True, weight_type="pair_product")
+        pickle_data_single( data = RR_counts, root = dir, pickle_name = 'rr' )
+    #print '\relapsed time ', apitimeDD + apitimeDR + apitimeRR
+
+    #for r in RR_counts[10:]: print("{0:10.6f} {1:10.6f} {2:10.6f} {3:10.1f}"
+    #                           " {4:10d} {5:10.6f}".format(r['rmin'], r['rmax'],
+    #                           r['rpavg'], r['pimax'], r['npairs'], r['weightavg']))
+
+    
+    #stop
+    #N = data.size
+    #rand_N = rand.size
+    
+    #smin = 40
+    #smax = 180
+    #snbin = 29
+    
+    #sbin, step = np.linspace(smin, smax, snbin, retstep=True)
+   
+    #sbin_center = sbin[:-1] + step/2.
+    #mubin, mus = np.linspace(0.0, 1.0, 101, retstep = True)
+    #mucenter = mubin[:-1]+mus/2.
+    
+    #xi_smu = Corrfunc.utils.convert_3d_counts_to_cf(N,N,rand_N,rand_N, DD_counts, DR_counts, DR_counts, RR_counts )
+
+
+    xi_smu, DD, DR, RR = direct_cf_smu( DD_counts, DR_counts, RR_counts, sbin, mubin, N, Nrand)
+    xi_smu_reshape = xi_smu.reshape(sbin_center.size, mubin.size)
+    DAT0 = np.column_stack(( DD, DR, RR, xi_smu ))
+    DATs = np.column_stack(( sbin[:-1], sbin_center, sbin[1:] ))
+    np.savetxt(dir + 'npairs.txt', DAT0, header='DD, DR, RR, xi_smu')
+    np.savetxt(dir + 'sbin.txt', DATs, header='smin, smid, smax (Mpc/h)')
+    np.savetxt(dir + 'mubin.txt', mubin )
+    
+    import scipy
+    legendre0 = np.array([scipy.special.eval_legendre(0,m) for m in mubin]).ravel() 
+    legendre2 = np.array([scipy.special.eval_legendre(2,m) for m in mubin]).ravel() 
+
+    xi_monopole = np.sum(xi_smu_reshape * legendre0.T, axis = 1)/mubin.size
+    xi_quadrupole = 5.0*np.sum(xi_smu_reshape * legendre2.T, axis = 1)/mubin.size
+
+
+    DAT = np.column_stack(( sbin[:-1], sbin_center, sbin[1:], xi_monopole, xi_quadrupole ))
+    np.savetxt(dir + 'cfz_multipole_single.txt', DAT)
+    print 'file saved to ', dir + 'cfz_multipole_single.txt'
+
+    
+    #return sbin_center, np.hstack([xi_monopole, xi_quadrupole])
+    
 
 
 def correlation_function_multipoles(data = None, rand = None, zlabel = 'Z', njack = 30, weight = None, suffix = '', out = None, nthreads = 20):
