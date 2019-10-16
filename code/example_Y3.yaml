@@ -2,8 +2,8 @@
 #   Extreme Deconvolution yaml settings
 ############################################### 
 
-debug : False
-continue : False
+debug : True
+continue : True
 ## If set True, fittig is resumed from the existing fitting model.
 fitting : True
 ## if set True, the code takes the 4-dimensional distribution 
@@ -16,33 +16,32 @@ random_sampling : True
 
 
 #output_dir : output/example_Y3/  
-output_dir : /global/cscratch1/sd/sjlee88/output_dmassY3/
+output_dir : output/output_dmassY3/
 ## output directory. All output results will be stored here. 
 #train_cmass_sample : ../../share/cmass-dr12v4-S-Reid-full.dat.fits
-train_cmass_sample : /global/cscratch1/sd/sjlee88/cmass_cat/cmass-dr12v4-S-Reid-full.dat.fits
+train_cmass_sample : /n/des/lee.5922/data/cmass_cat/cmass-dr12v4-S-Reid-full.dat.fits
 ## true CMASS catalog that overlaps with DES. Only positions will be used.
 ## can be downloaded from : https://drive.google.com/open?id=1ZtlhFoaict_I4PDvI0rkPupYv6i8STLZ
-#train_des_path : /n/des/lee.5922/data/gold_cat/ 
-train_des_path : /global/cscratch1/sd/sjlee88/Y3gold/
-#train_des_keyword : Y1A1_GOLD_STRIPE82_v2
-train_des_keyword : Gold.Y3_mastercat_7_24_19.fits
+train_des_path : /n/des/lee.5922/data/gold_cat_Y3/
+#train_des_path : //sd/sjlee88/Y3gold/
+train_des_keyword : Y3GOLD
+#train_des_keyword : Gold.Y3_mastercat_7_24_19.fits
 ## path and name of the des catalog that includes stripe82.  
 ## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df (No SFD98 corrected. Set SFD98:True)
 
 
-cmass_pickle : Y3gold_st82_XD_cmass_full_tol1e5.pkl 
+cmass_pickle : Y3gold_st82_XD_cmass_full_tol1e5.pkl.update.update 
 ## Fitted gaussian mixtures for CMASS - means, amplitudes, and covariance matrix.
-no_pickle : Y3gold_st82_XD_no_full_tol1e5.pkl
+no_pickle : Y3gold_st82_XD_no_full_tol1e5_ran100.pkl.update
 ## Fitted gaussian mixtures for non-CMASS 
-#cmass_fraction : output/example_Y3/cmassfrac
-cmass_fraction : /global/cscratch1/sd/sjlee88/output_dmassY3/cmassfrac
+cmass_fraction : output/output_dmassY3/cmassfrac
 ## if you know the fraction of CMASS in the training region (i.e CMASS in DES Y1 Stripe82)
 ## put the number here. Otherwise the code calculates the fraction automatically 
 ## during the fitting process and saves the number as file. 
 
-n_cmass : 
+n_cmass : 16 
 n_no :
-tol : 1
+tol : 1e-05
 ## the number of Gaussian mixutres for fitting. If you don't specify numbers, 
 ## the code will find the optimal number of mixtures through BIC. 
 
@@ -53,8 +52,8 @@ SFD98 : False
 
 cat_area : spt
 ## 'spt' or 'ST82'
-#input_cat_dir : /n/des/lee.5922/data/gold_cat/ 
-input_cat_dir : /global/cscratch1/sd/sjlee88/Y3gold/
+input_cat_dir : /n/des/lee.5922/data/gold_cat/ 
+#input_cat_dir : /global/cscratch1/sd/sjlee88/Y3gold/
 ## directory containing targeted DES catalogs  
 #input_cat_keyword : Y1A1_GOLD_slr_ebv_00  
 input_cat_keyword : Gold.Y3_mastercat_7_24_19.fits
