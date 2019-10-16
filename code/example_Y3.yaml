@@ -5,7 +5,7 @@
 debug : True
 continue : True
 ## If set True, fittig is resumed from the existing fitting model.
-fitting : True
+fitting : False
 ## if set True, the code takes the 4-dimensional distribution 
 ## of [mag r, mag i, g-r, r-i] and performs the extreme deconvolution, 
 ## saves the fitted result as pickle. 
@@ -32,7 +32,7 @@ train_des_keyword : Y3GOLD
 
 cmass_pickle : Y3gold_st82_XD_cmass_full_tol1e5.pkl.update.update 
 ## Fitted gaussian mixtures for CMASS - means, amplitudes, and covariance matrix.
-no_pickle : Y3gold_st82_XD_no_full_tol1e5_ran100.pkl.update
+no_pickle : Y3gold_st82_XD_no_full_tol1e5_ran100.pkl
 ## Fitted gaussian mixtures for non-CMASS 
 cmass_fraction : output/output_dmassY3/cmassfrac
 ## if you know the fraction of CMASS in the training region (i.e CMASS in DES Y1 Stripe82)
@@ -50,13 +50,16 @@ SFD98 : False
 ## if train_des_catalog or target des catalog does not have SFD98 corrected magnitudes, set this option 'True'. 
 
 
+hpix : True
 cat_area : spt
 ## 'spt' or 'ST82'
 input_cat_dir : /n/des/lee.5922/data/gold_cat/ 
 #input_cat_dir : /global/cscratch1/sd/sjlee88/Y3gold/
 ## directory containing targeted DES catalogs  
 #input_cat_keyword : Y1A1_GOLD_slr_ebv_00  
-input_cat_keyword : Gold.Y3_mastercat_7_24_19.fits
+#input_cat_keyword : Gold.Y3_mastercat_7_24_19
+input_cat_keyword : Gold.Y3
+#input_cat_keyword : Y3GOLD_STRIPE82_cleancut
 ## Target catalog's magnitudes should have SFD98 corrected magnitudes. 
 ## keyword for targeted DES catalog if you have multiple catalogs to run
 ## For a test, use https://drive.google.com/open?id=1fzb_RapthgevE8xD2Gph2eHNTFZRh4Df  (SFD98 corrected. Set SFD98:False)

@@ -1320,12 +1320,15 @@ def XD_fitting_old( data, pickleFileName = 'pickle/XD_fitting_test.pkl', n_cl = 
 
 
 
-def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, suffix = None ):
+def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, 
+                     mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+                     err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+                     suffix = None ):
     
     print "calculate loglikelihood gaussian with multiprocessing module"
     
-    try: X, Xcov = mixing_color( test )
-    except ValueError : X, Xcov = mixing_color( test, suffix = '')
+    try: X, Xcov = mixing_color( test, mag=mag, err=err )
+    except ValueError : X, Xcov = mixing_color( test, mag=mag, err=err, suffix = '')
         
     from multiprocessing import Process, Queue
     # split data
