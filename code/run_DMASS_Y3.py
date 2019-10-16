@@ -360,7 +360,11 @@ def main(params):
 """   
 
 def main_spt(params):
-      
+     
+
+    mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
+    err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
+
     output_dir = params['output_dir']
     cmass_fraction = params['cmass_fraction']
     cmass_pickle = output_dir + params['cmass_pickle']
@@ -385,7 +389,7 @@ def main_spt(params):
         if 'debug' in params : 
             if params['debug'] : 
                 print 'debugging mode : small sample for the fast calculation.'
-                input_keyword = 'Y1A1_GOLD_000001'
+                #input_keyword = 'Y1A1_GOLD_000001'
                 des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
                 randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
                 des_spt = des_spt[randind]
@@ -394,9 +398,11 @@ def main_spt(params):
         else : des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
 
 
-        des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
-        des_spt = Cuts.keepGoodRegion(des_spt)
-        des_spt = des_spt[des_spt['DEC'] < -3]
+        #des_spt = des_spt[ (des_spt['MODEST_CLASS'] == 1) & (des_spt['FLAGS_GOLD'] == 0 )]
+        #des_spt = Cuts.keepGoodRegion(des_spt)
+        #des_spt = des_spt[des_spt['DEC'] < -3]
+        des_spt = des_spt[priorCut_test(des_spt)]
+        des_spt = des_spt[(des_spt['FLAGS_GOLD'] == 0 )]
         #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
         #des_spt = des_spt[mask_y1a1]
 
@@ -418,83 +424,66 @@ def main_spt(params):
                 des_spt = RemovingSLRReddening(des_spt )
                 des_spt = des_spt[priorCut_test(des_spt)]
                 des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
+            else :
+                print 'Apply priorCut....SFD98 correction should be applied in advance....'
+                des_spt = des_spt[priorCut_test(des_spt)]
+        else :
+            print 'Apply priorCut....SFD98 correction should be applied in advance....'
+            des_spt = des_spt[priorCut_test(des_spt)]
 
-                """
-                indarray = np.arange( des_spt.size )
-                split_indarray = np.array_split(indarray, 5)
 
+        if 'hpix' in params :
+            if params['hpix'] :
 
-                des_spt_corrected = []
-                for si in split_indarray:
-                    des_spt_i = des_spt[si] 
-                    des_spt_i = RemovingSLRReddening(des_spt_i )
-                    des_spt_i = des_spt_i[priorCut_test(des_spt_i)]
-                    des_spt_i = AddingSFD98Reddening(des_spt_i, kind='SPT')
-                    #des_spt_i = des_spt_i[priorCut_test(des_spt_i)]
-                    des_spt_corrected.append(des_spt_i)
+                ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= True)
+                valid_hpix = list(set(ind_map))
+                print '# of healpix pixels :', len(valid_hpix)
 
-                des_spt = np.hstack( des_spt_corrected )
-                des_spt_corrected = None
-                """
+                for hp in valid_hpix:
+                    outname = out_catname+'_hpix{:03}.fits'.format(hp)
 
-        ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir )
+                    #if hp > 625:
+                    if os.path.exists(outname):
+                        print 'prob exists ', outname
+                        pass
+
+                    else :
+                        des_spt_i = des_spt[ind_map == hp]
+                        ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction, mag=mag, err=err )
+                        fitsio.write(outname, ts)
+                        print 'prob cat save to ', outname
+
+                        ts = None
+            else : 
+                ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir )
+
+        else : 
+            ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir )
         
 
-    prob_spt = []
+            prob_spt = []
 
-    jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'])
-    if len(jkoutnames) == 0 : 
+            jkoutnames = io.SearchFitsByName(path = output_dir, columns = None, keyword = params['out_catname'])
+            if len(jkoutnames) == 0 : 
             
-        for i in range(njack):
+                for i in range(njack):
 
-            outname = out_catname+'_jk{:03}.fits'.format(i+1)
-            if os.path.exists(outname): ts = fitsio.read(outname)
-            else : 
-                des_spt_i = des_spt[ind_map == i]
-                ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
-                fitsio.write(outname, ts)
-                print 'prob cat save to ', outname
+                    outname = out_catname+'_jk{:03}.fits'.format(i+1)
+                    if os.path.exists(outname): ts = fitsio.read(outname)
+                    else : 
+                        des_spt_i = des_spt[ind_map == i]
+                        ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction, mag=mag, err=err )
+                        fitsio.write(outname, ts)
+                        print 'prob cat save to ', outname
                 
-            prob_spt.append(ts)
-            ts = None
+                    prob_spt.append(ts)
+                    ts = None
     
-    else : 
-        prob_spt = [fitsio.read(jko) for jko in jkoutnames] 
+            else : 
+                prob_spt = [fitsio.read(jko) for jko in jkoutnames] 
 
-    """
-    for i in range(njack):
+            prob_spt = np.hstack(prob_spt)
 
-        outname = out_catname+'_jk{:03}.fits'.format(i+1)
-        if os.path.exists(outname): ts = fitsio.read(outname)
-        else : 
-            des_spt_i = des_spt[ind_map == i]
-            ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
-            fitsio.write(outname, ts)
-            
-        prob_spt.append(ts)
-        ts = None
-    """
-    prob_spt = np.hstack(prob_spt)
-
-
-    """
-    print 'make '+str(num_mock)+' catalogs'
-    for ii in range( num_mock ):
-
-        dmass_spt, _ = resampleWithPth( prob_spt, pstart = 0.0, pmax = 1.0 )
-        #dmass_spt.append(dm)
-        #outname = out_catname.split('.')[0]+'_jk{:03}.fits'.format(i+1)
-            
-        if ii == 0 :
-            print 'jk sample size :', dmass_spt.size
-            #print 'prob cat save to ', outname
-        #des_spt = np.hstack(des_spt_list)
-        #dmass_spt = np.hstack(dmass_spt)
-        #fitsio.write(out_resampled_cat, dmass_spt)
-        fitsio.write(out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt)
-        print 'dmass mock saved to ', out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt.size
-    
-    """
     
 if __name__=='__main__':
 

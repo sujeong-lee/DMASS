@@ -41,8 +41,8 @@ def hpRaDecToHEALPixel(ra, dec, nside=  4096, nest= False):
     return hpInd
 
 
-def hpHEALPixelToRaDec( hpPixel, nside = 256 ):
-    theta, phi = hp.pix2ang(nside, hpPixel)
+def hpHEALPixelToRaDec( hpPixel, nside = 256, nest=False ):
+    theta, phi = hp.pix2ang(nside, hpPixel, nest=nest)
     ra, dec = GetRaDec(phi,theta)
     return [ra, dec]
 
