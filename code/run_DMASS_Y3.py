@@ -11,7 +11,18 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
+def goldY3_masking( cat=None, valid_hpind=None ):
 
+    try : 
+        cathpind = hpRaDecToHEALPixel( cat['RA'], cat['DEC'], nside = 4096, nest=True )
+        mask = np.in1d( cathpind, valid_hpind )
+        
+    except KeyError:
+        cathpind = hpRaDecToHEALPixel( cat['ra'].value, cat['dec'].value, nside = 4096, nest=True )
+        mask = np.in1d( cathpind, valid_hpind )        
+        
+    return cat[mask]
+    
 def priorCut_test(data):
     ## Should add MODEST_CLASS cut later.
     modelmag_g_des = data['SOF_CM_MAG_CORRECTED_G']
@@ -91,7 +102,9 @@ def train_st82(params, param_file):
     columns = None
     gold_st82 = io.SearchAndCallFits(path = train_path, columns = columns, keyword = train_keyword )
     #gold_st82 = gold_st82[(gold_st82['MODEST_CLASS'] == 1)&(gold_st82['FLAGS_GOLD'] == 0 )]
-    gold_st82 = gold_st82[(gold_st82['FLAGS_GOLD'] == 0 )]
+    goldY3mask_map = fitsio.read('')
+    gold_mask = goldY3_masking(cat=dmassY3, valid_hpind=goldY3mask_map['HPIX'])
+    gold_st82 = gold_st82[(gold_st82['FLAGS_GOLD'] == 0 ) & gold_mask ]
     #gold_st82 = Cuts.keepGoodRegion(gold_st82)
 
 
@@ -128,7 +141,9 @@ def train_st82(params, param_file):
     print 'num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./train_sample.size * 100)
     print 'num of non-cmass in des side ', nocmass.size
 
-    if params['random_sampling'] : 
+    if params['random_sampling'] :
+	print 'random sampling... '
+	print 'sample size :', nocmass.size/100
         random_sampling_ind = np.random.choice(np.arange(nocmass.size), size = nocmass.size/100)
         nocmass = nocmass[random_sampling_ind]
         print 'num of randomly sampled non-cmass ', nocmass.size
@@ -263,102 +278,7 @@ def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jf
     print '--------------------------------'
     return ind
 
-"""    
-def main(params):
-      
-    output_dir = params['output_dir']
-    cmass_fraction = params['cmass_fraction']
-    cmass_pickle = output_dir + params['cmass_pickle']
-    no_pickle = output_dir + params['no_pickle']
-    out_catname = output_dir + params['out_catname']
-    out_resampled_cat = output_dir + params['out_resampled_cat']
-    input_path = params['input_cat_dir']
-    input_keyword = params['input_cat_keyword']
-    njack = 10
-    num_mock = 1
-    if 'num_mock' in params : 
-        num_mock = params['num_mock']
-
-
-
-    jkoutname = out_catname+'_jk{:03}.fits'.format(1)
-    if os.path.exists(jkoutname): pass
-    else : 
-        print 'jkoutfile doesnt exist'
-        print jkoutname
-        # calling spt des_gold ---------------------------------------------
-        des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
-        des_spt = des_spt[(des_spt['MODEST_CLASS'] == 1)&(des_spt['FLAGS_GOLD'] == 0)]
-        des_spt = Cuts.keepGoodRegion(des_spt)
-        des_spt = des_spt[des_spt['DEC'] < -3]
-        #mask_y1a1 = (des_spt['FLAGS_GOLD'] == 0 )&(priorCut_test(des_spt))
-        #des_spt = des_spt[mask_y1a1]
-
-        clf_cmass = XD_fitting( None, pickleFileName = cmass_pickle)               
-        clf_no = XD_fitting( None, pickleFileName = no_pickle)
-        
-        #assign prob to spt ----------------------
-        # dmass from spt
-        #rabin = np.linspace(des_spt['RA'].min(), des_spt['RA'].max(), 15)
-        #ind_map = np.digitize(des_spt['RA'], bins = rabin)
-        
-        ind_map = construct_jk_catalog_ind( des_spt, njack = njack, root = output_dir)
-    
-
-    #if 'SFD98' in params : 
-    #    if params['SFD98'] : 
-    #        print 'change reddening corrections from SLR to SFD98'
-    #        des_spt = RemovingSLRReddening(des_spt)
-    #        des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
-        
-    
-    #des_spt_list = []
-
-    print 'make '+str(num_mock)+' catalogs'
-    for ii in range( num_mock ):
-        
-        dmass_spt = []
-        for i in range(njack):
-
-            outname = out_catname+'_jk{:03}.fits'.format(i+1)
-            if os.path.exists(outname): ts = fitsio.read(outname)
-            else : 
-
-                des_spt_i = des_spt[ind_map == i]
-                if 'SFD98' in params : 
-                    if params['SFD98'] : 
-                        print 'change reddening corrections from SLR to SFD98'
-                        des_spt_i = RemovingSLRReddening(des_spt_i)
-                        des_spt_i = AddingSFD98Reddening(des_spt_i, kind='SPT')
-                        des_spt_i = des_spt[priorCut_test(des_spt)]
-                    else : des_spt_i = des_spt[priorCut_test(des_spt)]
-                else : des_spt_i = des_spt[priorCut_test(des_spt)]
-
-                ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
-                fitsio.write(outname, ts)
-
-            #des_spt_list.append(ts)
-            #ts = None
-            dm, _ = resampleWithPth( ts, pstart = 0.01, pmax = 1.0 )
-            dmass_spt.append(dm)
-            #outname = out_catname.split('.')[0]+'_jk{:03}.fits'.format(i+1)
-            
-            if ii == 0 :
-                print 'jk sample size :', ts.size
-                print 'prob cat save to ', outname
-        #des_spt = np.hstack(des_spt_list)
-        dmass_spt = np.hstack(dmass_spt)
-        #fitsio.write(out_resampled_cat, dmass_spt)
-        fitsio.write(out_resampled_cat+'_{:04}.fits'.format(ii+1), dmass_spt)
-        print 'dmass mock saved to ', out_resampled_cat+'_{:04}.fits'.format(ii+1)
-    
-    # resampling
-    #dmass_spt, _ = resampleWithPth( des_spt, pstart = 0.01, pmax = 1.0 )
-    
-    #save dmass
-    #fitsio.write(out_resampled_cat, dmass_spt)
-"""   
-
+     
 def main_spt(params):
       
     output_dir = params['output_dir']
