@@ -10,6 +10,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
+print('starting')
 
 def priorCut_test(data):
     print 'CHECK input catalog has only galaxies'
