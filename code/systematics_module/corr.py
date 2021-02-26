@@ -25,12 +25,15 @@ def adding_dc(catalog, zlabel = 'Z', dclabel = 'DC', h=0.7, Om0=0.286, Ob0=0.046
     #Om0 = 0.286
     #Ob0 = 0.046
     cosmo = FlatLambdaCDM(H0=h*100, Om0=Om0, Ob0=Ob0, Neff=Neff)
-    print 'Calculate comoving distance with cosmology \nH0={}, Om0={}'.format(100*h, Om0)
+
+    print('Calculate comoving distance with cosmology \nH0={}, Om0={}'.format(100*h, Om0))
 
     r = cosmo.comoving_distance(catalog[zlabel]).value *h
     #import numpy.lib.recfuctions as rf
     from numpy.lib import recfunctions as rf
-    print 'Adding Comoving distance column'
+
+    print('Adding Comoving distance column')
+
     sys.stdout.flush()
     catalog = rf.append_fields( catalog, dclabel, data = r )
     return catalog
@@ -193,6 +196,7 @@ def direct_cf_smu( DD_counts, DR_counts, RR_counts, scenter, mubin, N, Nrand):
     norm_DR = DR  * Nrr*1./Ndr #**2
     norm_RR = RR 
 
+
     zeromask = (RR == 0.0)
     #norm_RR[zeromask] = 0.0  # to avoid zero divide error. will be excluded at the end.
 
@@ -234,7 +238,7 @@ def _cfz(data, rand, zlabel = 'Z', weight = None):
     min_sep = 10
     max_sep = 180
     
-    print '.',
+    print('.', end=' ')
 
     #dd = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
     #dr = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
@@ -256,7 +260,7 @@ def correlation_function_3d(data = None, rand = None, zlabel = 'Z', njack = 30, 
     # jk sampling
     import os, sys
     from suchyta_utils import jk
-    print 'calculate 3d correlation function'
+    print('calculate 3d correlation function')
     #r, xi, xierr = _acf( data, rand, weight = weight )
     
     if 'DC' not in data.dtype.names : 
@@ -266,19 +270,19 @@ def correlation_function_3d(data = None, rand = None, zlabel = 'Z', njack = 30, 
         h = 0.6777
 
         cosmo = FlatLambdaCDM(H0=h*100, Om0=0.3)
-        print 'Calculate comoving distance with Planck cosmology \nH0=0.6777, Om0=0.3'
+        print('Calculate comoving distance with Planck cosmology \nH0=0.6777, Om0=0.3')
         sys.stdout.flush()
 
         r = cosmo.comoving_distance(data[zlabel]).value *h
         r_rand = cosmo.comoving_distance(rand[zlabel]).value *h
 
         from numpy.lib import recfunctions as rf
-        print 'Adding Comoving distance column'
+        print('Adding Comoving distance column')
         sys.stdout.flush()
         data = rf.append_fields( data, 'DC', data = r )
         rand = rf.append_fields( rand, 'DC', data = r_rand )
     
-    print 'JK sampling'
+    print('JK sampling')
     sys.stdout.flush()
     
     jkfile = './jkregion.txt'
@@ -339,7 +343,7 @@ def correlation_function_3d(data = None, rand = None, zlabel = 'Z', njack = 30, 
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt('data_txt/cfz_comparison_'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt('data_txt/cfz_comparison_'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -372,7 +376,69 @@ def pickle_data( data = None, root = 'data_txt/pair_counting/', pickle_name = No
         else : break
 
     pickle_name_i = pickle_name+'_jk'+str(i)+'.pkl'
-    print _root+pickle_name_i
+    print(_root+pickle_name_i)
+    output = open( _root + pickle_name_i, 'wb')
+    pickle.dump(data, output)
+    output.close()
+
+
+
+def load_pickle_data_single( root = 'data_txt/pair_counting/', pickle_name = None ):
+    import pickle
+
+    """
+    i = 0
+    _root = root + '_{}/'.format(i) 
+
+    for i in range(100): 
+        _root = root + '_{}/'.format(i) 
+        if os.path.exists(_root) : 
+            print _root, 'exist'
+            i += 1
+        else : break
+
+    #_root = root + '_{}/'.format(i) 
+    """
+
+    _root = root+'/'
+    #if not os.path.exists(_root) : 
+    #    os.makedirs(_root)
+    #if not os.path.exists(dir) : os.mkdir(dir)
+
+    pickle_name_i = pickle_name+'.pkl'
+
+    if os.path.exists(_root+pickle_name_i):
+        print('Loading stored paircounts... :', _root+pickle_name_i)
+        file = open( _root + pickle_name_i)
+        picklefile = pickle.load(file)
+        return picklefile
+    else : return None
+
+
+def pickle_data_single( data = None, root = 'data_txt/pair_counting/', pickle_name = None ):
+    import pickle
+
+    """
+    i = 0
+    _root = root + '_{}/'.format(i) 
+
+    for i in range(100): 
+        _root = root + '_{}/'.format(i) 
+        if os.path.exists(_root) : 
+            print _root, 'exist'
+            i += 1
+        else : break
+
+    #_root = root + '_{}/'.format(i) 
+    """
+
+    _root = root+'/'
+    if not os.path.exists(_root) : 
+        os.makedirs(_root)
+    #if not os.path.exists(dir) : os.mkdir(dir)
+
+    pickle_name_i = pickle_name+'.pkl'
+    print(_root+pickle_name_i)
     output = open( _root + pickle_name_i, 'wb')
     pickle.dump(data, output)
     output.close()
@@ -676,7 +742,8 @@ def correlation_function_multipoles_rppi_single( data, rand, weight_data = None,
 
     DAT = np.column_stack(( sbin[:-1], sbin_center, sbin[1:], xi_monopole, xi_quadrupole ))
     np.savetxt(dir + 'cfz_multipole_single.txt', DAT)
-    print 'file saved to ', dir + 'cfz_multipole_single.txt'
+
+    print('file saved to ', dir + 'cfz_multipole_single.txt')
 
 
 def correlation_function_multipoles_single( data, rand, weight_data = None, weight_rand = None, nthreads = 20, dir = './', 
@@ -802,7 +869,9 @@ def correlation_function_multipoles_single( data, rand, weight_data = None, weig
 
     DAT = np.column_stack(( sbin[:-1], sbin_center, sbin[1:], xi_monopole, xi_quadrupole ))
     np.savetxt(dir + 'cfz_multipole_single.txt', DAT)
-    print 'file saved to ', dir + 'cfz_multipole_single.txt'
+
+    print('file saved to ', dir + 'cfz_multipole_single.txt')
+
 
     
     #return sbin_center, np.hstack([xi_monopole, xi_quadrupole])
@@ -813,15 +882,15 @@ def correlation_function_multipoles(data = None, rand = None, zlabel = 'Z', njac
     # jk sampling
     import os, sys
     from suchyta_utils import jk
-    print 'calculate correlation function multipoles 0 and 2'
+    print('calculate correlation function multipoles 0 and 2')
 
     dir = 'data_txt/pair_counting/'+suffix+'/'
     if not os.path.exists(dir) : os.makedirs(dir)
     filename = dir+'cfz_multipole.txt'
-    print '# of jackknife sample :', njack
-    print '# of threads :', nthreads
-    print 'Ndata :', data.size, ' Nrand :', rand.size
-    print 'corr file will be saved to '+filename
+    print('# of jackknife sample :', njack)
+    print('# of threads :', nthreads)
+    print('Ndata :', data.size, ' Nrand :', rand.size)
+    print('corr file will be saved to '+filename)
     #r, xi, xierr = _acf( data, rand, weight = weight )
     
 
@@ -831,19 +900,19 @@ def correlation_function_multipoles(data = None, rand = None, zlabel = 'Z', njac
         h = 0.68
         Om0 = 0.305
         cosmo = FlatLambdaCDM(H0=h*100, Om0=0.305)
-        print 'Calculate comoving distance with Planck cosmology \nH0={}, Om0={}'.format(100*h, Om0)
+        print('Calculate comoving distance with Planck cosmology \nH0={}, Om0={}'.format(100*h, Om0))
         sys.stdout.flush()
 
         r = cosmo.comoving_distance(data[zlabel]).value *h
         r_rand = cosmo.comoving_distance(rand[zlabel]).value *h
 
         from numpy.lib import recfunctions as rf
-        print 'Cannot find comoving distance column... Adding Comoving distance column'
+        print('Cannot find comoving distance column... Adding Comoving distance column')
         sys.stdout.flush()
         data = rf.append_fields( data, 'DC', data = r )
         rand = rf.append_fields( rand, 'DC', data = r_rand )
     
-    print 'JK sampling'
+    print('JK sampling')
     sys.stdout.flush()
     
     jkfile = './.jkregion.'+suffix
@@ -875,7 +944,7 @@ def correlation_function_multipoles(data = None, rand = None, zlabel = 'Z', njac
     header = 'r (Mpc/h), monopole(r), quadrupole(r), jkerr0, jkerr2'
     DAT = np.column_stack((r, xi_mean[:r.size], xi_mean[r.size:], xijkerr[:r.size], xijkerr[r.size:] ))
     np.savetxt( filename, DAT, delimiter=' ', header=header )
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
 
     if out is True : return DAT
     else : return 0
@@ -895,13 +964,13 @@ def _corrfunc_acf_auto( data1, random1, tmin = 2.5/60, tmax = 250/60., nbins = 2
     tbins = np.logspace(np.log10(tmin), np.log10(tmax), nbins + 1)
 
     DD_counts = DDtheta_mocks(1, nthreads, tbins, data1['RA'], data1['DEC'], verbose=1)
-    print 'DD'
+    print('DD')
     DR_counts = DDtheta_mocks(0, nthreads, tbins,
                               RA, DEC,
                               RA2=RAND_RA, DEC2=RAND_DEC)
-    print 'DR'
+    print('DR')
     RR_counts = DDtheta_mocks(1, nthreads, tbins, RAND_RA, RAND_DEC)
-    print 'RR'
+    print('RR')
     wtheta = convert_3d_counts_to_cf(N, N, rand_N, rand_N,
                                      DD_counts, DR_counts,
                                      DR_counts, RR_counts)
@@ -915,7 +984,7 @@ def corrfunc_angular_correlation(data = None, rand = None, njack = 30,
     # jk sampling
     import os
     from suchyta_utils import jk
-    print 'calculate angular correlation function'
+    print('calculate angular correlation function')
     #r, xi, xierr = _acf( data, rand, weight = weight )
 
     jkfile = './jkregion.txt'
@@ -951,7 +1020,7 @@ def corrfunc_angular_correlation(data = None, rand = None, njack = 30,
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt(dir+'/corrfunc_acf_auto'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt(dir+'/corrfunc_acf_auto'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -988,7 +1057,7 @@ def _corrfunc_acf_cross( data1, data2, random1, random2, tmin = 2.5/60, tmax = 2
                       RAND_RA, RAND_DEC,
                       RA2=RAND_RA2, DEC2=RAND_DEC2)
 
-    print '.\r',
+    print('.\r', end=' ')
     wtheta = convert_3d_counts_to_cf(N, N2, rand_N, rand_N2,
                                      DD_counts, DR_counts,
                                      RD_counts, RR_counts)
@@ -1041,7 +1110,7 @@ def corrfunc_cross_angular_correlation(data = None, data2 = None, rand = None, r
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt(dir+'/corrfunc_acf_cross'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt(dir+'/corrfunc_acf_cross'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "\nsaving data file to : ",filename
+    print("\nsaving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -1080,7 +1149,7 @@ def _acf(data, rand, weight = None, nbins = 20, min_sep = 2.5/60., max_sep = 250
     #max_sep = 250/60.
     sep_units = 'degree'
     
-    print '.',
+    print('.', end=' ')
 
     #dd = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
     #dr = treecorr.NNCorrelation(nbins = nbins, bin_size = bin_size, min_sep= min_sep, sep_units=sep_units)
@@ -1130,14 +1199,14 @@ def angular_correlation_poisson(data, rand, weight_data = None, weight_rand = No
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     #np.savetxt(dir+'/acf_auto'+suffix+'.cov', xi_cov, header=''+str(r))
     #np.savetxt(dir+'/acf_auto'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
 
 
 def angular_correlation(data = None, rand = None, njack = 30, nbins=20, min_sep = 2.5/60, max_sep=250/60., weight = None, mpi=True, suffix = '', out = None, dir = './'):
     # jk sampling
     import os
     from suchyta_utils import jk
-    print 'calculate angular correlation function'
+    print('calculate angular correlation function')
     #r, xi, xierr = _acf( data, rand, weight = weight )
     #
     #os.system('rm -rf ./jkregion.txt')
@@ -1208,7 +1277,7 @@ def angular_correlation(data = None, rand = None, njack = 30, nbins=20, min_sep 
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt(dir+'/acf_auto'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt(dir+'/acf_auto'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -1259,7 +1328,7 @@ def _cross_acf(data, data2, rand, rand2, nbins = 20, min_sep = 2.5/60., max_sep 
     # Randy-Szalay estimator
     # [ D1D2 - D1R2 - D2R1 + R1R2 ]/ R1R2
 
-    print '.',
+    print('.', end=' ')
     dd.process(cat, cat2) 
     dr.process(cat, cat_rand2)
     rd.process(cat2, cat_rand)
@@ -1328,7 +1397,7 @@ def cross_angular_correlation(data = None, data2 = None, rand = None, rand2= Non
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt(dir+'/acf_cross'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt(dir+'/acf_cross'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "\nsaving data file to : ",filename
+    print("\nsaving data file to : ",filename)
     if out is True : return DAT
 
     
@@ -1367,7 +1436,7 @@ def _cross_kg_acf(data, data2, weight = None, kappa = None):
     # Randy-Szalay estimator
     # [ D1D2 - D1R2 - D2R1 + R1R2 ]/ R1R2
 
-    print '.',
+    print('.', end=' ')
     nk.process(cat, cat2) 
     #dr.process(cat, cat_rand2)
     #rd.process(cat2, cat_rand)
@@ -1436,7 +1505,7 @@ def cross_kg_correlation(data = None, data2 = None, njack = 30,  weight = None, 
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt(dir+'/acf_cross_kg'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt(dir+'/acf_cross_kg'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -1478,7 +1547,7 @@ def _cross_kk_acf(data, data2, kappa1 = None, kappa2 = None, weight1 = None, wei
     # Randy-Szalay estimator
     # [ D1D2 - D1R2 - D2R1 + R1R2 ]/ R1R2
 
-    print '.',
+    print('.', end=' ')
     kk.process(cat, cat2) 
 
     #kk.process_cross(cat, cat2)
@@ -1554,7 +1623,7 @@ def cross_kk_correlation(data = None, data2 = None, njack = 30,  kappa1 = None, 
     np.savetxt( filename, DAT, delimiter=' ', header=header )
     np.savetxt('data_txt/acf_cross_kk'+suffix+'.cov', xi_cov, header=''+str(r))
     np.savetxt('data_txt/acf_cross_kk'+suffix+'.jk_corr', xi_dat, header='r  jksamples')
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -1612,7 +1681,7 @@ def two_point_function(data = None, rand = None, njack = 30, ztag = None, weight
     # jk sampling
     import os
     from suchyta_utils import jk
-    print 'calculate angular correlation function'
+    print('calculate angular correlation function')
     #r, xi, xierr = _acf( data, rand, weight = weight )
     
     jkfile = './jkregion.txt'
@@ -1640,7 +1709,7 @@ def two_point_function(data = None, rand = None, njack = 30, ztag = None, weight
     header = 'r, xi, jkerr'
     DAT = np.column_stack((r, xi, xijkerr ))
     np.savetxt( filename, DAT, delimiter=' ', header=header )
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
 
     if out is True : return DAT
     else : return 0
@@ -1690,7 +1759,7 @@ def _Sigma_crit(zl, zs):
     try:dA_ls = cosmo.angular_diameter_distance_z1z2(zl,zs) * h
     except ValueError:
         if zs < zl: dA_ls = 0
-        else : print "ValueError"
+        else : print("ValueError")
     
     Sigma_crit = c**2 / (4 * np.pi * G) * dA_s/(dA_l * dA_ls)
     return Sigma_crit
@@ -1732,7 +1801,7 @@ def _LS_tomo(lense, source, rand, weight = None):
 
 def LensingSignal_tomo(lense = None, source = None, rand = None, weight = None, suffix = '', out=None, njack = 10):
     
-    print "Calculating lensing signal "
+    print("Calculating lensing signal ")
     
     # jk sampling
     import os
@@ -1768,7 +1837,7 @@ def LensingSignal_tomo(lense = None, source = None, rand = None, weight = None, 
     header = 'r_p_bins, gamma_t, jkerr'
     DAT = np.column_stack((theta, LensSignal, LSjkerr ))
     np.savetxt( filename, DAT, delimiter=' ', header=header )
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 
@@ -1850,7 +1919,7 @@ def _LS(lense, source, rand, zbin = None, weight = None, Boost = False):
         weight = 1./(Sigma_critical)**2
         weight = np.ones(Sigma_critical.shape)
         
-        print " **  To do : add Boost codes Weight "
+        print(" **  To do : add Boost codes Weight ")
         
         for i, S in enumerate(source_binned_cat):
             source_cat = treecorr.Catalog(ra=S['RA'], dec=S['DEC'], ra_units='deg', dec_units='deg')
@@ -1971,7 +2040,7 @@ def _LS(lense, source, rand, zbin = None, weight = None, Boost = False):
 
 def LensingSignal(lense = None, source = None, rand = None, zbin = [0.45, 0.55, 0.7, 1.0], weight = None, suffix = '', out=None, njack = 10):
     
-    print "Calculating lensing signal "
+    print("Calculating lensing signal ")
     
     # jk sampling
     import os
@@ -1979,8 +2048,8 @@ def LensingSignal(lense = None, source = None, rand = None, zbin = [0.45, 0.55, 
     
     z_l_min, z_l_max, z_s_min, z_s_max = zbin
     
-    print 'z_l = ({}, {})'.format(z_l_min, z_l_max),
-    print ' z_s = ({}, {})'.format(z_s_min, z_s_max)
+    print('z_l = ({}, {})'.format(z_l_min, z_l_max), end=' ')
+    print(' z_s = ({}, {})'.format(z_s_min, z_s_max))
     
     jkfile = './jkregion.txt'
     raTag, decTag = 'RA', 'DEC'
@@ -2012,7 +2081,7 @@ def LensingSignal(lense = None, source = None, rand = None, zbin = [0.45, 0.55, 
     header = 'r_p_bins, LensSignal, LSjkerr'
     DAT = np.column_stack((r_p_bins, LensSignal, LSjkerr ))
     np.savetxt( filename, DAT, delimiter=' ', header=header )
-    print "saving data file to : ",filename
+    print("saving data file to : ",filename)
     if out is True : return DAT
 
 

@@ -18,7 +18,7 @@ import sys
 
 
 def priorCut_test(data):
-    print 'CHECK input catalog has only galaxies'
+    print('CHECK input catalog has only galaxies')
     ## Should add MODEST_CLASS cut later. 
     modelmag_g_des = data['MAG_DETMODEL_G']
     modelmag_r_des = data['MAG_DETMODEL_R']
@@ -76,21 +76,21 @@ def _main_fitting():
 
     # calling BOSS cmass and applying dmass goodregion mask ----------------------------
     cmass = io.getSGCCMASSphotoObjcat()
-    print 'num of cmass in sgc region', cmass.size
-    print '\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------'
+    print('num of cmass in sgc region', cmass.size)
+    print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')
     cmass = Cuts.keepGoodRegion(cmass)
-    print 'num of cmass after des veto', cmass.size
+    print('num of cmass after des veto', cmass.size)
 
-    print '\n--------------------------------\n matching catalogues\n--------------------------------'
+    print('\n--------------------------------\n matching catalogues\n--------------------------------')
     # find cmass in des_gold side --------------------
     mg1, mg2, _ = esutil.htm.HTM(10).match(cmass['RA'], cmass['DEC'], gold_st82['RA'], \
                                          gold_st82['DEC'],2./3600, maxmatch=1)
     cmass_mask = np.zeros(gold_st82.size, dtype=bool)
     cmass_mask[mg2] = 1
     clean_cmass_data_des, nocmass = gold_st82[cmass_mask], gold_st82[~cmass_mask]
-    print 'num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./cmass.size * 100)
+    print('num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./cmass.size * 100))
 
-    print '\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------'
+    print('\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------')
     # Divide sample into train and test -------------------------
     #(trainInd, testInd), _ = split_samples(merged_des_st82_s, merged_des_st82_s, [0.9,0.1], random_state=0)
     #des_train = merged_des_st82_s[trainInd]
@@ -114,10 +114,9 @@ def _main_fitting():
     cmass_mask[me2] = 1
     cmass_test, _ = des_test[cmass_mask], des_test[~cmass_mask]
 
-    print \
-    clean_cmass_data_des.size * 1./gold_st82.size, \
+    print(clean_cmass_data_des.size * 1./gold_st82.size, \
     cmass_train.size*1./des_train.size, \
-    cmass_test.size*1./des_test.size # test is always small..why?
+    cmass_test.size*1./des_test.size) # test is always small..why?
 
 
     # Fitting ----------------------------------------------
@@ -137,10 +136,10 @@ def _main_fitting():
 
     
     # assign membership prob ----------------------------------
-    print '\n--------------------------------\n Assign membership prob\n--------------------------------'
+    print('\n--------------------------------\n Assign membership prob\n--------------------------------')
     cmass_fraction = cmass_train.size*1./des_train.size 
     #cmass_fraction = clean_cmass_data_des.size *1./merged_des_st82_s.size
-    print 'cmass_fraction', cmass_fraction
+    print('cmass_fraction', cmass_fraction)
     from xd import assignCMASSProb
     gold_st82 = assignCMASSProb( gold_st82, clf_cmass, clf_no, cmass_fraction = cmass_fraction )
     des_train = gold_st82[train_mask]
@@ -149,25 +148,25 @@ def _main_fitting():
 
 
     # resampling with assigned membership probability -------------------
-    print '\n--------------------------------\n resampling\n--------------------------------'
+    print('\n--------------------------------\n resampling\n--------------------------------')
     dmass_train, _ = resampleWithPth( des_train, pstart = 0, pmax = 1.0 )
-    print 100. * dmass_train.size/ cmass_train.size, '%'
+    print(100. * dmass_train.size/ cmass_train.size, '%')
     dmass_test, _ = resampleWithPth( des_test, pstart = 0, pmax = 1.0 )
-    print 100. * dmass_test.size/ cmass_test.size, '%'
+    print(100. * dmass_test.size/ cmass_test.size, '%')
     dmass, _ = resampleWithPth( gold_st82, pstart = 0, pmax = 1.0 )
-    print 100. * dmass.size/ clean_cmass_data_des.size, '%'
+    print(100. * dmass.size/ clean_cmass_data_des.size, '%')
 
-    print '\n--------------------------\n End\n---------------------------'
+    print('\n--------------------------\n End\n---------------------------')
 
 
     
 def prepare_cmass_sample(params):
     
     cmass = io.getSGCCMASSphotoObjcat()
-    print 'num of cmass in sgc region', cmass.size
-    print '\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------'
+    print('num of cmass in sgc region', cmass.size)
+    print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')
     cmass = Cuts.keepGoodRegion(cmass)
-    print 'num of cmass after des veto', cmass.size
+    print('num of cmass after des veto', cmass.size)
 
     return cmass   
 
@@ -218,12 +217,12 @@ def train_st82(params, param_file):
     # calling BOSS cmass and applying dmass goodregion mask ----------------------------
     #cmass = io.getSGCCMASSphotoObjcat()
     train_sample = esutil.io.read(train_sample_filename)
-    print 'total num of train', train_sample.size
-    print '\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------'   
+    print('total num of train', train_sample.size)
+    print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')   
     train_sample = Cuts.keepGoodRegion(train_sample)
-    print 'num of train_sample after des veto', train_sample.size
+    print('num of train_sample after des veto', train_sample.size)
 
-    print '\n--------------------------------\n matching catalogues\n--------------------------------'
+    print('\n--------------------------------\n matching catalogues\n--------------------------------')
         
     # find cmass in des_gold side --------------------
     mg1, mg2, _ = esutil.htm.HTM(10).match(train_sample['RA'], train_sample['DEC'], gold_st82['RA'], \
@@ -238,23 +237,23 @@ def train_st82(params, param_file):
     w_sgc = train_sample['WEIGHT_FKP']*train_sample['WEIGHT_SYSTOT'] *( train_sample['WEIGHT_CP'] + train_sample['WEIGHT_NOZ'] - 1. )
     clean_cmass_data_des = appendColumn(clean_cmass_data_des, name = 'CMASS_WEIGHT', value = w_sgc)
 
-    print 'num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./train_sample.size * 100)
-    print 'num of non-cmass in des side ', nocmass.size
+    print('num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./train_sample.size * 100))
+    print('num of non-cmass in des side ', nocmass.size)
 
     if params['random_sampling'] : 
         random_sampling_ind = np.random.choice(np.arange(nocmass.size), size = nocmass.size/10)
         nocmass = nocmass[random_sampling_ind]
-        print 'num of randomly sampled non-cmass ', nocmass.size
+        print('num of randomly sampled non-cmass ', nocmass.size)
 
     cmass_fraction = clean_cmass_data_des.size *1./gold_st82.size
-    print 'cmass_fraction', cmass_fraction
+    print('cmass_fraction', cmass_fraction)
     f = open(output_dir+'cmassfrac', 'w')
     f.write('{0:.10f}'.format(cmass_fraction))
 
     gold_st82 = None  # initialize called catalogs to save memory
 
     #params['cmass_fraction'] = cmass_fraction
-    print '\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------'
+    print('\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------')
     # Fitting ----------------------------------------------
 
     n_cmass, n_no = None, None
@@ -269,7 +268,7 @@ def train_st82(params, param_file):
     ncomp, xamp, xmean, xcovar = loadpickle( 'output/n2/gold_st82_XD_no.pkl')
     extreme_fitting(nocmass, n_comp = n_no, xamp=xamp, xmean=xmean, xcovar=xcovar, pickle_name = no_pickle, log=output_dir+'xd_log/no_cmass')
 
-    print '\n--------------------------\n Fitting End\n---------------------------'
+    print('\n--------------------------\n Fitting End\n---------------------------')
 
     
 def main_st82(params):
@@ -303,28 +302,28 @@ def main_st82(params):
     clf_no = XD_fitting( None, pickleFileName = no_pickle)
     
     # assign membership prob ----------------------------------
-    print '\n--------------------------------\n Assign membership prob\n--------------------------------'
-    print 'cmass_fraction', cmass_fraction
+    print('\n--------------------------------\n Assign membership prob\n--------------------------------')
+    print('cmass_fraction', cmass_fraction)
     from xd import assignCMASSProb
     gold_st82 = assignCMASSProb( gold_st82, clf_cmass, clf_no, cmass_fraction = cmass_fraction )
     fitsio.write(out_catname, gold_st82)
     
     # resampling with assigned membership probability -------------------
-    print '\n--------------------------------\n resampling\n--------------------------------'
+    print('\n--------------------------------\n resampling\n--------------------------------')
     dmass, _ = resampleWithPth( gold_st82, pstart = 0.01, pmax = 1.0 )
     fitsio.write(out_resampled_cat, dmass)
 
 def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt', suffix = '' ):
 
-    print '\n--------------------------------\n catalog jackknife sampling \n--------------------------------'
-    print 'jfile= ', root+jfile
-    print 'njack= ', njack
+    print('\n--------------------------------\n catalog jackknife sampling \n--------------------------------')
+    print('jfile= ', root+jfile)
+    print('njack= ', njack)
     
     km, jfile = GenerateRegions(cat, cat['RA'], cat['DEC'], root+jfile, njack, jtype)
     ind = AssignIndex(cat, cat['RA'], cat['DEC'], km)
     #ind_rand = AssignIndex(rand, rand['RA'], rand['DEC'], km) 
     
-    print '--------------------------------'
+    print('--------------------------------')
     return ind
 
     
@@ -368,8 +367,8 @@ def main(params):
         dmass_spt.append(dm)
         outname = out_catname.split('.')[0]+'_jk{:03}.fits'.format(i+1)
         fitsio.write(outname, ts)
-        print 'jk sample size :', ts.size
-        print 'prob cat save to ', outname
+        print('jk sample size :', ts.size)
+        print('prob cat save to ', outname)
     #des_spt = np.hstack(des_spt_list)
     dmass_spt = np.hstack(dmass_spt)
     

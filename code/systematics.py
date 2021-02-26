@@ -54,7 +54,7 @@ def brel_chisqr_fitting(xi1, xi2, Fisher, verbose=False):
     br1, brmin, br2 = find_nearest( chisqr_result, chisqr_min + 1,brelarr )
     err_brel = np.abs(br1-br2)/2.
     err_db = err_brel *b_cmass
-    if verbose : print 'err db, db / br1, brmin, br2 :', err_db, db, br1, brmin, br2  
+    if verbose : print('err db, db / br1, brmin, br2 :', err_db, db, br1, brmin, br2)  
     #return err_db, db, chisqr_result
     return err_brel, brmin, chisqr_result
     
@@ -249,10 +249,10 @@ def callingY1GoldMask( nside = 4096 ):
 
     
     if nside != 4096:
-        print "if resolution is degraded, pixel fraction column would not work properly "
+        print("if resolution is degraded, pixel fraction column would not work properly ")
         gdmask = hp.ud_grade(gdmask, nside_out = nside )
         bdmask = hp.ud_grade(bdmask, nside_out = nside )
-        print 'DOWNGRADE = ', nside
+        print('DOWNGRADE = ', nside)
         #fraction = hp.ud_grade(fraction, nside_out = nside )
     
     #ind_good_ring = np.where(( gdmask >= 1) & ((bdmask.astype('int64') & (64+32+8)) == 0) & (fraction > 0.8))[0]
@@ -285,19 +285,19 @@ def loadSystematicMaps(  property ='AIRMASS', filter='g', nside = 1024, filename
 
     if filename is not None:
         try:
-            print '\nPATH = ',path
-            print filename
+            print('\nPATH = ',path)
+            print(filename)
             sysMap_hp = hp.read_map( path+filename, nest=False)
             if nside != 4096 : 
                 sysMap_hp = hp.ud_grade(sysMap_hp, nside_out = nside )
-                print 'DOWNGRADE = ', nside
+                print('DOWNGRADE = ', nside)
             goodmask = hp.mask_good(sysMap_hp)
             maskIndices = np.arange(sysMap_hp.size)
             goodIndices = maskIndices[goodmask]
             clean_map = sysMap_hp[goodmask]
 
         except IOError:
-            print "Input map is not fits format. Not masked"
+            print("Input map is not fits format. Not masked")
             clean_map = np.loadtxt(path+filename)
             goodIndices = np.arange(clean_map.size)
             
@@ -322,13 +322,13 @@ def loadSystematicMaps(  property ='AIRMASS', filter='g', nside = 1024, filename
             
             for i in os.listdir(path):
                 if os.path.isfile(os.path.join(path,i)) and property.upper()+keyword in i and 'band_'+filter.lower() in i:
-                    print '\nPATH = ',path
-                    print i
+                    print('\nPATH = ',path)
+                    print(i)
                     
                     sysMap_hp = hp.read_map( path+i, nest=False)
                     if nside != 4096 : 
                         sysMap_hp = hp.ud_grade(sysMap_hp, nside_out = nside )
-                        print 'DOWNGRADE = ', nside
+                        print('DOWNGRADE = ', nside)
                     goodmask = hp.mask_good(sysMap_hp)
                     
                     maskIndices = np.arange(sysMap_hp.size)
@@ -391,7 +391,7 @@ def _GalaxyDensity_Systematics( catalog, sysMap, rand = None, weight = None, nsi
         if filter == 'i' : max = 18
         if filter == 'z' : max = 26
 
-    print 'max', max
+    print('max', max)
 
     bin_center, binned_cat, keeps = divide_bins( sysMap, Tag = 'SIGNAL', min = min, max = max, bin_num = bin_num )
 
@@ -734,7 +734,7 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
                 
                 #_, R_predict = fitting_errftn( bins, Rbins, Rdensity, Rerr)                 
                 
-            else : print 'Please enter the kind of fitting function'
+            else : print('Please enter the kind of fitting function')
                 
             Cchi2_model = np.sum((Cdensity - C_predict[zeromaskC])**2 *1./Cerr**2)
             Rchi2_model = np.sum((Rdensity - R_predict[zeromaskR])**2 *1./Rerr**2)
@@ -745,9 +745,9 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
             Del_Cchi2 = Cchi2_null - Cchi2_model 
             Del_Rchi2 = Rchi2_null - Rchi2_model
             
-            print 'chi2_null = ', Cchi2_null
-            print 'chi2_mod. = ', Cchi2_model
-            print 'Delta chi2 (sample) =', Cchi2_null - Cchi2_model 
+            print('chi2_null = ', Cchi2_null)
+            print('chi2_mod. = ', Cchi2_model)
+            print('Delta chi2 (sample) =', Cchi2_null - Cchi2_model) 
             
 
             
@@ -756,7 +756,7 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
             '\nbins, Sample, Random'
             
             np.savetxt(filename+'.model', DAT, header =header)
-            print 'output save to ', filename+'.model\n'
+            print('output save to ', filename+'.model\n')
             
             if plot : 
                 ax[i].errorbar(Cbins, Cdensity, yerr=Cerr, fmt='b-', label='dmass' + ' $\Delta \chi^2={:0.2f}$'.format(Del_Cchi2))
@@ -777,7 +777,7 @@ def fitting_SP( property = None, filter=None, kind = None, suffix='', plot=False
         if plot : 
             figname = path+'systematic_fitting_'+p+'_'+f+'_'+kind+'_'+suffix+'.png'
             fig.savefig(figname)
-            print 'saving fig to ', figname
+            print('saving fig to ', figname)
 
 
 def maskingCatalogSP(catalog=None, sysMap=None, maskonly=False):
@@ -839,8 +839,8 @@ def maskingCatalogSP(catalog=None, sysMap=None, maskonly=False):
     
     HpIdxInsys_mask = HpIdxInsys_mask4096 * HpIdxInsys_mask512
     
-    print HpIdxInsys_mask.size, np.sum(HpIdxInsys_mask)
-    print 'mask ', np.sum(HpIdxInsys_mask) * 1./catalog.size
+    print(HpIdxInsys_mask.size, np.sum(HpIdxInsys_mask))
+    print('mask ', np.sum(HpIdxInsys_mask) * 1./catalog.size)
     if maskonly : return HpIdxInsys_mask
     else : return catalog[HpIdxInsys_mask]
 
@@ -914,32 +914,32 @@ def calculate_weight( property = None, filter=None, kind = None, suffix='', plot
         _, C_predict = fitting_errftn( bin_center, Cbins, Cdensity, Cerr)                
 
     else : 
-        print 'Please enter the kind of fitting function'
+        print('Please enter the kind of fitting function')
         return 0
 
 
-    if plot : 
-        ax.errorbar(Cbins, Cdensity, yerr=Cerr, fmt='b-', label='dmass')
-        ax.errorbar(Rbins, Rdensity, yerr=Rerr, fmt='r-', label='random')
-        ax.plot(bin_center, C_predict, 'b--', alpha=1.0)
-        #ax[i].plot(Rbins*1.005, R_predict, 'r-', alpha = 0.3)
-        ax.plot(bin_center*1.005, R_predict, 'r--', alpha = 1.0)
-        ax.axhline(y=1.0, color='grey', ls = '--')
-        ax.set_xlabel(p+'_'+f)
-        ax.set_ylabel('galaxy num density')
-        ax.set_ylim(0.7, 1.3)
-        ax.legend(loc=1)
-        ax.set_xlim(Rbins.min() * 0.95, Rbins.max()*1.05 )
-        if function == 'log' : ax.set_xscale('log')
-	plt.show() 
+    if plot :
+      ax.errorbar(Cbins, Cdensity, yerr=Cerr, fmt='b-', label='dmass')
+      ax.errorbar(Rbins, Rdensity, yerr=Rerr, fmt='r-', label='random')
+      ax.plot(bin_center, C_predict, 'b--', alpha=1.0)
+      #ax[i].plot(Rbins*1.005, R_predict, 'r-', alpha = 0.3)    
+      ax.plot(bin_center*1.005, R_predict, 'r--', alpha = 1.0)
+      ax.axhline(y=1.0, color='grey', ls = '--')
+      ax.set_xlabel(p+'_'+f)
+      ax.set_ylabel('galaxy num density')
+      ax.set_ylim(0.7, 1.3)
+      ax.legend(loc=1)
+      ax.set_xlim(Rbins.min() * 0.95, Rbins.max()*1.05 )
+      if function == 'log' : ax.set_xscale('log')
+      plt.show() 
 
     wg = np.zeros( catalog.size, dtype=float)
     for i, sysMap_i in enumerate(binned_cat):
         HpIdxInSys_mask = np.in1d(catHpInd, sysMap_i['PIXEL'])
         wg[HpIdxInSys_mask] = 1./C_predict[i]
-        print bin_center[i], C_predict[i]
+        print(bin_center[i], C_predict[i])
 
-    print C_predict 
+    print(C_predict) 
     #stop
         #print np.sum(HpIdxInSys_mask), 1./C_predict[i], sysMap_i['PIXEL'].size
        
@@ -981,7 +981,7 @@ def plotting_significance( property = None, filter=None, kind = None, suffix='',
     #label = label[arg]
     siglist = [siglist[a] for a in arg]
     label = [label[a] for a in arg]
-    print siglist
+    print(siglist)
     fig, ax = plt.subplots(figsize = (10,5))
     ax.plot( np.arange( len(siglist) ), siglist,   'o'  )
     #ax.axvline(x = 2, ls = '--', color='k')
@@ -1002,8 +1002,8 @@ def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, 
              outdir='../data_txt/systemtaics/', pixelmask = None, 
              reweight_cat1=None, reweight_rand1=None, reweight_cat2=None, reweight_rand2=None ):
     
-    print '\nsys_ngal : '
-    print 'the number of bins=', nbins
+    print('\nsys_ngal : ')
+    print('the number of bins=', nbins)
     from systematics import ReciprocalWeights, jksampling, GalaxyDensity_Systematics
     for p in properties:
         if p is 'NSTARS_allband':
@@ -1043,7 +1043,7 @@ def sys_ngal(cat1 = None, cat2=None, rand1 = None, rand2 = None, sysmap = None, 
             #DAT = np.column_stack(( bins-(bins[1]-bins[0])*0.1, Bdensity, Berr, Bf_area, Bdensity, Berr, Bf_area  ))
             DAT = np.column_stack(( bins, Bdensity, Berr, Bf_area, Rdensity, Rerr, Rf_area  ))
             np.savetxt(filename, DAT, delimiter = ' ', header = 'bins, Ddensity, Derr, Dfarea, Rdensity, Rerr, Rfarea, R_jkerr')
-            print "saving data to ", filename
+            print("saving data to ", filename)
 
 
 
@@ -1063,7 +1063,7 @@ def GetCov(full_j, it_j, njack):
 
     cov = 0
     for k in range(len(it_j)):
-        print cov
+        print(cov)
         cov +=  (it_j[k][matrix1] - full_j[matrix1]) * (it_j[k][matrix2]- full_j[matrix2] )
 
     cov = norm * cov
@@ -1084,8 +1084,8 @@ def jksampling(catalog, sysMap, property = 'NSTARS', nside = 256, njack = 10, ra
     full_j = jkresults['full'][1]
     it_j = np.array( [jkresults['jk'][i][1] for i in range(njack)] )
 
-    print full_j.size
-    print len(it_j)
+    print(full_j.size)
+    print(len(it_j))
 
     njack = len(it_j) #redefine njack
     norm = 1. * (njack-1)/njack
@@ -1136,7 +1136,7 @@ def CrossCorrel(catalog, property = 'AIRMASS', filter = 'g', raTag = 'RA', decTa
     path = '/n/des/lee.5922/data/systematic_maps/'
     for i in os.listdir(path):
         if os.path.isfile(os.path.join(path,i)) and property.upper()+'__mean' in i and 'band_'+filter.lower() in i:
-            print i
+            print(i)
             sysMap = fitsio.read(path+i)
 
     nside = 4096
@@ -1162,7 +1162,7 @@ def CrossCorrel(catalog, property = 'AIRMASS', filter = 'g', raTag = 'RA', decTa
     masklist = []
     for i in range(sysMap.size/n_sample):
         mask[i * n_sample:(i+1)*n_sample-1] = 1
-        print mask
+        print(mask)
         masklist.append(mask)
         mask = np.zeros(sysMap.size, dtype = bool)
 
@@ -1447,7 +1447,7 @@ def CMASSclassifier(sdss_data, des_data, train_sample = None ):
         train_size = len(train_sample)*1/5
 
     cl, predict_mask, good_mask = classifier3(sdss_data, des_data, des_tags = des_tags, sdss_tags = sdss_tags, train_size = train_size, train = train_sample)
-    print predict_mask.size, des_data.size
+    print(predict_mask.size, des_data.size)
 
     return predict_mask
 
@@ -1547,7 +1547,7 @@ def make2SphereRandoms( ra_min = 0, ra_max = 360, dec_min = -90, dec_max= 90, si
         ax.set_ylabel('DEC')
         ax.set_title('Random sample in RA and DEC, size = 5000')
         fig2.savefig('../figure/randomSphere_radec')
-        print 'fig saved :','../figure/randomSphere_3d.png',' ../figure/randomSphere_radec.png'
+        print('fig saved :','../figure/randomSphere_3d.png',' ../figure/randomSphere_radec.png')
 
     return random
 
@@ -1966,7 +1966,7 @@ def BCCDESfootprintMasking():
         for i in os.listdir(catpath):
             if os.path.isfile(os.path.join(catpath,i)) and keyword in i:
                 tables.append(catpath+i)
-                print i
+                print(i)
 
         if len(tables)==0: pass
         else :
@@ -1980,7 +1980,7 @@ def BCCDESfootprintMasking():
             bcc = bcc[keep]
             filename = 'Aardvark_v1.0c_des_rotated.{:02d}.fit'.format(j)
             fitsio.write('/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'+filename, bcc)
-            print "save fits file to ",'/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'+filename
+            print("save fits file to ",'/n/des/lee.5922/data/bcc_cat/aardvark_v1.0/mask/'+filename)
     return 0
 
 
@@ -2002,7 +2002,7 @@ def CutDESStripe82(keyword = 'Y1A1'):
         else :
             tables.append(cat_SPT)
             #fitsio.write(catpath+'SSPT_COADD_OBJECTS_{:05d}.fits'.format(j), cat_SPT)
-            print 'SSPT_COADD_OBJECTS_{:05d}.fits'.format(j)
+            print('SSPT_COADD_OBJECTS_{:05d}.fits'.format(j))
 
     tables = np.hstack(tables)
     tables = Cuts.doBasicCuts(tables, object='star')
@@ -2221,13 +2221,13 @@ def main():
         Cerr = Cerr[zeromask]
         Cbins = bins[zeromask]
         ax.errorbar(Cbins-(bins[1]-bins[0])*0.05 * i, Cdensity, yerr = Cerr, fmt = 'o', label = labels[i])
-        print Cdensity
+        print(Cdensity)
     
     
     "test"
     for i, cat in enumerate(binned_cat):
         bins, Cdensity, Cerr = GalaxyDensity_Systematics(cat, sysMap, nside = nside, raTag = raTag, decTag= decTag)
-        print Cdensity
+        print(Cdensity)
 
 
 
@@ -2265,7 +2265,7 @@ def main():
     ax.set_ylabel('DEC')
 
     fig.savefig('../figure/footprint')
-    print 'figsave : ../figure/spatialtest.png'
+    print('figsave : ../figure/spatialtest.png')
 
 
     # angular correlation of CMASS in st82 and whole CMASS

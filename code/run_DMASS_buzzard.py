@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 def priorCut_test(data):
-    print 'CHECK input catalog has only galaxies'
+    print('CHECK input catalog has only galaxies')
     ## Should add MODEST_CLASS cut later. 
     
     #modelmag_g_des = data['MAG_DETMODEL_G']
@@ -105,7 +105,7 @@ def train_st82(params, param_file):
 
     if 'SFD98' in params : 
         if params['SFD98'] : 
-            print 'change reddening corrections from SLR to SFD98'
+            print('change reddening corrections from SLR to SFD98')
             gold_st82 = RemovingSLRReddening(gold_st82)
             gold_st82 = AddingSFD98Reddening(gold_st82, kind='STRIPE82')
 
@@ -116,14 +116,14 @@ def train_st82(params, param_file):
     # calling BOSS cmass and applying dmass goodregion mask ----------------------------
     #cmass = io.getSGCCMASSphotoObjcat()
     train_sample = esutil.io.read(train_sample_filename)
-    print 'total num of train', train_sample.size
-    print '\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------'   
+    print('total num of train', train_sample.size)
+    print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')   
     train_sample = Cuts.keepGoodRegion(train_sample)
     fitsio.write( output_dir+'/cmass_in_st82.fits', train_sample)
 
-    print 'num of train_sample after des veto', train_sample.size
+    print('num of train_sample after des veto', train_sample.size)
 
-    print '\n--------------------------------\n matching catalogues\n--------------------------------'
+    print('\n--------------------------------\n matching catalogues\n--------------------------------')
         
     # find cmass in des_gold side --------------------
     mg1, mg2, _ = esutil.htm.HTM(10).match(train_sample['RA'], train_sample['DEC'], gold_st82['RA'], \
@@ -133,16 +133,16 @@ def train_st82(params, param_file):
     clean_cmass_data_des, nocmass = gold_st82[cmass_mask], gold_st82[~cmass_mask]
 
 
-    print 'num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./train_sample.size * 100)
-    print 'num of non-cmass in des side ', nocmass.size
+    print('num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./train_sample.size * 100))
+    print('num of non-cmass in des side ', nocmass.size)
 
     if params['random_sampling'] : 
         random_sampling_ind = np.random.choice(np.arange(nocmass.size), size = nocmass.size/10)
         nocmass = nocmass[random_sampling_ind]
-        print 'num of randomly sampled non-cmass ', nocmass.size
+        print('num of randomly sampled non-cmass ', nocmass.size)
 
     cmass_fraction = clean_cmass_data_des.size *1./gold_st82.size
-    print 'cmass_fraction', cmass_fraction
+    print('cmass_fraction', cmass_fraction)
 
     fitsio.write( output_dir+'/train_sample_des.fits', clean_cmass_data_des)
     fitsio.write( output_dir+'/train_sample_sdss.fits', train_sample[mg1])
@@ -153,7 +153,7 @@ def train_st82(params, param_file):
     gold_st82 = None  # initialize called catalogs to save memory
 
     #params['cmass_fraction'] = cmass_fraction
-    print '\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------'
+    print('\n--------------------------------\n Extreme deconvolution fitting\n--------------------------------')
     # Fitting ----------------------------------------------
 
     n_cmass, n_no = None, None
@@ -176,9 +176,9 @@ def train_st82(params, param_file):
             no_pickle = no_pickle +'.update'
             params['no_pickle'] = params['no_pickle'] + '.update'
 
-            print 'resuming from the existing pkl files'
-            print cmass_pickle
-            print no_pickle
+            print('resuming from the existing pkl files')
+            print(cmass_pickle)
+            print(no_pickle)
 
     clf_cmass = XD_fitting( data = clean_cmass_data_des, pickleFileName = cmass_pickle, 
         n_cl = n_cmass, n_iter = 10000, tol = tol, verbose = True, init_params= init_params_cmass)                 
@@ -186,7 +186,7 @@ def train_st82(params, param_file):
         n_cl = n_no, n_iter = 10000, tol = tol, verbose = True, init_params = init_params_no)
 
     
-    print '\n--------------------------\n Fitting End\n---------------------------'
+    print('\n--------------------------\n Fitting End\n---------------------------')
 
     
 def main_st82(params):
@@ -205,7 +205,7 @@ def main_st82(params):
         num_mock = params['num_mock']
 
     if os.path.exists(out_catname): 
-        print 'probability catalog already exists. Use this for sampling.'
+        print('probability catalog already exists. Use this for sampling.')
         pass
 
     else : 
@@ -222,7 +222,7 @@ def main_st82(params):
 
         if 'SFD98' in params : 
             if params['SFD98'] : 
-                print 'change reddening corrections from SLR to SFD98'
+                print('change reddening corrections from SLR to SFD98')
                 gold_st82 = RemovingSLRReddening(gold_st82)
                 gold_st82 = AddingSFD98Reddening(gold_st82, kind='STRIPE82')
 
@@ -237,8 +237,8 @@ def main_st82(params):
     # assign membership prob ----------------------------------
     if os.path.exists(out_catname): gold_st82 = fitsio.read(out_catname)
     else : 
-        print '\n--------------------------------\n Assign membership prob\n--------------------------------'
-        print 'cmass_fraction', cmass_fraction
+        print('\n--------------------------------\n Assign membership prob\n--------------------------------')
+        print('cmass_fraction', cmass_fraction)
         from xd import assignCMASSProb
         gold_st82 = assignCMASSProb( gold_st82, clf_cmass, clf_no, cmass_fraction = cmass_fraction )
         fitsio.write(out_catname, gold_st82, clobber=True)
@@ -257,15 +257,15 @@ def main_st82(params):
 
 def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt' ):
 
-    print '\n--------------------------------\n catalog jackknife sampling \n--------------------------------'
-    print 'jfile= ', root+jfile
-    print 'njack= ', njack
+    print('\n--------------------------------\n catalog jackknife sampling \n--------------------------------')
+    print('jfile= ', root+jfile)
+    print('njack= ', njack)
     
     km, jfile = GenerateRegions(cat, cat['RA'], cat['DEC'], root+jfile, njack, jtype)
     ind = AssignIndex(cat, cat['RA'], cat['DEC'], km)
     #ind_rand = AssignIndex(rand, rand['RA'], rand['DEC'], km) 
     
-    print '--------------------------------'
+    print('--------------------------------')
     return ind
 
 """    
@@ -383,15 +383,15 @@ def main_spt(params):
 
     jkoutname = out_catname # +'_jk{:03}.fits'.format(1)
     if os.path.exists(jkoutname): 
-        print 'probability catalog already exists. Use this for sampling.'
+        print('probability catalog already exists. Use this for sampling.')
         pass
     else : 
-        print 'jkoutfile doesnt exist'
-        print jkoutname
+        print('jkoutfile doesnt exist')
+        print(jkoutname)
 
         if 'debug' in params : 
             if params['debug'] : 
-                print 'debugging mode : small sample for the fast calculation.'
+                print('debugging mode : small sample for the fast calculation.')
                 input_keyword = 'Y1A1_GOLD_000001'
                 des_spt = io.SearchAndCallFits(path = input_path, keyword = input_keyword, no_keyword=no_keyword)
                 randind = np.random.choice( np.arange(des_spt.size), size = des_spt.size/100)
@@ -424,7 +424,7 @@ def main_spt(params):
 
         if 'SFD98' in params : 
             if params['SFD98'] : 
-                print 'change reddening corrections from SLR to SFD98'
+                print('change reddening corrections from SLR to SFD98')
                 des_spt = RemovingSLRReddening(des_spt )
                 des_spt = des_spt[priorCut_test(des_spt)]
                 des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
@@ -465,7 +465,7 @@ def main_spt(params):
                 des_spt_i = des_spt[ind_map == i]
                 ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
                 fitsio.write(outname, ts)
-                print 'prob cat save to ', outname
+                print('prob cat save to ', outname)
                 
             prob_spt.append(ts)
             ts = None
@@ -549,13 +549,13 @@ def main_buzzard(params):
             #valid_hpix = list(set(ind_map))
             ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= True)
             valid_hpix = list(set(ind_map))
-            print '# of healpix pixels :', len(valid_hpix)
+            print('# of healpix pixels :', len(valid_hpix))
             for hp in valid_hpix:
                 outname = out_catname+'_hpix{:03}.fits'.format(hp)
 
                 #if hp > 625:
                 if os.path.exists(outname):
-                    print 'prob exists ', outname
+                    print('prob exists ', outname)
                     pass
 
                 else : 
@@ -569,7 +569,7 @@ def main_buzzard(params):
                     #if os.path.exists(outname):
                     ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
                     fitsio.write(outname, ts)
-                    print 'prob cat save to ', outname
+                    print('prob cat save to ', outname)
                     
                     #prob_spt.append(ts)
                     ts = None
@@ -592,7 +592,7 @@ def main_buzzard(params):
 
             if 'SFD98' in params : 
                 if params['SFD98'] : 
-                    print 'change reddening corrections from SLR to SFD98'
+                    print('change reddening corrections from SLR to SFD98')
                     des_spt = RemovingSLRReddening(des_spt)
                     des_spt = des_spt[priorCut_test(des_spt)]
                     des_spt = AddingSFD98Reddening(des_spt, kind='SPT')
@@ -602,7 +602,7 @@ def main_buzzard(params):
             outname = output_dir+'/'+'DMASS.'+outcat
             des_spt_prob = assignCMASSProb(des_spt , clf_cmass, clf_no, cmass_fraction = cmass_fraction )
             fitsio.write(outname, des_spt_prob)
-            print 'prob cat save to ', outname
+            print('prob cat save to ', outname)
 
 
 
@@ -639,7 +639,7 @@ if __name__=='__main__':
             logname = output_dir + 'log/log.v{:03}'.format(vind)
         else : break
 
-    print 'log saved to ', logname
+    print('log saved to ', logname)
             #if os.path.exists(cpconfigname):
             #   cpconfigname = output_dir+'config.yaml' +'.v3'
             #   logname = output_dir + 'log.v3'
