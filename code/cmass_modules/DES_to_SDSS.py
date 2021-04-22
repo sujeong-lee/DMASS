@@ -388,7 +388,7 @@ def DESmag_to_SDSSmag(sdss_data, des_data):
     des = DESfib2mag_to_SDSSfib2mag(sdss, des)
     #des = DESdperp_to_SDSSdperp(sdss, des)
     """
-    print '\ntime :', time.time()-t1
+    print('\ntime :', time.time()-t1)
 
 
     return sdss, des #des #sdss, des2
@@ -412,7 +412,7 @@ def transform_DES_to_SDSS(g_des, r_des, i_des, z_des):
     return sdss_mag
 
 def add_SDSS_colors(data, magTag_template = 'MAG_DETMODEL', independent = None):
-    print "Doing des->sdss color transforms for "+magTag_template
+    print("Doing des->sdss color transforms for "+magTag_template)
     filters = ['G','R','I','Z']
     magTags = []
     
@@ -473,7 +473,7 @@ def modestify(data):
     modest[neither] = 5
     
     data = rf.append_fields(data, 'MODETYPE', modest)
-    print np.sum(galcut), np.sum(starcut), np.sum(neither)
+    print(np.sum(galcut), np.sum(starcut), np.sum(neither))
     return data
 
 def DESclassifier( des):
@@ -488,7 +488,7 @@ def match(sdss, des):
     matchDist = 1/3600. # match distance (degrees) -- default to 1 arcsec
     m_des, m_sdss, d12 = h.match(des['RA'], des['DEC'], sdss['RA'],sdss['DEC'],matchDist,maxmatch=1)
     
-    print 'matched object ',len(m_des)
+    print('matched object ',len(m_des))
     return sdss[m_sdss],des[m_des]
 
 def matchCatalogsWithTag(cat1, cat2 , tag = 'balrog_index'):

@@ -11,11 +11,11 @@ def weightmultiply( weightDic ):
     
     length = weightDic['vetoed'].size
     w0 = np.ones(length)
-    names = weightDic.keys()
-    print names
+    names = list(weightDic.keys())
+    print(names)
     n = len(names)
     for i in range(n):
-        print names[i]
+        print(names[i])
         w0 *= weightDic[names[i]]
         
     return w0
@@ -26,7 +26,7 @@ def fitting_allSP( suffix, properties = None, kind = 'SPT', inputdir = None, plo
 
     filters = ['g', 'r', 'i', 'z']
 
-    print 'all linear function'
+    print('all linear function')
     fitting_SP( property = ['DEPTH', 'EXPTIME', 'AIRMASS', 'FWHM', 'SKYBRITE'], filter=filters, kind = kind, 
                suffix=suffix, plot=plot, function = 'linear',
                     path = inputdir )
@@ -114,9 +114,9 @@ def sys_iteration( nextweight=None, suffix=None, all_weight = None,
     else : nextprop = nextw[0]+'_'+nextw[1]
     nextfil = nextw[-1]
     #nextprop, nextfil = nextweight.split('_')
-    print '----------------------------------'
-    print 'initialize function ', nextweight
-    print function
+    print('----------------------------------')
+    print('initialize function ', nextweight)
+    print(function)
 
 
     wg = calculate_weight( property = nextprop, filter=nextfil, kind = kind, suffix=suffix, plot=plot, 
@@ -125,17 +125,17 @@ def sys_iteration( nextweight=None, suffix=None, all_weight = None,
                     weight=True, raTag ='RA', decTag='DEC', nside=nside)
 
 
-    print 'store weight ', nextweight
+    print('store weight ', nextweight)
     os.system('mkdir '+path+'/weights/')
     fitsname = path+'/weights/wg_'+nextweight.lower()+'_'+kind+'.fits'
-    print 'save weight to fits', fitsname
+    print('save weight to fits', fitsname)
     fitsio.write( fitsname, wg, clobber=True )
     weightDic[nextweight] = wg
     
     
     if suffix == 'vetoed': suffix = 'wg_'+nextweight.lower()
     else : suffix = suffix+'_'+nextweight.lower()
-    print 'suffix = ', suffix
+    print('suffix = ', suffix)
     all_weight = np.multiply( all_weight, weightDic[nextweight] )
 
     #extremesys_mask_cat1 = maskingCatalogSP(catalog=cat1, sysMap=sysMap, maskonly=True) 
@@ -232,7 +232,7 @@ def plot_sysweight(property = None, nside = 1024, kind = 'SPT', suffix1='', suff
     os.system('mkdir '+outdir)
     figname = outdir+'comparison_systematic_'+property+'_'+kind+'_'+suffix2+'.pdf'
     fig.savefig(figname)
-    print "saving fig to ", figname
+    print("saving fig to ", figname)
 
     return 0
 
@@ -250,7 +250,7 @@ def plot_sysweight_one(property = None, filter = 'g', nside = 1024, kind = 'SPT'
     #filters = ['g']
     
     #xlabel = property + '  ' + filter
-    print xlabel
+    print(xlabel)
     if property is 'NSTARS_allband' :
         nside = 1024
         #xxlabel = property
@@ -328,7 +328,7 @@ def plot_sysweight_one(property = None, filter = 'g', nside = 1024, kind = 'SPT'
     figname = outdir+'comparison_systematic_'+property+'_'+filter+'.pdf'
     fig.tight_layout( rect=[0.0, 0.0, 1.0, 1.0] )
     fig.savefig(figname)
-    print "saving fig to ", figname
+    print("saving fig to ", figname)
 
     return 0
 
@@ -350,8 +350,8 @@ def generating_randoms():
 	rand2_cmass = Cuts.keepGoodRegion(rand2_cmass)
 	rand2_cmass = rand2_cmass[ rand2_cmass['DEC'] > -30.0 ]
 
-	print rand.size, dmass.size
-	print rand_cmass.size, cmass.size
+	print(rand.size, dmass.size)
+	print(rand_cmass.size, cmass.size)
 
 	return rand, rand2, rand_cmass, rand2_cmass
 
@@ -379,7 +379,7 @@ def run_survey_systematics( ):
 	dmass = fitsio.read(rootdir+'dmass_spt_0001.fits')
 	#dmass_st82 = fitsio.read(rootdir+'dmass_st82_0001.fits')
 	#cmass = fitsio.read(rootdir+'train_sample_des.fits')
-	print 'dmass sample size :', dmass.size
+	print('dmass sample size :', dmass.size)
 	#print 'dmass st82 sample size :', dmass_st82.size
 	#print 'cmass sample size :', cmass.size
 	rand, rand2, rand_cmass, rand2_cmass = generating_randoms()
@@ -446,10 +446,10 @@ def run_survey_systematics( ):
 	for ii in range(21):
 	    
 	    #nextweight = 'AIRMASS_g'
-	    print '-------------------------'
-	    print ' iteration -', ii
-	    print ' nextweight', nextweight
-	    print '-------------------------'
+	    print('-------------------------')
+	    print(' iteration -', ii)
+	    print(' nextweight', nextweight)
+	    print('-------------------------')
 	    #if ii < 4 : pp = []
 	    #else : pp = properties
 	    all_weight = weightmultiply(weightDic)
@@ -477,14 +477,14 @@ def run_survey_systematics( ):
 
 
 
-	print 'plotting galaxy number density with sys_weight, without sys_weight'
+	print('plotting galaxy number density with sys_weight, without sys_weight')
 	from systematics_module.contCorrection import plot_sysweight
 	for p in properties:
 	    plot_sysweight(property = p, nside = 4096, kind = kind, 
 	               suffix1='vetoed', suffix2=suffix, inputdir1 = sysoutdir, inputdir2 = sysoutdir, outdir=figoutdir)
 
 
-	print 'calculate correlation function and galaxy bias'
+	print('calculate correlation function and galaxy bias')
 
 
 	#tree corr

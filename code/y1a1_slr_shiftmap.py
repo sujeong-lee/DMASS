@@ -24,31 +24,31 @@ class SLRShift:
         self.nmag = self.zpshifts['ZP_SHIFT'][0,:].size
         self.bands = np.zeros(self.nmag,dtype='S1')
 
-        for i in xrange(self.nmag):
+        for i in range(self.nmag):
             magname = hdr['MAG%d' % (i)]
             parts=magname.split('_')
             # force to be upper case...
             self.bands[i] = parts[len(parts)-1].upper()  
 
-        print "Using zpshift file: %s" % (self.zpfile)
-        print "Bands: %s" % (str(self.bands))
-        print "NSIDE = %d (~%.1f arcmin)" % (self.nside, hp.nside2resol(self.nside, True))
-        print "Area = %.2f deg^2" % (hp.nside2pixarea(self.nside, degrees=True) * self.zpshifts.size)
+        print("Using zpshift file: %s" % (self.zpfile))
+        print("Bands: %s" % (str(self.bands)))
+        print("NSIDE = %d (~%.1f arcmin)" % (self.nside, hp.nside2resol(self.nside, True)))
+        print("Area = %.2f deg^2" % (hp.nside2pixarea(self.nside, degrees=True) * self.zpshifts.size))
 
         # now we want to build the healpix map...
         self.shiftmap = np.zeros((self.nmag,hp.nside2npix(self.nside)),dtype=np.float32) + hp.UNSEEN
-        for i in xrange(self.nmag):
+        for i in range(self.nmag):
             # all 99s are un-fit
             gd,=np.where(self.zpshifts['ZP_SHIFT'][:,i] < 90.0)
             self.shiftmap[i,self.zpshifts['HPIX'][gd]] = self.zpshifts['ZP_SHIFT'][gd,i]
             
         if (self.fill_periphery):
-            print "Filling in periphery pixels..."
+            print("Filling in periphery pixels...")
             self._fill_periphery()
 
-            print "Peripheral area:"
-            for i in xrange(self.nmag):
-                print "  %s: %.2f deg^2" % (self.bands[i], self.peripheral_area[i])
+            print("Peripheral area:")
+            for i in range(self.nmag):
+                print("  %s: %.2f deg^2" % (self.bands[i], self.peripheral_area[i]))
         else:
             self.peripheral_area = None
 
@@ -58,7 +58,7 @@ class SLRShift:
         '''
 
         self.peripheral_area = np.zeros(self.nmag,dtype=np.float32)
-        for i in xrange(self.nmag):
+        for i in range(self.nmag):
             all_neighbor_pix = np.unique(hp.get_all_neighbours(self.nside,np.nonzero(self.shiftmap[i,:] != hp.UNSEEN)[0]))
 
             # remove any negatives...
@@ -83,7 +83,7 @@ class SLRShift:
         # get band index
         bind,=np.where(band.upper() == self.bands)
         if (bind.size == 0):
-            print "Error: could not find band %s in list of bands %s" % (band.upper(), str(self.bands))
+            print("Error: could not find band %s in list of bands %s" % (band.upper(), str(self.bands)))
             return np.zeros(ra.size,dtype=np.float32) + 99.0
         bind=bind[0]
         

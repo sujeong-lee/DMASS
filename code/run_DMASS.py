@@ -94,7 +94,9 @@ def train_st82(params, param_file):
     # calling BOSS cmass and applying dmass goodregion mask ----------------------------
     #cmass = io.getSGCCMASSphotoObjcat()
     train_sample = esutil.io.read(train_sample_filename)
+
     print('total num of train', train_sample.size)
+
     print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')   
     
     train_sample = Cuts.keepGoodRegion(train_sample)
@@ -221,7 +223,9 @@ def main_st82(params):
     if os.path.exists(out_catname): gold_st82 = fitsio.read(out_catname)
     else : 
         print('\n--------------------------------\n Assign membership prob\n--------------------------------')
+
         print('cmass_fraction', cmass_fraction)
+
         from xd import assignCMASSProb
         gold_st82 = assignCMASSProb( gold_st82, clf_cmass, clf_no, cmass_fraction = cmass_fraction )
         fitsio.write(out_catname, gold_st82, clobber=True)
@@ -241,6 +245,7 @@ def main_st82(params):
 def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jfile = 'jkregion.txt' ):
 
     print('\n--------------------------------\n catalog jackknife sampling \n--------------------------------')
+
     print('jfile= ', root+jfile)
     print('njack= ', njack)
     
@@ -328,6 +333,7 @@ def main_spt(params):
 
                 ind_map = hpRaDecToHEALPixel(des_spt['RA'], des_spt['DEC'], nside=  8, nest= True)
                 valid_hpix = list(set(ind_map))
+
                 print('# of healpix pixels :', len(valid_hpix))
 
                 for hp in valid_hpix:
@@ -335,6 +341,7 @@ def main_spt(params):
 
                     #if hp > 625:
                     if os.path.exists(outname):
+
                         print('prob exists ', outname)
                         pass
 
@@ -342,6 +349,8 @@ def main_spt(params):
                         des_spt_i = des_spt[ind_map == hp]
                         ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction, mag=mag, err=err )
                         fitsio.write(outname, ts)
+
+
                         print('prob cat save to ', outname)
 
                         ts = None
@@ -365,7 +374,9 @@ def main_spt(params):
                         des_spt_i = des_spt[ind_map == i]
                         ts = assignCMASSProb(des_spt_i , clf_cmass, clf_no, cmass_fraction = cmass_fraction, mag=mag, err=err )
                         fitsio.write(outname, ts)
+
                         print('prob cat save to ', outname)
+
                 
                     prob_spt.append(ts)
                     ts = None
@@ -406,6 +417,7 @@ if __name__=='__main__':
         else : break
 
     print('log saved to ', logname)
+
             #if os.path.exists(cpconfigname):
             #   cpconfigname = output_dir+'config.yaml' +'.v3'
             #   logname = output_dir + 'log.v3'

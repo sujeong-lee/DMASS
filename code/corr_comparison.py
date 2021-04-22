@@ -22,7 +22,7 @@ random_sgc = esutil.io.read(path+'random0_DR12v5_CMASS_South.fits.gz')
 
 from astropy.cosmology import FlatLambdaCDM
 cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
-print 'Calculate comoving distance with FlatLambdaCDM cosmology \nH0=70, Om0=0.3'
+print('Calculate comoving distance with FlatLambdaCDM cosmology \nH0=70, Om0=0.3')
 sys.stdout.flush()
 
 h = 0.7
@@ -31,14 +31,14 @@ r_rand = cosmo.comoving_distance(random_sgc['Z']).value *h
 
 #import numpy.lib.recfuctions as rf
 from numpy.lib import recfunctions as rf
-print 'Adding Comoving distance column'
+print('Adding Comoving distance column')
 sys.stdout.flush()
 cmass_sgc = rf.append_fields( cmass_sgc, 'DC', data = r )
 random_sgc = rf.append_fields( random_sgc, 'DC', data = r_rand )
 
-print cmass_sgc['DC'].data
+print(cmass_sgc['DC'].data)
 
-print 'cutting redshift bin'
+print('cutting redshift bin')
 cmass_sgc_zcut = cmass_sgc[(cmass_sgc['Z'] > 0.43) & (cmass_sgc['Z'] < 0.7)]
 random_sgc_zcut = random_sgc[(random_sgc['Z'] > 0.43) & (random_sgc['Z'] < 0.7)]
 

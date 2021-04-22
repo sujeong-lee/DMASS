@@ -19,7 +19,7 @@ def adding_dc(catalog, H0=67.77, Om0 = 0.307115):
     from astropy.cosmology import FlatLambdaCDM
     #cosmo = FlatLambdaCDM(H0=67.77, Om0=0.307115)
     cosmo = FlatLambdaCDM(H0=H0, Om0=Om0)
-    print 'Calculate comoving distance with FlatLambdaCDM cosmology \nH0='+str(H0)+', Om0='+str(Om0)
+    print('Calculate comoving distance with FlatLambdaCDM cosmology \nH0='+str(H0)+', Om0='+str(Om0))
     sys.stdout.flush()
 
     h = H0/100.
@@ -27,7 +27,7 @@ def adding_dc(catalog, H0=67.77, Om0 = 0.307115):
 
     #import numpy.lib.recfuctions as rf
     from numpy.lib import recfunctions as rf
-    print 'Adding Comoving distance column'
+    print('Adding Comoving distance column')
     sys.stdout.flush()
     catalog = rf.append_fields( catalog, 'DC', data = r )
     return catalog
@@ -65,12 +65,12 @@ def main( switch = None ):
 	mock_catalog_south, mock_catalog_south, randoms_catalog_south, randoms_catalog_north \
 	= None, None, None, None
 
-	print 'random sampling'
+	print('random sampling')
 	random_sam_ind = np.random.choice(np.arange(mock_catalog.size), size = mock_catalog.size)
 	mock_catalog = mock_catalog[random_sam_ind]
 	random_sam_ind2 = np.random.choice(np.arange(randoms_catalog.size), size = randoms_catalog.size/10)
 	randoms_catalog = randoms_catalog[random_sam_ind2]
-	print 'sample size (gal, random) :', mock_catalog.size, ' ', randoms_catalog.size
+	print('sample size (gal, random) :', mock_catalog.size, ' ', randoms_catalog.size)
 
 
 	Om0 = 0.307115
@@ -84,7 +84,7 @@ def main( switch = None ):
 
 
 	from systematics_module.corr import correlation_function_multipoles, _cfz_multipoles
-	print 'Initializing CorrFunc modules'
+	print('Initializing CorrFunc modules')
 
 	#settings
 	nthreads = 28
@@ -97,14 +97,14 @@ def main( switch = None ):
 		suffix = 'cmass_ngc_sgc_weight_fkp_random10_njack'+str(njack)
 		mockcat = mock_catalog
 		randcat = randoms_catalog
-		print 'switch', suffix
+		print('switch', suffix)
 
 	elif switch == 1:
 
 		suffix = 'cmass_ngc_sgc_zcut_weight_fkp_random10_njack'+str(njack)
 		mockcat = mock_catalog_zcut
 		randcat = randoms_catalog_zcut
-		print 'switch', suffix
+		print('switch', suffix)
 
 	
 	weight_data = mockcat['WEIGHT_SYSTOT']*( mockcat['WEIGHT_CP'] + mockcat['WEIGHT_NOZ'] - 1.)

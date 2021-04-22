@@ -19,12 +19,8 @@ def goldY3_masking( cat=None, valid_hpind=None ):
         
     except KeyError:
         cathpind = hpRaDecToHEALPixel( cat['ra'].value, cat['dec'].value, nside = 4096, nest=True )
-
+        mask = np.in1d( cathpind, valid_hpind )       
         
-        mask = np.in1d( cathpind, valid_hpind )        
-        
-    return cat[mask]
-    
 def priorCut_test(data):
 
     fitsfile= '/PCON0003/warner785/galaxy_DR11v1_CMASS_South-photoObj.fits.gz'

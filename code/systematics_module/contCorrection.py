@@ -17,7 +17,7 @@ def getavgbias( mag, z , pstart=0.0 ):
     #z = cat['DESDM_ZP']
     logL = logL_from_mag( mag = mag, z = z )
     avg_b = logL_to_galaxyBias(logL = logL)
-    print 'avg bias=',avg_b, ' sample size=', mag.size
+    print('avg bias=',avg_b, ' sample size=', mag.size)
     return avg_b
 
 
@@ -267,7 +267,7 @@ def doVisualization_ngal(property = None, nside = 1024, kind = 'SPT', suffix='',
     os.system('mkdir '+outdir)
     figname = outdir+'systematic_'+property+'_'+kind+'_'+suffix+'.png'
     fig.savefig(figname)
-    print "saving fig to ", figname
+    print("saving fig to ", figname)
 
     return 0
 
@@ -351,7 +351,7 @@ def plot_sysweight(property = None, nside = 1024, kind = 'SPT', suffix1='', suff
     os.system('mkdir '+outdir)
     figname = outdir+'comparison_systematic_'+property+'_'+kind+'_'+suffix2+'.png'
     fig.savefig(figname)
-    print "saving fig to ", figname
+    print("saving fig to ", figname)
 
     return 0
 
@@ -419,7 +419,7 @@ class CorrectContaminant():
         keep = (r > rmin) & (r < rmax)
         eps82 = np.mean(np.fabs(err[keep]/w[keep]))/np.sqrt(np.sum(keep))
         eps = eps82  * np.sqrt(180./1000)
-        print 'angular stat err (st82, full) ', eps82, eps
+        print('angular stat err (st82, full) ', eps82, eps)
         return eps82, eps
    
    
@@ -434,7 +434,7 @@ class CorrectContaminant():
         eps_len82 = np.mean(np.abs(err[keep]/L[keep]))/np.sqrt(np.sum(keep))
         eps_len = eps_len82 * np.sqrt(180./1000)
         
-        print 'lensing stat err (st82, full) ', eps_len82, eps_len
+        print('lensing stat err (st82, full) ', eps_len82, eps_len)
         return eps_len82, eps_len
     
     
@@ -462,7 +462,7 @@ class CorrectContaminant():
         i_fL = np.abs(1. - np.sqrt( (1 + w - self.eps) * 1./(1 + w_t) ))
         self.m_i_fL = np.mean(np.ma.masked_invalid(i_fL[keep]))
 
-        print 'Angular max fc ', m_fL, ' ideal fc (simple mean) ', self.m_i_fL, ' mean sys ', np.mean(ang_L[keep])
+        print('Angular max fc ', m_fL, ' ideal fc (simple mean) ', self.m_i_fL, ' mean sys ', np.mean(ang_L[keep]))
         return m_fL, self.m_i_fL
 
 
@@ -486,7 +486,7 @@ class CorrectContaminant():
         #square weight
         self.m_i_fR = np.mean(np.ma.masked_invalid(i_fR[keep]))
         
-        print 'Angular max fc ', m_fR, ' ideal fc (simple mean) ', self.m_i_fR, ' mean sys ', np.mean(ang_R[keep])
+        print('Angular max fc ', m_fR, ' ideal fc (simple mean) ', self.m_i_fR, ' mean sys ', np.mean(ang_R[keep]))
         return m_fR, self.m_i_fR
 
 
@@ -517,7 +517,7 @@ class CorrectContaminant():
         i_f_weighted_len = weight_len * i_fL_len
         self.f_weighted_len_L = np.sum(i_f_weighted_len[keep * maskL])
         
-        print 'Lensing max fc ', m_fL_len, ' ideal fc (weighted mean) ', self.f_weighted_len_L, ' mean sys ', np.mean(len_L[keep])
+        print('Lensing max fc ', m_fL_len, ' ideal fc (weighted mean) ', self.f_weighted_len_L, ' mean sys ', np.mean(len_L[keep]))
         return m_fL_len, self.f_weighted_len_L
 
 
@@ -548,7 +548,7 @@ class CorrectContaminant():
         i_f_weighted_len = weight_len * i_fR_len
         self.f_weighted_len_R = np.sum(i_f_weighted_len[keep * maskR])
         
-        print 'Lening max fc ', m_fR_len, ' ideal fc (weighted mean) ', self.f_weighted_len_R, ' mean sys ', np.mean(len_R[keep])
+        print('Lening max fc ', m_fR_len, ' ideal fc (weighted mean) ', self.f_weighted_len_R, ' mean sys ', np.mean(len_R[keep]))
         return m_fR_len, self.f_weighted_len_R
 
 
@@ -574,7 +574,7 @@ class CorrectContaminant():
         
         sys = w_t * 2 * f_c * (b_c/b_t -1 )
         
-        print 'b_c ', b_c, ' b_t ', b_t, ' mean sys ', np.mean(np.abs(sys[keep]))
+        print('b_c ', b_c, ' b_t ', b_t, ' mean sys ', np.mean(np.abs(sys[keep])))
         return r, sys
 
 
@@ -605,7 +605,7 @@ class CorrectContaminant():
         sys = L_t * f_c * (b_c/b_t - 1)
         
         #self.len_stat_err(rmin = rmin, rmax = rmax)
-        print 'b_c ', b_c, ' b_t ', b_t, ' mean sys ', np.mean(np.abs(sys[keep]))
+        print('b_c ', b_c, ' b_t ', b_t, ' mean sys ', np.mean(np.abs(sys[keep])))
         return r, sys
 
 
