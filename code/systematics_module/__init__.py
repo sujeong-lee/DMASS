@@ -1,3 +1,3 @@
 
 
-from contCorrection import CorrectContaminant
+from .contCorrection import CorrectContaminant

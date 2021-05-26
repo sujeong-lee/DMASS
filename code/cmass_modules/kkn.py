@@ -42,8 +42,8 @@ class knn(object):
 
     def classifier(self, sdss, des, des_tags=None, sdss_tags = None, train=None, train_size=60000):
 
-        print 'after prior cut (s/d) :', len(sdss), len(des)
-        print 'train_size ', train_size
+        print('after prior cut (s/d) :', len(sdss), len(des))
+        print('train_size ', train_size)
         """
         dperp_sdss = ( sdss['MODELMAG_R'] - sdss['MODELMAG_I']) - (sdss['MODELMAG_G'] - sdss['MODELMAG_R'])/8.
         sdss_cuts = ( ( dperp_sdss > 0.55 ) &
@@ -106,8 +106,8 @@ class knn(object):
             #y_all[sdss_cuts] = 1
         """
         
-        print 'train set ', np.sum(train_mask), ' test set ', np.sum((~train_mask))
-        print 'cmass/train', np.sum(sdss_cuts[train]), ' cmass/test', np.sum(sdss_cuts[test]), ' total', np.sum(sdss_cuts)
+        print('train set ', np.sum(train_mask), ' test set ', np.sum((~train_mask)))
+        print('cmass/train', np.sum(sdss_cuts[train]), ' cmass/test', np.sum(sdss_cuts[test]), ' total', np.sum(sdss_cuts))
 
 
         #from sklearn.ensemble import RandomForestClassifier as rfc
@@ -117,7 +117,7 @@ class knn(object):
         from sklearn.neighbors import KNeighborsClassifier as kNN
         
         n_neighbors = 100 #   int(train_size * 0.02)
-        print 'n_neighbors', n_neighbors
+        print('n_neighbors', n_neighbors)
         pl = kNN(n_neighbors=n_neighbors,weights='distance',p=2,n_jobs=-1)
         pl.fit(x,y)
         predict_test = pl.predict(x_test)
@@ -126,9 +126,9 @@ class knn(object):
         predict_test_all = pl.predict(x_all)
         #truth_test_all = y_all == 1
         
-        print "Classifier completeness:", np.sum(predict_test * truth_test) *1. / np.sum(truth_test)
-        print "Classifier purity:", np.sum(predict_test * truth_test) * 1./np.sum(predict_test)
-        print "number (test/all)", np.sum(predict_test), np.sum(predict_test_all)
+        print("Classifier completeness:", np.sum(predict_test * truth_test) *1. / np.sum(truth_test))
+        print("Classifier purity:", np.sum(predict_test * truth_test) * 1./np.sum(predict_test))
+        print("number (test/all)", np.sum(predict_test), np.sum(predict_test_all))
 
 
         # Now reverse it, and see what SDSS galaxies we can be sure are selected by the classifier.
@@ -152,7 +152,7 @@ class knn(object):
         predict_rev_all = pl2.predict(x_all)
         good = (predict_rev_all ==0) & (predict_test_all == 1)
         
-        print "Reverse classifier completeness:", np.sum(predict_rev * predict_test ) *1. / np.sum(predict_test)
-        print "Reverse classifier purity:", np.sum(predict_rev * predict_test) * 1./np.sum(predict_rev)
+        print("Reverse classifier completeness:", np.sum(predict_rev * predict_test ) *1. / np.sum(predict_test))
+        print("Reverse classifier purity:", np.sum(predict_rev * predict_test) * 1./np.sum(predict_rev))
         
         return pl, (predict_test_all == 1), (predict_test_all == 1)

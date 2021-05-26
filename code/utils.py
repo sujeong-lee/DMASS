@@ -200,7 +200,7 @@ def spatialcheck(data, label = None, convert = None, ratag='RA',dectag='DEC', za
     #fig, ax = plt.subplots(1,1,figsize = (7,7))
     fig, ax = plt.subplots(figsize = (10,8))
     if len(data) > 1000 :
-            print "Warning : Be careful when you put more than 20 data"
+            print("Warning : Be careful when you put more than 20 data")
             data = [data]
 
     if label is None: label = [None for i in range(0,len(data))]
@@ -249,7 +249,7 @@ def spatialcheck(data, label = None, convert = None, ratag='RA',dectag='DEC', za
     #ax.set_xlim(0,360)
     ax.legend(loc = 'best')
     fig.savefig(dir+'/spatialtest_'+suffix)
-    print 'figsave : '+dir+'/spatialtest_'+suffix+'.png'
+    print('figsave : '+dir+'/spatialtest_'+suffix+'.png')
 
 
 
@@ -277,7 +277,7 @@ def doVisualization_z( cats = None, labels = None, suffix = 'test', zlabel = 'DE
     axes[-1].remove()
     figname =outdir+'hist_z_'+suffix+'.png'
     fig.savefig(figname)
-    print 'saving fig to ',figname
+    print('saving fig to ',figname)
 
 
 
@@ -305,7 +305,7 @@ def doVisualization_z_1( cats = None, labels = None, suffix = 'test', zlabel = '
 
     figname ='figure/hist_z_'+suffix+'.png'
     fig.savefig(figname)
-    print 'saving fig to ',figname
+    print('saving fig to ',figname)
 
 
 def makeTagUppercase(cat):
@@ -366,7 +366,7 @@ def getRawMag( cat, mags = None, reddening = 'SFD98', suffix='_corrected' ):
         
     for name in mags:
         for f in filter:
-            print 'raw color = ',name+'_'+f, fac, redtag+'_'+f
+            print('raw color = ',name+'_'+f, fac, redtag+'_'+f)
             changeColumnName( cat, name = name+'_'+f+suffix, rename = name+'_'+f )
             cat[name+'_'+f] = cat[name+'_'+f] + fac * cat[redtag+'_'+f]
 
@@ -400,7 +400,7 @@ def getCorrectedMag( cat, mags = None, reddening = 'SFD98', suffix='_corrected' 
             if reddening == None : pass
             else:
                 magname = mag+'_'+f
-                print 'corrected color = ',magname, fac, redtag+'_'+f
+                print('corrected color = ',magname, fac, redtag+'_'+f)
                 cat[magname+suffix] = cat[magname+suffix] + fac * cat[redtag+'_'+f]
 
     #except ValueError : print "'MAG_APER_4' is not in list. Skip it"
@@ -444,9 +444,9 @@ def AddingReddening(cat):
     offsetsdf = DataFrame( offsets, index = nametag ).T
     cat = DataFrame(cat)
     #del cat['index']
-    print 'concatenate two ndarrays'
+    print('concatenate two ndarrays')
     cat = concat([cat, offsetsdf], axis=1)
-    print 'dataframe to recordarray'
+    print('dataframe to recordarray')
     cat = cat.to_records()
     
     """
@@ -480,32 +480,32 @@ def RemovingSLRReddening(cat):
             offsetsdf = DataFrame( offsets, index = nametag ).T
             cat = DataFrame(cat, index = catnametag)
             #del cat['index']
-            print 'concatenate two ndarrays'
+            print('concatenate two ndarrays')
             cat = concat([cat, offsetsdf], axis=1)
-            print 'dataframe to recordarray'
+            print('dataframe to recordarray')
             cat = cat.to_records()
         
         except ValueError :
-            print "Big-endian buffer not supported on little-endian compiler"
-            print "Doing byte swapping"
+            print("Big-endian buffer not supported on little-endian compiler")
+            print("Doing byte swapping")
             
             #offsetsdf = np.array(offsetsdf).byteswap().newbyteorder()
             cat = np.array(cat).byteswap().newbyteorder()
             offsetsdf = DataFrame( offsets, index = nametag ).T
             cat = DataFrame(cat)
 
-            print 'concatenate two ndarrays'
+            print('concatenate two ndarrays')
             cat = concat([cat, offsetsdf], axis=1)
-            print 'dataframe to recordarray'
+            print('dataframe to recordarray')
             cat = cat.to_records()
             cat.dtype.names = [str(x) for x in cat.dtype.names]
             
             #matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes, left_index=left_index)
 
 
-    print 'Removing SLR Shift '
+    print('Removing SLR Shift ')
     for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
-        print '  removing SLR from ', mag
+        print('  removing SLR from ', mag)
         for b in ['G', 'R', 'I', 'Z']:
             cat[mag + '_'+b] = cat[mag + '_'+b] - cat['SLR_SHIFT'+ '_'+b]
 
@@ -522,9 +522,9 @@ def RemovingSLRReddening(cat):
 def AddingSLRReddening(cat):
 
 
-    print 'Adding SLR Shift '
+    print('Adding SLR Shift ')
     for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
-        print '  Adding SLR from ', mag
+        print('  Adding SLR from ', mag)
         for b in ['G', 'R', 'I', 'Z']:
             cat[mag + '_'+b] = cat[mag + '_'+b] + cat['SLR_SHIFT'+ '_'+b]
 
@@ -539,10 +539,10 @@ def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
 
     if 'EBV' not in cat.dtype.names :   
      
-        print 'Using SFD98 nside 4096 healpix map'
-        print 'Bands :',  band
+        print('Using SFD98 nside 4096 healpix map')
+        print('Bands :',  band)
         #print 'NSIDE = 4096'
-        print 'coefficients = ', coeff
+        print('coefficients = ', coeff)
         nside = 4096
 
         #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
@@ -587,8 +587,8 @@ def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
             matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
                                suffixes = ['','_sys'], left_index=False, right_index=False)
         except ValueError :
-            print "Big-endian buffer not supported on little-endian compiler"
-            print "Doing byte swapping ...."
+            print("Big-endian buffer not supported on little-endian compiler")
+            print("Doing byte swapping ....")
 
             cat_hp = np.array(cat_hp).byteswap().newbyteorder()
             #sfdmap = np.array(sfdmap).byteswap().newbyteorder()
@@ -607,12 +607,12 @@ def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
 
     else : matched_arr = cat
 
-    print 'Adding SFD98 Shift '
-    print 'Bands :',  band
-    print 'coefficients = ', coeff
+    print('Adding SFD98 Shift ')
+    print('Bands :',  band)
+    print('coefficients = ', coeff)
 
     for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
-        print '  Adding SFD to ', mag
+        print('  Adding SFD to ', mag)
         for i,b in enumerate(band):
             matched_arr[mag + '_'+b] = matched_arr[mag + '_'+b] - matched_arr['EBV'] * coeff[i]    
 
@@ -626,9 +626,9 @@ def RemovingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] )
 
     band = ['G', 'R', 'I', 'Z']
 
-    print 'Removing SFD98 Shift '
-    print 'Bands :',  band
-    print 'coefficients = ', coeff
+    print('Removing SFD98 Shift ')
+    print('Bands :',  band)
+    print('coefficients = ', coeff)
 
     correction_tag = 'EBV'
 
@@ -636,7 +636,7 @@ def RemovingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] )
         correction_tag = 'SFD98'
 
     for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
-        print '  Removing SFD to ', mag
+        print('  Removing SFD to ', mag)
         for i,b in enumerate(band):
             cat[mag + '_'+b] = cat[mag + '_'+b] + cat[correction_tag] * coeff[i]    
 
@@ -650,10 +650,10 @@ def _AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
 
     band = ['G', 'R', 'I', 'Z']
 
-    print 'Using SFD98 nside 512 healpix map'
-    print 'Bands :',  band
-    print 'NSIDE = 512'
-    print 'coefficients = ', coeff
+    print('Using SFD98 nside 512 healpix map')
+    print('Bands :',  band)
+    print('NSIDE = 512')
+    print('coefficients = ', coeff)
 
     #from suchyta_utils.y1a1_slr_shiftmap import SLRShift
     #sfdfile = '/n/des/lee.5922/data/systematic_maps/y1a1_wide_slr_wavg_zpshift2.fit'
@@ -688,8 +688,8 @@ def _AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
         matched = pd.merge(cat_Data, sfdData, on='PIXEL', how='left', 
                            suffixes = ['','_sys'], left_index=False, right_index=False)
     except ValueError :
-        print "Big-endian buffer not supported on little-endian compiler"
-        print "Doing byte swapping ...."
+        print("Big-endian buffer not supported on little-endian compiler")
+        print("Doing byte swapping ....")
 
         cat_hp = np.array(cat_hp).byteswap().newbyteorder()
         #sfdmap = np.array(sfdmap).byteswap().newbyteorder()
@@ -705,9 +705,9 @@ def _AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
     matched_arr = matched.to_records(index=False)
     matched_arr.dtype.names = [str(x) for x in matched_arr.dtype.names]
 
-    print 'Adding SFD98 Shift '
+    print('Adding SFD98 Shift ')
     for mag in ['MAG_MODEL', 'MAG_DETMODEL', 'MAG_AUTO']:
-        print '  Adding SFD to ', mag
+        print('  Adding SFD to ', mag)
         for i,b in enumerate(band):
             matched_arr[mag + '_'+b] = matched_arr[mag + '_'+b] - matched_arr['SFD98'] * coeff[i]    
 
@@ -724,7 +724,7 @@ def addphotoz(des = None, im3shape = None):
 
     m_re, m_im3 = esutil.numpy_util.match(des['COADD_OBJECTS_ID'], im3shape['COADD_OBJECTS_ID'])
 
-    print des.size, im3shape.size, m_re.size, 'z_failure :', des.size - m_re.size
+    print(des.size, im3shape.size, m_re.size, 'z_failure :', des.size - m_re.size)
     
     desdm_zp = np.zeros(des.size, dtype=float)
     #desdm_zp.fill(1e+20)
@@ -768,8 +768,8 @@ def mergeCatalogsUsingPandas(des=None, gold=None, how = 'right', key=None, left_
         matched = pd.merge(desData, goldData, on=key, how=how, suffixes = suffixes, left_index=left_index, right_index=right_index)
 
     except ValueError :
-        print "Big-endian buffer not supported on little-endian compiler"
-        print "Doing byte swapping"
+        print("Big-endian buffer not supported on little-endian compiler")
+        print("Doing byte swapping")
         
         des = np.array(des).byteswap().newbyteorder()
         gold = np.array(gold).byteswap().newbyteorder()
@@ -817,7 +817,7 @@ def getHealInd_buz(ra, ra2, dec, dec2):
     vec  = hp.ang2vec(-(dec - 90.) * np.pi / 180., ra * np.pi / 180.)
     rvec = np.dot(np.linalg.inv(rmat), vec.T)
     pix  = set(hp.vec2pix(8, *rvec, nest=False))
-    print 'Healpix ind ', np.sort(list(pix))
+    print('Healpix ind ', np.sort(list(pix)))
     return pix
 
 
@@ -986,10 +986,10 @@ def GenerateRegions(jarrs, jras, jdecs, jfile, njack, jtype):
         np.savetxt(jfile, km.centers)
 
     elif jtype=='read':
-	print 'read stored jfile :', jfile
-        centers = np.loadtxt(jfile)
-        km = kmeans_radec.KMeans(centers)
-        njack = len(centers)
+      print('read stored jfile :', jfile)
+      centers = np.loadtxt(jfile)
+      km = kmeans_radec.KMeans(centers)
+      njack = len(centers)
 
     return [km, jfile]
 
@@ -1013,7 +1013,7 @@ def AssignIndex(jarrs, jras, jdecs, km):
 
 #### survey mask ----------------------------------------------------
 def catalog_masking(cat, nside_out = 128, area=None):
-    print 'input cat ', cat.size
+    print('input cat ', cat.size)
     #cat = reddening_mask(cat = cat, nside_out = nside_out)
     #print 'reddening ', cat.size
     if area is 'NGC' :
@@ -1024,9 +1024,9 @@ def catalog_masking(cat, nside_out = 128, area=None):
         cat = Cuts.keepGoodRegion(cat)
         cat = cat[cat['DEC']<-3.0]
         #cat = y1gold_mask(cat = cat, nside_out = nside_out)
-    else : print 'area keyword input : either one of NGC SGC SPT'
+    else : print('area keyword input : either one of NGC SGC SPT')
         
-    print 'output ', cat.size
+    print('output ', cat.size)
     return cat
 
 def boss_mask(cat=None, area='SGC', nside_out = 128):
@@ -1041,7 +1041,7 @@ def boss_mask(cat=None, area='SGC', nside_out = 128):
         boss_hpind = esutil.io.read('/n/des/lee.5922/data/cmass_cat/healpix_boss_footprint_NGC_1024.fits')
         #boss_hpind = hp.ud_grade(boss_hpind, pess=True, nside_out = nside)
     else : 
-        print 'area keyword input : SGC or NGC'
+        print('area keyword input : SGC or NGC')
         return 0
      
     boss_hpfrac = np.zeros(hp.nside2npix(1024), dtype = 'float')

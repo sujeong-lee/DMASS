@@ -9,7 +9,7 @@ import pandas as pd
 import numpy.lib.recfunctions as rf
 #import seaborn as sns
 
-from ang2stripe import *
+from .ang2stripe import *
 import fitsio
 from fitsio import FITS, FITSHDR
 
@@ -71,7 +71,7 @@ def modestify(data, suffix='_corrected'):
     modest[neither] = 5
     
     #data = rf.append_fields(data, 'MODETYPE', modest)
-    print np.sum(galcut), np.sum(starcut), np.sum(neither)
+    print(np.sum(galcut), np.sum(starcut), np.sum(neither))
     return modest
 
 
@@ -207,7 +207,7 @@ def keepY1GoldRegion(des, hpInd = False):
 
 def limitingDepth(catalog, nside = 4096):
 
-    print "Don't use this function"
+    print("Don't use this function")
     import healpy as hp
     Npix = hp.nside2npix(nside)
     path = '/n/des/lee.5922/data/balrog_cat/'
@@ -231,7 +231,7 @@ def doGoldBasicCuts(des, raTag = 'RA', decTag = 'DEC', object = 'galaxy'):
     import healpy as hp
     # 25 is the faintest object detected by DES
     # objects larger than 25 considered as Noise
-    print "Don't use this function"
+    print("Don't use this function")
     """
     path = '/n/des/lee.5922/data/balrog_cat/'
     goodmask = path+'y1a1_gold_1.0.2_wide_footprint_4096.fit'
@@ -265,7 +265,7 @@ def doGoldBasicCuts(des, raTag = 'RA', decTag = 'DEC', object = 'galaxy'):
 
     if object is 'galaxy': use = use & (modtype == 1)
     elif object is 'star'  : use = use & (modtype == 2)
-    elif object is None : print 'no object selected. retrieve star + galaxy both'
+    elif object is None : print('no object selected. retrieve star + galaxy both')
     
     taglist = ['MAG_MODEL'] #, 'MAG_DETMODEL','MAG_AUTO', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
     filters = ['R','I']
@@ -276,7 +276,7 @@ def doGoldBasicCuts(des, raTag = 'RA', decTag = 'DEC', object = 'galaxy'):
             thistag = tag+'_'+thisfilter
             use = use & ((des[thistag] < 25.0) & (des[thistag] > 10.))
 
-    print 'do Basic Cut', np.sum(use)
+    print('do Basic Cut', np.sum(use))
     return des[use]
 
 
@@ -313,7 +313,7 @@ def _doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galax
             use = use & ((des[thistag] < 30.0) & (des[thistag] > 15.))
 
 
-    print 'do Basic Cut', np.sum(use)
+    print('do Basic Cut', np.sum(use))
     return des[use]
 
 
@@ -380,7 +380,7 @@ def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy
         #modtype = modestify(des, suffix=suffix)
         modtype = des['MODEST_CLASS']
         use = use & (modtype == 3)
-    elif object is None : print 'no object selected. retrieve star + galaxy both'
+    elif object is None : print('no object selected. retrieve star + galaxy both')
     
     taglist = ['MAG_MODEL'] #, 'MAG_DETMODEL','MAG_AUTO', 'MAG_PETRO', 'MAG_PSF', 'MAG_HYBRID']
     filters = ['R','I']
@@ -400,7 +400,7 @@ def doBasicCuts(des, raTag = 'RA', decTag = 'DEC', balrog=None, object = 'galaxy
             use = use & ((des[thistag] < 25) & (des[thistag] > 15.))
             #use = use & (des[thistag] != 99)
 
-    print 'do Basic Cut', np.sum(use)
+    print('do Basic Cut', np.sum(use))
     return des[use]
 
 
@@ -503,7 +503,7 @@ def CMASSQaulityCut( sdss ):
             ( ((sdss['FLAGS'] & saturated) == 0) | (((sdss['FLAGS'] & saturated) > 0) & ((sdss['FLAGS'] & saturated_center) == 0) ) )&
             ( ((sdss['FLAGS'] & blended) == 0 ) | ((sdss['FLAGS'] & nodeblend) ==0) ) )
 
-    print np.sum(~use), " objects excluded"
+    print(np.sum(~use), " objects excluded")
     return sdss[use]
 
 
@@ -514,7 +514,7 @@ def SpatialCuts(  data, ra = 350.0, ra2=355.0 , dec= 0.0 , dec2=1.0 ):
         decli = data['DEC']
 
     except (ValueError, NameError) :
-        print "Can't RA and DEC column. Try with 'ALPHAWIN_J2000_DET' and 'DELTAWIN_J2000_DET' column"
+        print("Can't RA and DEC column. Try with 'ALPHAWIN_J2000_DET' and 'DELTAWIN_J2000_DET' column")
         ascen = data['ALPHAWIN_J2000_DET']
         decli = data['DELTAWIN_J2000_DET']
         
@@ -527,7 +527,7 @@ def SpatialCuts(  data, ra = 350.0, ra2=355.0 , dec= 0.0 , dec2=1.0 ):
       (ascen > ra) &
       (decli > dec))
 
-    print 'Spatial Cut ', np.sum(cut)
+    print('Spatial Cut ', np.sum(cut))
     return data[cut]
 
 
@@ -535,7 +535,7 @@ def RedshiftCuts(  data, z_min=0.43, z_max=0.7 ):
     
     cut = ((data['Z'] < z_max ) &
            (data['Z'] > z_min))
-    print 'Redshift Cut ', np.sum(cut)
+    print('Redshift Cut ', np.sum(cut))
     return data[cut]
 
 

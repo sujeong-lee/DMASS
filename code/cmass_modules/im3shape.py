@@ -31,7 +31,7 @@ def im3mag_desmag_correction(  im3shape, des ):
     zeropoint = des_exp['MAG_MODEL_I'] - im3shape_exp['MAG_MODEL_I']
     
     for i in range(20):
-        print im3shape_exp['DISC_FLUX'][i], des_exp['FLUX_MODEL_I'][i],im3shape_exp['DISC_FLUX'][i]/des_exp['FLUX_MODEL_I'][i]
+        print(im3shape_exp['DISC_FLUX'][i], des_exp['FLUX_MODEL_I'][i],im3shape_exp['DISC_FLUX'][i]/des_exp['FLUX_MODEL_I'][i])
     
     fig, (ax, ax2) = plt.subplots(nrows =1, ncols =2, figsize = (14, 7))
     ax.plot( im3shape_exp['MAG_MODEL_I'], des_exp['MAG_MODEL_I'], 'r.', label = 'exp_model', alpha = 0.33 )
@@ -53,7 +53,7 @@ def im3mag_desmag_correction(  im3shape, des ):
 
 
     fig.savefig('../figure/fluxcomparison_im3shapeVSdes')
-    print 'savefig :', '../figure/fluxcomparison_im3shapeVSdes'
+    print('savefig :', '../figure/fluxcomparison_im3shapeVSdes')
 
     #return im3sorted, DESsorted
 
@@ -113,7 +113,7 @@ def im3shape_galprof_mask( im3shape, fulldes ):
     
     data = rf.append_fields(fulldes, 'IM3_GALPROF', im3galprofile)
     
-    print np.sum(expmask), np.sum(devmask)
+    print(np.sum(expmask), np.sum(devmask))
     return data
 
 def addMagforim3shape(im3_des):
