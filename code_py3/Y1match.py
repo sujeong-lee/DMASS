@@ -66,3 +66,61 @@ clean_cmass_data_des = gold_st82[mg2] # common galaxies in Y1 Gold
 cmass_mask = np.zeros(gold_st82.size, dtype=bool)
 cmass_mask[mg2] = 1
 nocmass = gold_st82[~cmass_mask]
+
+print(('num of cmass in des side', clean_cmass_data_des.size, '({:0.0f}%)'.format(clean_cmass_data_des.size*1./cmass.size*100.)))
+-------------------------------
+
+#matching catalogs (train_st82):
+'''
+#Su's flags and color cut:
+mask_all=cut
+f'=f[cut]
+train_sample=fitsfile
+#print('total num of train', len(train_sample))
+'''
+#reading in needed values:
+cmass_ra=hdu[1].data['RA     ']
+cmass_dec=hdu[1].data['DEC    ']
+
+mg1, mg2,_= esutil.htm.HTM(10).match(cmass_ra, cmass_dec, ra, dec, 2./3600, maxmatch=1)
+
+cmass_mask=np.zeros(ra.size, dtype=bool)
+cmass_mask[mg2]=1
+clean_cmass_data_des_ra, nocmass_ra=ra[cmass_mask], ra[~cmass_mask]
+clean_cmass_data_des_dec, nocmass_dec=dec[cmass_mask], dec[~cmass_mask]
+
+print(('num of cmass in des side', clean_cmass_data_des_ra.size, '({:0.0f}%)'.format(clean_cmass_data_des_ra.size*1./cmass_ra.size*100.)))
+
+---------------------
+
+import esutil
+import numpy as np
+    
+mask_all = priorCut_test(gold_st82)
+gold_st82 = gold_st82[mask_all]
+    
+# calling BOSS cmass and applying dmass goodregion mask ----------------------------
+#cmass = io.getSGCCMASSphotoObjcat()
+train_sample = esutil.io.read(train_sample_filename)
+
+print('total num of train', train_sample.size)
+
+print('\n--------------------------------\n applying DES veto mask to CMASS\n--------------------------------')   
+    
+train_sample = Cuts.keepGoodRegion(train_sample)
+fitsio.write( output_dir+'/cmass_in_st82.fits', train_sample)
+
+print('num of train_sample after des veto', train_sample.size)
+
+print('\n--------------------------------\n matching catalogues\n--------------------------------')
+
+# find cmass in des_gold side --------------------
+mg1, mg2, _ = esutil.htm.HTM(10).match(cmass_ra, cmass_dec, ra, \
+                                         dec,2./3600, maxmatch=1)
+cmass_mask = np.zeros(ra.size, dtype=bool)
+cmass_mask[mg2] = 1
+clean_cmass_data_des_ra, nocmass_ra = ra[cmass_mask], ra[~cmass_mask]
+clean_cmass_data_des_dec, nocmass_dec = dec[cmass_mask], dec[~cmass_mask]
+
+
+print('num of cmass in des side',clean_cmass_data_des_ra.size,'({:0.0f}%)'.format(clean_cmass_data_des_ra.size*1./cmass_ra.size*100))
