@@ -530,6 +530,13 @@ def AddingSLRReddening(cat):
 
     return cat
 
+def AddingReddening(cat, kind='SFD98', coeff = [3.186,2.140,1.569,1.196 ]):
+    print('Correct Reddening with {}'.format(kind) )
+    for mag in ['MAG_DETMODEL', 'SOF_CM_MAG', 'MOF_CM_MAG', 'MAG_AUTO']:
+        print('  Adding Reddening from ', mag)
+        for i, b in enumerate(['G', 'R', 'I', 'Z']):
+            cat[mag + '_'+b] = cat[mag + '_'+b] - cat['EBV'+ '_'+kind] * coeff[i]
+    return cat
 
 def AddingSFD98Reddening(cat, kind='SPT', coeff = [3.186,2.140,1.569,1.196 ] ):
     import numpy.lib.recfunctions as rf

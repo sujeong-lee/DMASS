@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-import sys
+import sys, os, fitsio
 from time import time
 import numpy as np
 from astroML.decorators import pickle_results
 #from astroML.density_estimation import XDGMM
-#from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
-#import matplotlib
-#matplotlib.use('Agg')
+from cmass_modules import io, DES_to_SDSS, im3shape, Cuts
+import matplotlib
+matplotlib.use('Agg')
 #from matplotlib import rc
 #rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
 #rc('text', usetex=True)
@@ -16,7 +16,6 @@ from numpy import linalg
 #from __future__ import print_function, division
 #from ..utils import logsumexp, log_multivariate_gaussian, check_random_state
 from multiprocessing import Process, Queue
-#from sklearn.mixture import GMM as GaussianMixture
 from sklearn.mixture import GaussianMixture
 
 def getCMASSparam(filename = None ):
@@ -52,17 +51,17 @@ def extreme_fitting( cat, n_comp = 20, xmean=None, xamp=None, xcovar=None, pickl
     if weight is True : weight = cat['CMASS_WEIGHT']
 
     if xmean is None : 
-        from sklearn.mixture import GaussianMixture
-        print('initial guess')
-        gmm = GaussianMixture(n_comp, max_iter= 10, covariance_type='full',
+        from sklearn.mixture import GMM
+        print 'initial guess'
+        gmm = GMM(n_comp, n_iter= 10, covariance_type='full',
                           random_state=1).fit(ydata)
         xmean = gmm.means_
         xamp = gmm.weights_
-        xcovar = gmm.covariance_
+        xcovar = gmm.covars_
 
         #return xmean, xamp, xcovar
 
-    print('fitting started')
+    print 'fitting started'
     
     l = extreme_deconvolution(ydata, ycovar, xamp, xmean, xcovar, projection=None, weight=weight, \
                           fixamp=None, fixmean=None, fixcovar=None, tol=1e-6, maxiter=1000000, \
@@ -77,7 +76,7 @@ def extreme_fitting( cat, n_comp = 20, xmean=None, xamp=None, xcovar=None, pickl
     clf = {'retval' : data }
     output = open( pickle_name, 'wb')
     pickle.dump( clf, output )
-    print('pickle saved ', pickle_name)
+    print 'pickle saved ', pickle_name
     
     #return clf
 
@@ -139,32 +138,32 @@ class XDGMM(object):
         # this doesn't take into account errors, but is a fast first-guess
         
         if init_params is None : 
-            gmm = GaussianMixture(self.n_components, max_iter=10, covariance_type='full',
+            gmm = GMM(self.n_components, n_iter=10, covariance_type='full',
                       random_state=self.random_state).fit(X)
         
         
         #print gmm.weights_
         
         if init_params is not None:
-            print("init_params = True : initializing with cmass params ")
+            print "init_params = True : initializing with cmass params "
             filename = init_params
             #fix_mu, fix_alpha, fix_V = getCMASSparam(filename = 'pickle/gold_st82_20_XD_dmass.pkl')
             fix_mu, fix_alpha, fix_V = getCMASSparam(filename = filename)
 
-            gmm = GaussianMixture(self.n_components, max_iter=1, covariance_type='full',
+            gmm = GMM(self.n_components, n_iter=1, covariance_type='full',
                         random_state=self.random_state).fit(X)
 
             gmm.means_ = fix_mu
-            gmm.covariances_ = fix_V
+            gmm.covars_ = fix_V
             gmm.weights_= fix_alpha
         
         
         self.mu = gmm.means_
         self.alpha = gmm.weights_
-        self.V = gmm.covariances_
+        self.V = gmm.covars_
         self.n_components = len(self.V)
-        print('n components =',self.n_components)
-        print('tolerance =', self.tol)
+        print 'n components =',self.n_components
+        print 'tolerance =', self.tol
 
 
         logL = self.logL(X, Xerr)
@@ -181,8 +180,8 @@ class XDGMM(object):
             #sys.stdout.flush()
             
             if self.verbose:
-                print(("%i: log(L) = %.10g" % (i + 1, logL_next)))
-                print(("    (%.2g sec)" % (t1 - t0)))
+                print("%i: log(L) = %.10g" % (i + 1, logL_next))
+                print("    (%.2g sec)" % (t1 - t0))
               
             if logL_next < logL + self.tol:
                 break
@@ -192,7 +191,7 @@ class XDGMM(object):
                 self.mu = fix_mu
                 self.V = fix_V
                 if all( s == 0. for s in self.alpha ) == True :
-                    print('invalid value in GMM parameter')
+                    print 'invalid value in GMM parameter'
                     break 
                 pass
 
@@ -451,7 +450,7 @@ def detMatrixMultiprocessing( T ):
         q.put((order, re))
     
     q = Queue()
-    Processes = [Process(target = det_process, args=(q, z[0], z[1])) for z in zip(list(range(n_process)), T_split)]
+    Processes = [Process(target = det_process, args=(q, z[0], z[1])) for z in zip(range(n_process), T_split)]
     
     for p in Processes: p.start()
     result = []
@@ -474,7 +473,7 @@ def invMatrixMultiprocessing( T ):
         q.put((order, re))
     
     q = Queue()
-    Processes = [Process(target = inv_process, args=(q, z[0], z[1])) for z in zip(list(range(n_process)), T_split)]
+    Processes = [Process(target = inv_process, args=(q, z[0], z[1])) for z in zip(range(n_process), T_split)]
     
     for p in Processes: p.start()
     result = []
@@ -656,21 +655,42 @@ def logsumexp(arr, axis=None):
 
 
 
-def mixing_color(data, suffix = '', 
-    mag = ['MAG_MODEL', 'MAG_DETMODEL'], 
-    err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'], 
-    filter = ['G', 'R', 'I'],
-    sdss = None, cmass = None, elg=None,
+def mixing_color(data, suffix = '', sdss = None, cmass = None, buzzard=True, 
+    #mag = ['MAG_MODEL', 'MAG_DETMODEL'], 
+    #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'], 
+    mag = ['MAG', 'MAG'], 
+    err = [ 'MAGERR','MAGERR'], 
     no_zband = True  ):
     
+    filter = ['G', 'R', 'I', 'Z']
+    
+    #mag = ['MAG_MODEL', 'MAG_DETMODEL']
     magtag = [ m+'_'+f+suffix for m in mag for f in filter ]
+    del magtag[0], magtag[2]
+    #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL']
     errtag = [ e+'_'+f for e in err for f in filter ]
-    del magtag[0], errtag[0]
-    if 'Z' in filter: del magtag[2], errtag[2]
-    print(magtag)
+    del errtag[0], errtag[2]
+    
+    if no_zband : 
+        print 'No z_band!'
+        magtag = magtag[:-1]
+        errtag = errtag[:-1]
+        #print magtag
+    #print magtag
+    #print errtag
+
 
     X = [ data[mt] for mt in magtag ]
     Xerr = [ data[mt] for mt in errtag ]
+
+    """
+    if buzzard:
+
+        mag1 = data[mag[0]]
+        err1 = data[err[0]]
+        X = [ mag1[:,1], mag1[:,2], mag1[:,0], mag1[:,1], mag1[:,2] ]
+        Xerr = [ err1[:,1], err1[:,2], err1[:,0], err1[:,1], err1[:,2] ]
+    """
     #reddeningtag = 'XCORR_SFD98'
 
     X = np.vstack(X).T
@@ -683,79 +703,32 @@ def mixing_color(data, suffix = '',
                   [0, 0, 0, 1, -1, 0],   # r-i
                   [0, 0, 0, 0, 1, -1]])  # i-z
 
-    if 'Z' not in filter: W = W[:-1,:-1]
+    if no_zband : W = W[:-1,:-1]
+
     X = np.dot(X, W.T)
 
+
     Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
-    Xcov[:, list(range(Xerr.shape[1])), list(range(Xerr.shape[1]))] = Xerr**2
+    Xcov[:, range(Xerr.shape[1]), range(Xerr.shape[1])] = Xerr**2
     Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
     return X, Xcov
 
 
-def mixing_color_elg(data, suffix = '', 
-    mag = ['MAG_MODEL', 'MAG_DETMODEL'], 
-    err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'], 
-    filter = ['G', 'R', 'I', 'Z'],
-    full=False,
-    no_zband = True  ):
-    
-    magtag = [ m+'_'+f+suffix for m in mag for f in filter ]
-    errtag = [ e+'_'+f for e in err for f in filter ]
-    #del magtag[0], errtag[0]
-    if 'Z' in filter: del magtag[3], errtag[3]
-    #print(magtag)
-
-    X = [ data[mt] for mt in magtag ]
-    Xerr = [ data[mt] for mt in errtag ]
-    #reddeningtag = 'XCORR_SFD98'
-
-    X = np.vstack(X).T
-    Xerr = np.vstack(Xerr).T
-    # mixing matrix
-    W = np.array([[1, 0, 0, 0, 0, 0, 0],    # g mag
-                  [0, 1, 0, 0, 0, 0, 0],    # r mag
-                  [0, 0, 1, 0, 0, 0, 0],    # i mag
-                  [0, 0, 0, 1, -1, 0, 0],   # g-r
-                  #[0, 0, 0, 0, 1, -1, 0],   # r-i
-                  #[0, 0, 0, 0, 0, 1, -1],   # i-z
-                  [1, 0, 0, 0, 0, 0, -1]])  # r-z
-    if full:
-        W = np.array([[1, 0, 0, 0, 0, 0, 0],    # g mag
-                    [0, 1, 0, 0, 0, 0, 0],    # r mag
-                    [0, 0, 1, 0, 0, 0, 0],    # i mag
-                    [0, 0, 0, 1, -1, 0, 0],   # g-r
-                    [0, 0, 0, 0, 1, -1, 0],   # r-i
-                    [0, 0, 0, 0, 0, 1, -1],   # i-z
-                    [1, 0, 0, 0, 0, 0, -1]])  # r-z
-
-    #if 'Z' not in filter: W = W[:-1,:-1]
-    X = np.dot(X, W.T)
-
-    Xcov = np.zeros(Xerr.shape + Xerr.shape[-1:])
-    Xcov[:, list(range(Xerr.shape[1])), list(range(Xerr.shape[1]))] = Xerr**2
-    Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
-    return X, Xcov
 
     
-def XD_fitting( data = None, 
-        pickleFileName = 'pickle/XD_fitting_test.pkl', 
-        init_params = None, 
-        suffix='', 
-        mag = ['MAG_MODEL', 'MAG_DETMODEL'],
-        err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
-        filter = ['G', 'R', 'I'],
-        n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
-
+def XD_fitting( data = None, pickleFileName = 'pickle/XD_fitting_test.pkl', init_params = None, suffix='', n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
     from astroML.decorators import pickle_results
+    
     @pickle_results(pickleFileName, verbose = True)
-    def compute_XD(X, Xcov, init_params = None, n_iter=500, 
-    verbose=False, n_cl = None, tol=1E-5):
+    def compute_XD(X, Xcov, init_params = None, n_iter=500, verbose=False, n_cl = None, tol=1E-5):
         if init_params != None : 
             n_cl = 10
 
         if n_cl is None : 
-            n_cl,_,_= _FindOptimalN( np.arange(2, 50, 2), X, 
-            pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
+            n_pickleFilename = pickleFileName+'.n_cluster'
+            n_cl,_,_= _FindOptimalN( np.arange(2, 50, 2), X, pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
+
+        #print 'n_cluster : ', n_cl
 
         clf= XDGMM(n_cl, n_iter=n_iter, tol=tol, verbose=verbose)
         clf.fit(X, Xcov, init_params = init_params)
@@ -764,51 +737,14 @@ def XD_fitting( data = None,
     if data is None: 
         import pickle 
         f = open(pickleFileName)
-        pickle = pickle.load(f, 'rb')
+        pickle = pickle.load(f)
         clf = pickle['retval']
     else:
-        X, Xcov = mixing_color(data, mag=mag, err=err, filter=filter, 
-        suffix = suffix, no_zband=False)
-        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, 
-        n_iter = n_iter, tol=tol, verbose=verbose)
+        X, Xcov = mixing_color(data, suffix = suffix, no_zband=True)
+        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, n_iter = n_iter, tol=tol, verbose=verbose)
     return clf
     
     
-def XD_fitting_X( X = None, Xcov=None, 
-        pickleFileName = 'pickle/XD_fitting_test.pkl', 
-        init_params = None, 
-        suffix='', 
-        mag = ['MAG_MODEL', 'MAG_DETMODEL'],
-        err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
-        filter = ['G', 'R', 'I'],
-        n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
-
-    from astroML.decorators import pickle_results
-    @pickle_results(pickleFileName, verbose = True)
-    def compute_XD(X, Xcov, init_params = None, n_iter=500, 
-    verbose=False, n_cl = None, tol=1E-5):
-        if init_params != None : 
-            n_cl = 10
-
-        if n_cl is None : 
-            n_cl,_,_= _FindOptimalN( np.arange(2, 50, 2), X, 
-            pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
-
-        clf= XDGMM(n_cl, n_iter=n_iter, tol=tol, verbose=verbose)
-        clf.fit(X, Xcov, init_params = init_params)
-        return clf
-
-    if X is None: 
-        import pickle 
-        f = open(pickleFileName, 'rb')
-        pickle = pickle.load(f, encoding="bytes")
-        clf = pickle['retval']
-    else:
-        #X, Xcov = mixing_color(data, mag=mag, err=err, filter=filter, 
-        #suffix = suffix, no_zband=False)
-        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, 
-        n_iter = n_iter, tol=tol, verbose=verbose)
-    return clf
 
 
 def add_errors(model_data, real_data, real_covars):
@@ -821,7 +757,7 @@ def add_errors(model_data, real_data, real_covars):
     (dist, ind) = tree.query(model_data)
     model_covars = real_covars[ind,:,:]
     noise = np.empty(model_data.shape)
-    for i in range(model_data.shape[0]):
+    for i in xrange(model_data.shape[0]):
         noise[i,:] = (np.random.multivariate_normal(model_data[i,:]*0.,model_covars[i,:,:]))
     
     noisy_data = model_data + noise
@@ -834,15 +770,14 @@ def add_errors_multiprocessing(model_data, real_data, real_covars):
     
     X_sample_split = np.array_split(model_data, n_process, axis=0)
     
-    def addingerror_process(q, order, xxx_todo_changeme):
-        (model, data, cov) = xxx_todo_changeme
+    def addingerror_process(q, order, (model, data, cov)):
         re = add_errors(model, data, cov)
         q.put((order, re))
     
     inputs = [ (X_sample_split[i], real_data, real_covars) for i in range(n_process) ]
     
     q = Queue()
-    Processes = [Process(target = addingerror_process, args=(q, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    Processes = [Process(target = addingerror_process, args=(q, z[0], z[1])) for z in zip(range(n_process), inputs)]
     
     for p in Processes: p.start()
     
@@ -869,22 +804,22 @@ def add_errors_multiprocessing(model_data, real_data, real_covars):
 
 def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=100, prefix= 'default' ):
     if labels == None:
-        print(" always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data.")
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
     else:
         ndim = len(labels)
     
     if ranges == None:
         # try to figure out the correct axis ranges.
-        print("Using central 98% to set range.")
+        print "Using central 98% to set range."
         ranges = []
-        for i in range(ndim):
+        for i in xrange(ndim):
             ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
     fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
     
-    for i in range(ndim):
-        for j in range(ndim):
+    for i in xrange(ndim):
+        for j in xrange(ndim):
             if i == j:
                 xbins = np.linspace(ranges[i][0],ranges[i][1],100)
                 axes[i][i].hist(data1[:,i],bins=xbins,normed=True,label='data1')
@@ -905,70 +840,66 @@ def doVisualization3( true, data1, data2, labels = None, ranges = None, nbins=10
                 axes[j][i].set_title('data2')
 
     filename = 'figure/'+prefix+"diagnostic_histograms3.png"
-    print("writing output plot to: "+filename)
+    print "writing output plot to: "+filename
     fig.savefig(filename)
 
 
 
-def doVisualization_1d( data=None, labels = None, 
-ranges = None, name = None, weight = [None,None], 
-color=['grey', 'tab:blue', 'tab:orange', 'tab:green'],
-nbins=100, filename=None):
+def doVisualization_1d( true, data1, labels = None, ranges = None, name = None, weight = [None,None], nbins=100, prefix= 'default', outdir='./'):
 
 
     if labels == None:
-        print(" always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data.")
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
     else:
         ndim = len(labels)
     
     if ranges == None:
         # try to figure out the correct axis ranges.
-        print("Using central 98% to set range.")
+        print "Using central 98% to set range."
         ranges = []
-        for i in range(ndim):
-            ranges.append( np.percentile(data[-1][:,i],[1.,99.]) )
+        for i in xrange(ndim):
+            ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
-    
     fig,axes = plt.subplots(nrows=1, ncols= ndim, figsize= (4*ndim, 4) )
+   
     #print weight[0], weight[1].size, data1[:,0].size 
-    for i in range(ndim):
+    for i in xrange(ndim):
         xbins = np.linspace(ranges[i][0],ranges[i][1], nbins)
-        for j in range(len(data)):
-            axes[i].hist(data[j][:,i],bins=xbins, label=name[j], weights=weight[j], alpha = 0.5, color =color[j], density=True)
-            #axes[i].hist(data[:,i],bins=xbins, alpha=1.0,label=name[1], weights=weight[1], histtype='step', color='k', lw=1, density=True)
+        axes[i].hist(true[:,i],bins=xbins,normed=True, label=name[0], weights=weight[0], alpha = 0.5, color ='grey')
+        axes[i].hist(data1[:,i],bins=xbins,normed=True,alpha=1.0,label=name[1], weights=weight[1], histtype='step', color='k', lw=1)
         axes[i].set_xlabel(labels[i], fontsize = 20)
         #axes[i].hist(data2[:,i],bins=xbins,normed=True,alpha=0.5,label='data2')
         axes[i].get_yaxis().set_visible(False)
         axes[i].tick_params(labelsize=15)
-        axes[i].legend(loc='best',fontsize = 10)
+        axes[i].legend(loc='best',fontsize = 15)
 
-    #filename = "figure/diagnostic_histograms_1d.pdf"
-    #print("writing output plot to: "+filename)
+    filename = outdir+"/"+prefix+"diagnostic_histograms_1d.pdf"
+    print "writing output plot to: "+filename
     fig.tight_layout()
     fig.subplots_adjust(wspace=0.05, hspace=0.5);
-    if filename != None: fig.savefig(filename)
+    fig.savefig(filename)
     #plt.close(fig)
 
 
 def doVisualization_1d_NperA( data1, true, area = None, labels = None, ranges = None, name = None, nbins=100, prefix= 'default' ):
     
     if labels == None:
-        print(" always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data.")
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
     else:
         ndim = len(labels)
     
     if ranges == None:
         # try to figure out the correct axis ranges.
-        print("Using central 98% to set range.")
+        print "Using central 98% to set range."
         ranges = []
-        for i in range(ndim):
+        for i in xrange(ndim):
             ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
     fig, axes = plt.subplots(nrows=1, ncols= ndim, figsize= (6*ndim, 5) )
     
-    for i in range(ndim):
+    for i in xrange(ndim):
         xbins, step = np.linspace(ranges[i][0],ranges[i][1],100, retstep = True)
         
         #N_t, _,_ = axes[i].hist(true[:,i],bins=xbins,normed=False, color='blue')
@@ -985,29 +916,29 @@ def doVisualization_1d_NperA( data1, true, area = None, labels = None, ranges = 
         axes[i].legend(loc='best')
 
     filename = "figure/"+prefix+"diagnostic_histograms_1d.png"
-    print("writing output plot to: "+filename)
+    print "writing output plot to: "+filename
     fig.savefig(filename)
     #plt.close(fig)
 
 
 def doVisualization(model_data, real_data, name = ['model', 'real'], labels = None, ranges = None, nbins=100, prefix= 'default'):
     if labels == None:
-        print(" always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data.")
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
     else:
         ndim = len(labels)
     
     if ranges == None:
         # try to figure out the correct axis ranges.
-        print("Using central 98% to set range.")
+        print "Using central 98% to set range."
         ranges = []
-        for i in range(ndim):
+        for i in xrange(ndim):
             ranges.append( np.percentile(real_data[:,i],[1.,99.]) )
 
     fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
     
-    for i in range(ndim):
-        for j in range(ndim):
+    for i in xrange(ndim):
+        for j in xrange(ndim):
             if i == j:
                 xbins = np.linspace(ranges[i][0],ranges[i][1],100)
                 axes[i][i].hist(real_data[:,i],bins=xbins,normed=True,label=name[1], color='blue')
@@ -1027,29 +958,29 @@ def doVisualization(model_data, real_data, name = ['model', 'real'], labels = No
                 axes[j][i].set_title(name[0])
 
     filename = 'figure/'+prefix+"diagnostic_histograms.png"
-    print("writing output plot to: "+filename)
+    print "writing output plot to: "+filename
     fig.savefig(filename)
     plt.close(fig)
 
 
 def doVisualization2(true_data, test_data, labels = None, ranges = None, nbins=100, prefix= 'default'):
     if labels == None:
-        print(" always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data.")
+        print " always label your axes! you must populate the 'labels' keyword with one entry for each dimension of the data."
         stop
     else:
         ndim = len(labels)
     
     if ranges == None:
         # try to figure out the correct axis ranges.
-        print("Using central 98% to set range.")
+        print "Using central 98% to set range."
         ranges = []
-        for i in range(ndim):
+        for i in xrange(ndim):
             ranges.append( np.percentile(test_data[:,i],[1.,99.]) )
 
     fig,axes = plt.subplots(nrows=ndim, ncols= ndim, figsize= (6*ndim, 6*ndim) )
     
-    for i in range(ndim):
-        for j in range(ndim):
+    for i in xrange(ndim):
+        for j in xrange(ndim):
             if i == j:
                 xbins = np.linspace(ranges[i][0],ranges[i][1],100)
                 axes[i][i].hist(test_data[ labels[i] ],bins=xbins,normed=True,label='real')
@@ -1069,7 +1000,7 @@ def doVisualization2(true_data, test_data, labels = None, ranges = None, nbins=1
                 axes[j][i].set_title('true')
 
     filename = prefix+"diagnostic_histograms2.png"
-    print("writing output plot to: "+filename)
+    print "writing output plot to: "+filename
     fig.savefig(filename)
 
 
@@ -1082,7 +1013,7 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
         for i in range(len(N)):
             sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
             sys.stdout.flush()
-            models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
+            models[i] = GaussianMixture(n_components=N[i], n_iter=n_iter,
                             covariance_type=covariance_type)
             models[i].fit(Xdata)
         return models
@@ -1093,8 +1024,8 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
     i_best = np.argmin(BIC)
     gmm_best = models[i_best]
     sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(100))
-    print("\nbest fit converged:", gmm_best.converged_, end=' ')
-    print(" n_components =  %i" % N[i_best])
+    print "\nbest fit converged:", gmm_best.converged_,
+    print " n_components =  %i" % N[i_best]
     return N[i_best], AIC, BIC
 
 
@@ -1118,7 +1049,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     cmass_mask = true_cmass == 1
     cmass_fraction = np.sum(cmass_mask) * 1./train.size
     if cmass_fraction is not None : cmass_fraction = cmass_fraction
-    print('num of cmass in train', np.sum(cmass_mask), ' fraction ', cmass_fraction)
+    print 'num of cmass in train', np.sum(cmass_mask), ' fraction ', cmass_fraction
 
     # stack DES data
 
@@ -1134,13 +1065,13 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     
     
 
-    print('train/test', len(X_train), len( X ))
+    print 'train/test', len(X_train), len( X )
     
     # train sample XD convolution ----------------------------------
     
     # finding optimal n_cluster
 
-    #from sklearn.mixture import GMM
+    from sklearn.mixture import GMM
     prefix1 = prefix # 'gold_st82_5_'
     prefix2 = prefix #'gold_st82_6_' # has only all likelihood.
     #prefix2 = prefix
@@ -1189,7 +1120,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
 
     # logprob_a ------------------------------------------
     
-    print("calculate loglikelihood gaussian with multiprocessing module")
+    print "calculate loglikelihood gaussian with multiprocessing module"
     #cmass_logprob_a = logsumexp(clf_cmass.logprob_a( X, Xcov, parallel = True ), axis = 1)
     #all_logprob_a = logsumexp(clf.logprob_a( X, Xcov, parallel = True ), axis = 1)
     
@@ -1203,8 +1134,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     X_split = np.array_split(X, n_process, axis=0)
     Xcov_split = np.array_split(Xcov, n_process, axis=0)
     
-    def logprob_process(q,  classname, order, xxx_todo_changeme1):
-        (data, cov) = xxx_todo_changeme1
+    def logprob_process(q,  classname, order,(data, cov)):
         re = classname.logprob_a(data, cov)
         result = logsumexp(re, axis = 1)
         q.put((order, result))
@@ -1214,9 +1144,9 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     q_cmass = Queue()
     q_all = Queue()
     q_no = Queue()
-    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
-    all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
-    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
+    all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(range(n_process), inputs)]
+    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
 
     #sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
     
@@ -1271,7 +1201,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
         clf_patch_no = XD_fitting( test, pickleFileName = 'pickle/gold_st82_20_XD_no2.pkl', suffix = '_all2', n_cl = n_cl_all )
         
         q_patch = Queue()
-        patch_Processes = [Process(target = logprob_process, args=(q_patch, clf_patch_no, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+        patch_Processes = [Process(target = logprob_process, args=(q_patch, clf_patch_no, z[0], z[1])) for z in zip(range(n_process), inputs)]
 
         for p in patch_Processes: p.start()
 
@@ -1310,7 +1240,7 @@ def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fract
     # -----------------------------------------------
     
     
-    print('add noise to samples...')
+    print 'add noise to samples...'
     
     
     """
@@ -1396,16 +1326,12 @@ def XD_fitting_old( data, pickleFileName = 'pickle/XD_fitting_test.pkl', n_cl = 
 
 
 
-def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, 
-                     mag = ['MAG_MODEL', 'MAG_DETMODEL'],
-                     err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
-                     filter = ['G', 'R', 'I'],
-                     suffix = None ):
+def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, suffix = None ):
     
-    print("calculate loglikelihood gaussian with multiprocessing module")
+    print "calculate loglikelihood gaussian with multiprocessing module"
     
-    try: X, Xcov = mixing_color( test, mag=mag, err=err, filter=filter )
-    except ValueError : X, Xcov = mixing_color( test, mag=mag, err=err, filter=filter, suffix = '')
+    try: X, Xcov = mixing_color( test )
+    except ValueError : X, Xcov = mixing_color( test, suffix = '')
         
     from multiprocessing import Process, Queue
     # split data
@@ -1414,8 +1340,7 @@ def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None,
     X_split = np.array_split(X, n_process, axis=0)
     Xcov_split = np.array_split(Xcov, n_process, axis=0)
     
-    def logprob_process(q,  classname, order, xxx_todo_changeme2):
-        (data, cov) = xxx_todo_changeme2
+    def logprob_process(q,  classname, order,(data, cov)):
         re = classname.logprob_a(data, cov)
         result = logsumexp(re, axis = 1)
         q.put((order, result))
@@ -1425,9 +1350,9 @@ def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None,
     q_cmass = Queue()
     #q_all = Queue()
     q_no = Queue()
-    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
     #all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(range(n_process), inputs)]
-    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(range(n_process), inputs)]
     
     #sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
     
@@ -1478,88 +1403,6 @@ def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None,
         
     return test
 
-def assignELGProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, 
-                     mag = ['MAG_MODEL', 'MAG_DETMODEL'],
-                     err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
-                     filter = ['G', 'R', 'I', 'Z'],
-                     full=False,
-                     suffix = None ):
-    
-    print("calculate loglikelihood gaussian with multiprocessing module")
-    
-    try: X, Xcov = mixing_color_elg( test, mag=mag, err=err, filter=filter, full=full )
-    except ValueError : X, Xcov = mixing_color_elg( test, mag=mag, err=err, filter=filter, suffix = '', full=full)
-        
-    from multiprocessing import Process, Queue
-    # split data
-    n_process = 12
-    
-    X_split = np.array_split(X, n_process, axis=0)
-    Xcov_split = np.array_split(Xcov, n_process, axis=0)
-    
-    def logprob_process(q,  classname, order, xxx_todo_changeme2):
-        (data, cov) = xxx_todo_changeme2
-        re = classname.logprob_a(data, cov)
-        result = logsumexp(re, axis = 1)
-        q.put((order, result))
-    
-    inputs = [ (X_split[i], Xcov_split[i]) for i in range(n_process) ]
-    
-    q_cmass = Queue()
-    #q_all = Queue()
-    q_no = Queue()
-    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
-    #all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(range(n_process), inputs)]
-    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
-    
-    #sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
-    
-    for p in cmass_Processes: p.start()
-    
-    percent = 0.0
-    result = []
-    for p in cmass_Processes:
-        result.append(q_cmass.get())
-        percent += + 1./( n_process * 2 ) * 100
-        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
-        sys.stdout.flush()
-    
-    #result = [q_cmass.get() for p in cmass_Processes]
-    result.sort()
-    cmass_logprob_a = np.hstack([np.array(r[1]) for r in result ])
-
-    for p in no_Processes: p.start()
-    
-    resultno = []
-    for p in no_Processes:
-        resultno.append(q_no.get())
-        percent += + 1./( n_process * 2 ) * 100
-        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
-        sys.stdout.flush()
-    
-    resultno.sort()
-    no_logprob_a = np.hstack([r[1] for r in resultno ])
-    
-    sys.stdout.write("\r" + 'multiprocessing {:0.0f} % \n'.format( 100 ))
-
-    numerator =  np.exp(cmass_logprob_a) * cmass_fraction
-    #denominator = np.exp(all_logprob_a)
-    denominator = numerator + np.exp(no_logprob_a) * (1. - cmass_fraction)
-    
-    denominator_zero = denominator == 0
-    ELG_PROB = np.zeros( numerator.shape )
-    ELG_PROB[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
-
-    try:
-        test = rf.append_fields(test, 'ELG_PROB', ELG_PROB)
-        #test = rf.append_fields(test, 'cmassLogLikelihood', cmass_logprob_a)
-        #test = rf.append_fields(test, 'noLogLikelihood', no_logprob_a)
-    except ValueError:
-        test['ELG_PROB'] = ELG_PROB
-        #test['cmassLogLikelihood'] = cmass_logprob_a
-        #test['noLogLikelihood'] = no_logprob_a
-        
-    return test
 
 def keepSDSSgoodregion( data ):
     
@@ -1568,10 +1411,10 @@ def keepSDSSgoodregion( data ):
     mask = np.ones( data.size, dtype = bool )
     
     for tag in Tags:
-        print(tag)
+        print tag
         mask = mask * (data[tag] == 0)
     
-    print('masked objects ', mask.size - np.sum(mask))
+    print 'masked objects ', mask.size - np.sum(mask)
     
     data_tags = list(data.dtype.names)
     reduced_tags = []
@@ -1609,7 +1452,7 @@ def probability_calibration( des = None, cmass_des = None, matchID = 'COADD_OBJE
     ax.set_ylabel('true fraction')
     ax.legend(loc='best')
     fig.savefig('com_pur_results/'+prefix + '_probability_calibration.png')
-    print('save fig: com_pur_results/'+prefix+'_probability_calibration.png')
+    print 'save fig: com_pur_results/'+prefix+'_probability_calibration.png'
 
 
 
@@ -1624,14 +1467,14 @@ def _resampleWithPth( des ):
         mask = (des['EachProb_CMASS'] >= pth_bin[i])&(des['EachProb_CMASS'] < pth_bin[i]+step)
         cat = des[mask]
         dmass[i] = np.random.choice( cat, size = np.around(pcenter[i] * cat.size) )
-        print(pth_bin[i], pth_bin[i]+step, pcenter[i], dmass[i].size * 1./cat.size, dmass[i].size)
+        print pth_bin[i], pth_bin[i]+step, pcenter[i], dmass[i].size * 1./cat.size, dmass[i].size
     
     
     i = i+1
     mask = (des['EachProb_CMASS'] >= pth_bin[i])
     cat = des[mask]
     dmass[i] = np.random.choice( cat, size = int( 0.75 * cat.size) )
-    print(pth_bin[i], pth_bin[i]+step, 0.75, dmass[i].size * 1./cat.size, dmass[i].size)
+    print pth_bin[i], pth_bin[i]+step, 0.75, dmass[i].size * 1./cat.size, dmass[i].size
     
     dmass = np.hstack(dmass)
     return dmass
