@@ -801,8 +801,9 @@ def XD_fitting_X( X = None, Xcov=None,
     if X is None: 
         import pickle 
         f = open(pickleFileName, 'rb')
-        pickle = pickle.load(f, encoding="bytes")
-        clf = pickle['retval']
+        pickle = pickle.load(f, encoding="latin1")
+        clf = pickle['retval']        
+        
     else:
         #X, Xcov = mixing_color(data, mag=mag, err=err, filter=filter, 
         #suffix = suffix, no_zband=False)
