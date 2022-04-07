@@ -774,7 +774,7 @@ def XD_fitting( data = None,
     return clf
     
     
-def XD_fitting_X( X = None, Xcov=None, 
+def _XD_fitting_X( X = None, Xcov=None, 
         pickleFileName = 'pickle/XD_fitting_test.pkl', 
         init_params = None, 
         suffix='', 
@@ -810,6 +810,47 @@ def XD_fitting_X( X = None, Xcov=None,
         clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, 
         n_iter = n_iter, tol=tol, verbose=verbose)
     return clf
+
+
+
+
+
+#xdgmm = XDGMM()
+
+def XD_fitting_X( X = None, Xcov=None, 
+        FileName = None, 
+        #init_params = None, 
+        #suffix='', 
+        #mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+        #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+        #filter = ['G', 'R', 'I'],
+        n_cl = None, n_iter = 500, tol=1E-5, method='Bovy', verbose=False ):
+
+    from xdgmm import XDGMM
+
+    if FileName != None:
+        # calling pre-computed model
+        xdgmm = XDGMM(filename=FileName) 
+        return xdgmm
+
+    else: 
+        #initiated class
+        xdgmm = XDGMM( n_iter=n_iter, tol=tol, method=method )
+
+        if n_cl == None : 
+            # Define the range of component numbers, and get ready to compute the BIC for each one:
+            param_range = np.arange(2, 50, 2)
+            # Loop over component numbers, fitting XDGMM model and computing the BIC:
+            bic, optimal_n_comp, lowest_bic = xdgmm.bic_test(X, Xcov, param_range)
+            #n_cl = optimal_n_comp[np.argmin(bic)]
+        else: optimal_n_comp = n_cl
+
+        # fitting
+        xdgmm.n_components = optimal_n_comp
+        xdgmm = xdgmm.fit(X, Xcov)
+        xdgmm.save_model(pickleFileName)
+
+        return xdgmm
 
 
 def add_errors(model_data, real_data, real_covars):
