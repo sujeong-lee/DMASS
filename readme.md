@@ -16,12 +16,15 @@ yaml
 fitsio 
 scikit-learn
 multiprocessing
+XDGMM (https://github.com/tholoien/XDGMM.git)
 ```
 
 
 ### Install
 
-```git clone https://github.com/sujeong-lee/CMASS.git```
+```git clone https://github.com/sujeong-lee/DMASS.git```
+
+
 
 
 ### Configuration setting 
