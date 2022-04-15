@@ -18,6 +18,7 @@ from numpy import linalg
 from multiprocessing import Process, Queue
 #from sklearn.mixture import GMM as GaussianMixture
 from sklearn.mixture import GaussianMixture
+from xdgmm import XDGMM as XDGMM_Holoien
 
 def getCMASSparam(filename = None ):
     
@@ -863,17 +864,17 @@ def XDnew_fitting_X( X = None, Xcov=None,
         #filter = ['G', 'R', 'I'],
         n_cl = None, n_iter = 500, tol=1E-5, method='Bovy', verbose=False ):
 
-    from xdgmm import XDGMM as XDGMM2
+    
 
     try: 
-        xdgmm_obj = XDGMM2(filename=FileName) 
+        xdgmm_obj = XDGMM_Holoien(filename=FileName) 
         print ('Using precomputed results from ', FileName)
         return xdgmm_obj
     except FileNotFoundError: pass
     
     if X is None:
         # calling pre-computed model
-        xdgmm_obj = XDGMM2(filename=FileName) 
+        xdgmm_obj = XDGMM_Holoien(filename=FileName) 
         print ('Using precomputed results from ', FileName)
         return xdgmm_obj
 
@@ -883,7 +884,7 @@ def XDnew_fitting_X( X = None, Xcov=None,
             optimal_n_comp,_,_= _FindOptimalN_with_err( param_range, X, Xcov, 
             pickleFileName = FileName+'.n_cluster' , suffix = '')
             
-            #xdgmm_test = XDGMM2( n_iter=n_iter, tol=tol, method=method )
+            #xdgmm_test = XDGMM_Holoien( n_iter=n_iter, tol=tol, method=method )
             ## Define the range of component numbers, and get ready to compute the BIC for each one:
             #param_range = np.arange(2, 50, 2)
             ## Loop over component numbers, fitting XDGMM model and computing the BIC:
@@ -894,7 +895,7 @@ def XDnew_fitting_X( X = None, Xcov=None,
         #import time
         # fitting
         #initiated class
-        xdgmm_obj = XDGMM2( n_components=optimal_n_comp, n_iter=n_iter, tol=tol, method=method )
+        xdgmm_obj = XDGMM_Holoien( n_components=optimal_n_comp, n_iter=n_iter, tol=tol, method=method )
         #xdgmm.n_components = optimal_n_comp
         print ('n_components=', optimal_n_comp)
         print ('fitting started. This will take for a while.')
@@ -910,7 +911,7 @@ def XDnew_fitting_X( X = None, Xcov=None,
         #print ('saving obj. time:', (t3-t2)%60,'s')
         
         #t4 = time.time()
-        xdgmm_obj = XDGMM2(filename=FileName) 
+        xdgmm_obj = XDGMM_Holoien(filename=FileName) 
         #print ('loading obj. time:', (t4-t3)%60,'s')
         t2 = time.time()
         print ('elapsed time:', (t2-t1)/60.0,'s')
