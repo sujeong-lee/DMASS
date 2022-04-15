@@ -52,7 +52,7 @@ def extreme_fitting( cat, n_comp = 20, xmean=None, xamp=None, xcovar=None, pickl
     if weight is True : weight = cat['CMASS_WEIGHT']
 
     if xmean is None : 
-        from sklearn.mixture import GaussianMixture
+        #from sklearn.mixture import GaussianMixture
         print('initial guess')
         gmm = GaussianMixture(n_comp, max_iter= 10, covariance_type='full',
                           random_state=1).fit(ydata)
@@ -774,7 +774,7 @@ def XD_fitting( data = None,
     return clf
     
     
-def _XD_fitting_X( X = None, Xcov=None, 
+def XD_fitting_X( X = None, Xcov=None, 
         pickleFileName = 'pickle/XD_fitting_test.pkl', 
         init_params = None, 
         suffix='', 
@@ -812,12 +812,49 @@ def _XD_fitting_X( X = None, Xcov=None,
     return clf
 
 
+def XDastroML_fitting_X( X = None, Xcov=None, 
+        FileName = 'pickle/XD_fitting_test.pkl', 
+        init_params = None, 
+        #suffix='', 
+        #mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+        #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+        #filter = ['G', 'R', 'I'],
+        n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
+
+    from astroML.decorators import pickle_results
+    @pickle_results(FileName, verbose = True)
+    def compute_XD(X, Xcov, init_params = None, n_iter=500, 
+    verbose=False, n_cl = None, tol=1E-5):
+        if init_params != None : 
+            n_cl = 10
+
+        if n_cl is None : 
+            #n_cl,_,_= _FindOptimalN_with_err( np.arange(2, 50, 2), X, Xcov
+            #pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
+            param_range=np.arange(2, 50, 2)
+            n_cl,_,_= _FindOptimalN_with_err( param_range, X, Xcov, 
+            FileName = FileName+'.n_cluster' , suffix = '')
+
+        clf= XDGMM(n_cl, n_iter=n_iter, tol=tol, verbose=verbose)
+        clf.fit(X, Xcov, init_params = init_params)
+        return clf
+
+    if X is None: 
+        import pickle 
+        f = open(FileName, 'rb')
+        pickle = pickle.load(f, encoding="latin1")
+        clf = pickle['retval']        
+        
+    else:
+        #X, Xcov = mixing_color(data, mag=mag, err=err, filter=filter, 
+        #suffix = suffix, no_zband=False)
+        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, 
+        n_iter = n_iter, tol=tol, verbose=verbose)
+    return clf
 
 
 
-#xdgmm = XDGMM()
-
-def XD_fitting_X( X = None, Xcov=None, 
+def XDnew_fitting_X( X = None, Xcov=None, 
         FileName = None, 
         #init_params = None, 
         #suffix='', 
@@ -826,31 +863,58 @@ def XD_fitting_X( X = None, Xcov=None,
         #filter = ['G', 'R', 'I'],
         n_cl = None, n_iter = 500, tol=1E-5, method='Bovy', verbose=False ):
 
-    from xdgmm import XDGMM
+    from xdgmm import XDGMM as XDGMM2
 
-    if FileName != None:
+    try: 
+        xdgmm_obj = XDGMM2(filename=FileName) 
+        print ('Using precomputed results from ', FileName)
+        return xdgmm_obj
+    except FileNotFoundError: pass
+    
+    if X is None:
         # calling pre-computed model
-        xdgmm = XDGMM(filename=FileName) 
-        return xdgmm
+        xdgmm_obj = XDGMM2(filename=FileName) 
+        print ('Using precomputed results from ', FileName)
+        return xdgmm_obj
 
     else: 
-        #initiated class
-        xdgmm = XDGMM( n_iter=n_iter, tol=tol, method=method )
-
         if n_cl == None : 
-            # Define the range of component numbers, and get ready to compute the BIC for each one:
-            param_range = np.arange(2, 50, 2)
-            # Loop over component numbers, fitting XDGMM model and computing the BIC:
-            bic, optimal_n_comp, lowest_bic = xdgmm.bic_test(X, Xcov, param_range)
-            #n_cl = optimal_n_comp[np.argmin(bic)]
+            param_range=np.arange(2, 50, 2)
+            optimal_n_comp,_,_= _FindOptimalN_with_err( param_range, X, Xcov, 
+            pickleFileName = FileName+'.n_cluster' , suffix = '')
+            
+            #xdgmm_test = XDGMM2( n_iter=n_iter, tol=tol, method=method )
+            ## Define the range of component numbers, and get ready to compute the BIC for each one:
+            #param_range = np.arange(2, 50, 2)
+            ## Loop over component numbers, fitting XDGMM model and computing the BIC:
+            #bic, optimal_n_comp, lowest_bic = xdgmm_test.bic_test(X, Xcov, param_range)
+            ##n_cl = optimal_n_comp[np.argmin(bic)]
         else: optimal_n_comp = n_cl
 
+        #import time
         # fitting
-        xdgmm.n_components = optimal_n_comp
-        xdgmm = xdgmm.fit(X, Xcov)
-        xdgmm.save_model(pickleFileName)
-
-        return xdgmm
+        #initiated class
+        xdgmm_obj = XDGMM2( n_components=optimal_n_comp, n_iter=n_iter, tol=tol, method=method )
+        #xdgmm.n_components = optimal_n_comp
+        print ('n_components=', optimal_n_comp)
+        print ('fitting started. This will take for a while.')
+        t1 = time.time()
+        xdgmm_obj = xdgmm_obj.fit(X, Xcov)
+        #t2 = time.time()
+        print ('fitting finished')
+        
+        #t3 = time.time()
+        print ('saving xdgmm object to.. ', FileName)
+        xdgmm_obj.save_model(FileName)
+        print ('file saved')
+        #print ('saving obj. time:', (t3-t2)%60,'s')
+        
+        #t4 = time.time()
+        xdgmm_obj = XDGMM2(filename=FileName) 
+        #print ('loading obj. time:', (t4-t3)%60,'s')
+        t2 = time.time()
+        print ('elapsed time:', (t2-t1)/60.0,'s')
+        return xdgmm_obj
 
 
 def add_errors(model_data, real_data, real_covars):
@@ -1122,7 +1186,8 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
     def compute_GMM( N, covariance_type='full', n_iter=1000):
         models = [None for n in N]
         for i in range(len(N)):
-            sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
+            sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                             .format(i * 1./len(N) * 100.))
             sys.stdout.flush()
             models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
                             covariance_type=covariance_type)
@@ -1134,12 +1199,38 @@ def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
     BIC = [m.bic(Xdata) for m in models]
     i_best = np.argmin(BIC)
     gmm_best = models[i_best]
-    sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(100))
+    sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                     .format(100))
     print("\nbest fit converged:", gmm_best.converged_, end=' ')
     print(" n_components =  %i" % N[i_best])
     return N[i_best], AIC, BIC
 
 
+def _FindOptimalN_with_err( N, Xdata, Xcov, pickleFileName = None, suffix = None):
+    #from sklearn.mixture import GMM
+    #data, _ = mixing_color(data, suffix = suffix)
+    @pickle_results( pickleFileName )
+    def compute_GMM( N, covariance_type='full', n_iter=1000):
+        models = [None for n in N]
+        for i in range(len(N)):
+            sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                             .format(i * 1./len(N) * 100.))
+            sys.stdout.flush()
+            models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
+                            covariance_type=covariance_type)
+            models[i].fit(Xdata, Xcov)
+        return models
+    
+    models = compute_GMM(N)
+    AIC = [m.aic(Xdata) for m in models]
+    BIC = [m.bic(Xdata) for m in models]
+    i_best = np.argmin(BIC)
+    gmm_best = models[i_best]
+    sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                     .format(100))
+    print("\nbest fit converged:", gmm_best.converged_, end=' ')
+    print(" n_components =  %i" % N[i_best])
+    return N[i_best], AIC, BIC
 
 
 def XDGMM_model(cmass, lowz, train = None, test = None, mock = None, cmass_fraction = None, spt = False, prefix = ''):
