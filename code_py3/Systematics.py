@@ -168,7 +168,7 @@ def uniform_random_on_sphere(data, size = None ):
 #lens, randoms = calling_lens_catalog('/fs/scratch/PCON0003/warner785/bwarner/dmass_y1_public_v1.fits')
 dmass_val, randoms = calling_lens_catalog('/fs/scratch/PCON0008/warner785/bwarner/dmass_st82_DET200.fits')
 
-random_val = uniform_random_on_sphere(dmass_val, size = int(np.sum(dmass_val['WEIGHT'])))
+random_val = uniform_random_on_sphere(dmass_val, size = 10*int(np.sum(dmass_val['WEIGHT']))) #larger size of randoms
 # applying LSS mask 
 random_val = keepGoodRegion(random_val)
 
@@ -459,24 +459,24 @@ def number_density(sysMap, h, area):
 
     return pcenter, norm_number_density, fracerr_norm
 
-def chi2(norm_number_density, x2_value, fracerr_norm):
+def chi2(norm_number_density, x2_value, fracerr_norm, n):
     #chi**2 values for qualitative analysis:
     # difference of (randoms-horizontal line)**2/err_ran**2
     x1 = norm_number_density
     x2 = x2_value
     err = fracerr_norm
     chi2 = (x1-x2)**2 / err **2 
-    chi2_reduced = sum(chi2)/chi2.size
+    chi2_reduced = sum(chi2)/(chi2.size-n)  # n = 2 for linear fit, -3 for quad.
     #print("chi2: ",chi2_reduced)
     
-    return chi2_reduced
+    return chi2, chi2_reduced
     
 #--------------------------different loaded files:------------------------------------------------#
 
 
 input_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_maps_jointmask_no_stars1623/'
 #y3/band_z/
-keyword_template = 'pca{0}'
+keyword_template = 'pca{0}_'
 for i_pca in range(2): #50
     input_keyword = keyword_template.format(i_pca)
     print(input_keyword)
@@ -510,12 +510,12 @@ for i_pca in range(2): #50
     #plt.ylim(top=1.2)  # adjust the top leaving bottom unchanged
     #plt.ylim(bottom=0.85)
     plt.axhline(y=1, color='grey', linestyle='--')
-    plt.title(xlabel, 'systematic check')
+    plt.title(xlabel+' systematic check')
     fig.savefig(xlabel+'.pdf')
 
-    ran_chi2 = chi2(norm_number_density_ran, 1, fracerr_ran_norm)
+    ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, 1, fracerr_ran_norm, 0)
 
-    print('ran_chi2: ', ran_chi2)
+    print('ran_chi2: ', ran_chi2_reduced)
 
     #trendline:
     # fit to trend:
@@ -536,9 +536,43 @@ for i_pca in range(2): #50
 #plt.xlim(right=10) 
 #plt.xlim(left=-4)
 
-    plt.title(xlabel,'systematic trendline')
-    fig.savefig(xlabel+'trend.pdf')
+    plt.title(xlabel+' systematic linear trendline')
+    fig.savefig(xlabel+'linear.pdf')
 
-    trend_chi2 = chi2(norm_number_density, p(pcenter), fracerr_norm)
+    trend_chi2, trend_chi2_reduced = chi2(norm_number_density, p(pcenter), fracerr_norm, 2)
 
-    print('trend_chi2: ', trend_chi2)
+    print('linear trend_chi2: ', trend_chi2_reduced)
+    
+# difference between sum(chi2) between models (free parameters-- 1 new, want more than 1 better in sum(chi2))
+
+    # second trendline:
+    # fit to trend:
+    fig,ax = plt.subplots(1,1)
+    #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
+    z2 = np.polyfit(pcenter, norm_number_density, 2)
+    p2 = np.poly1d(z2)
+
+#print(p)
+#print(p(pcenter))
+#print(pcenter)
+
+    ax.plot(pcenter,p2(pcenter),"r--")
+    ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
+
+#plt.ylim(top=1.4)  # adjust the top leaving bottom unchanged
+#plt.ylim(bottom=0.8)
+#plt.xlim(right=10) 
+#plt.xlim(left=-4)
+
+    plt.title(xlabel+' systematic quadratic trendline')
+    fig.savefig(xlabel+'quadratic.pdf')
+
+    trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, p2(pcenter), fracerr_norm, 3)
+    diff_chi2 = abs(sum(trend_chi2)-sum(trend2_chi2))
+    print('quadratic trend_chi2: ', trend2_chi2_reduced)
+
+    print("difference of chi2 between models: ", diff_chi2)
+    if diff_chi2 > 1:
+        print("Quadratic is better fit for ", xlabel)
+    else:
+        print("Linear fit is suitable for ", xlabel)
