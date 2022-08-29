@@ -179,6 +179,25 @@ plt.rcParams.update({
 
 random_val = appendColumn(random_val, value=np.ones(random_val.size), name='WEIGHT')
 
+path = '/fs/scratch/PCON0008/warner785/bwarner/'
+fracDet = fitsio.read(path+'y3a2_griz_o.4096_t.32768_coverfoot_EQU.fits.gz')
+
+phi = random_val['RA'] * np.pi / 180.0
+theta = ( 90.0 - random_val['DEC'] ) * np.pi/180.0
+random_pix = hp.ang2pix(4096, theta, phi)
+print(random_pix.size)
+
+frac = np.zeros(hp.nside2npix(4096))
+fracDet["PIXEL"] = hp.nest2ring(4096, fracDet['PIXEL'])
+#sysHp[sysMap['PIXEL'][dim_mask]] = sysMap['SIGNAL'][dim_mask]
+frac[fracDet['PIXEL']] = fracDet['SIGNAL']
+
+frac_obj = frac[random_pix]
+
+u = np.random.rand(len(random_pix))
+#select random points with the condition u < frac_obj
+random_val_fracselected = random_val[u < frac_obj]
+
 def cut_and_downgradePCA(sysMap):
     #print(sysMap.dtype.names)
 
@@ -378,15 +397,15 @@ def area_pixels(sysMap, fracDet_512):
     return area
 
 
-def downgrade_ran(random_val):
+def downgrade_ran(random_val_fracselected):
     # convert nside for randoms:
-    phi = random_val['RA'] * np.pi / 180.0
-    theta = ( 90.0 - random_val['DEC'] ) * np.pi/180.0
+    phi = random_val_fracselected['RA'] * np.pi / 180.0
+    theta = ( 90.0 - random_val_fracselected['DEC'] ) * np.pi/180.0
     nside= 4096
 
     HPIX_512 = hp.ang2pix(512, theta, phi)
 
-    random_val = append_fields(random_val, 'HPIX_512', HPIX_512, usemask=False)
+    random_val = append_fields(random_val_fracselected, 'HPIX_512', HPIX_512, usemask=False)
     #print(random_val.dtype.names)
 
     index_ran_mask = np.argsort(random_val['HPIX_512'])
@@ -477,7 +496,7 @@ def chi2(norm_number_density, x2_value, fracerr_norm, n):
 input_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_maps_jointmask_no_stars1623/'
 #y3/band_z/
 keyword_template = 'pca{0}_'
-for i_pca in range(2): #50
+for i_pca in range(5): #50
     input_keyword = keyword_template.format(i_pca)
     print(input_keyword)
     sysMap = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
@@ -491,7 +510,7 @@ for i_pca in range(2): #50
     dmass_chron = downgrade_dmass(dmass_val)
     h = number_gal(sysMap, dmass_chron)
     area = area_pixels(sysMap, fracDet_512)
-    random_chron = downgrade_ran(random_val)
+    random_chron = downgrade_ran(random_val_fracselected)
     h_ran = number_gal(sysMap, random_chron)
 
     pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
@@ -524,7 +543,7 @@ for i_pca in range(2): #50
     z = np.polyfit(pcenter, norm_number_density, 1)
     p = np.poly1d(z)
 
-#print(p)
+    print(p)
 #print(p(pcenter))
 #print(pcenter)
 
@@ -552,7 +571,7 @@ for i_pca in range(2): #50
     z2 = np.polyfit(pcenter, norm_number_density, 2)
     p2 = np.poly1d(z2)
 
-#print(p)
+    print(p2)
 #print(p(pcenter))
 #print(pcenter)
 
