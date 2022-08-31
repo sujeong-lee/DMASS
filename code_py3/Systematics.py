@@ -13,6 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from run_systematics import sys_iteration, weightmultiply, fitting_allSP, calling_sysMap
 
+#debugging:
+#import ipdb
+#ipdb.set_trace()
+
 # calling map 
 path = '/fs/scratch/PCON0008/warner785/bwarner/'
 LSSGoldmask = fitsio.read(path+'MASK_Y3LSSBAOSOF_22_3_v2p2.fits') #BAO is different measurement, may be different from this analysis
@@ -198,6 +202,21 @@ u = np.random.rand(len(random_pix))
 #select random points with the condition u < frac_obj
 random_val_fracselected = random_val[u < frac_obj]
 
+def cutPCA(sysMap):
+    RA, DEC = hp.pix2ang(4096, sysMap['PIXEL'], lonlat=True)
+    sysMap = append_fields(sysMap, 'RA', RA, usemask=False)
+    sysMap = append_fields(sysMap, 'DEC', DEC, usemask=False)
+    #print(sysMap.dtype.names)
+
+    sysMap = keepGoodRegion(sysMap)
+
+    mask4 =(sysMap['RA']>18)&(sysMap['RA']<43)
+    mask4 = mask4 & (sysMap['DEC']>-10) & (sysMap['DEC']<10)
+    sysMap = sysMap[mask4]
+    
+    return sysMap
+
+
 def cut_and_downgradePCA(sysMap):
     #print(sysMap.dtype.names)
 
@@ -314,17 +333,19 @@ def number_gal(sysMap, dmass_chron):
     pcenter = pbin[:-1] + pstep/2
 
     #x = np.zeros(hp.nside2npix(512))
-    x = np.full(hp.nside2npix(512), hp.UNSEEN)
+    x = np.full(hp.nside2npix(4096), hp.UNSEEN)
     #print(x, sum(x))
     #x[sysMap['PIXEL'][dim_mask]] = sysMap['SIGNAL'][dim_mask]
-    x[sysMap['HPIX_512']] = sysMap['SIGNAL']
+#    x[sysMap['HPIX_512']] = sysMap['SIGNAL']
+    x[sysMap['PIXEL']] = sysMap['SIGNAL']
 
     #print(hp.visufunc.mollview(x)) # this is fine
     #print(hp.UNSEEN)
 
     #systematic value at galaxy location:
 
-    sysval_gal = x[dmass_chron['HPIX_512']].copy()
+#    sysval_gal = x[dmass_chron['HPIX_512']].copy()
+    sysval_gal = x[dmass_chron['HPIX_4096']].copy()
 
     #which healpixels have values in the sysMap signal
 
@@ -339,7 +360,7 @@ def number_gal(sysMap, dmass_chron):
     
     return h
 
-def area_pixels(sysMap, fracDet_512):
+def area_pixels(sysMap, fracDet):
     
     #minimum = np.percentile(sysMap['SIGNAL'][dim_mask], 1)
     minimum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 1)
@@ -366,19 +387,24 @@ def area_pixels(sysMap, fracDet_512):
 
     #matched_sys2 = sysMap[dim_mask]
     sys = sysMap
-    mask = np.full(hp.nside2npix(512), hp.UNSEEN)
+#    mask = np.full(hp.nside2npix(512), hp.UNSEEN)
+    mask = np.full(hp.nside2npix(4096), hp.UNSEEN)
 
-    print(fracDet_512["HPIX_512"])
+#    print(fracDet_512["HPIX_512"])
+    print(fracDet["PIXEL"])
 
     #Only look at pixels where fracDet has value
-    frac_mask = np.in1d(fracDet_512["HPIX_512"], sys["HPIX_512"], assume_unique=False, invert=False)
+#    frac_mask = np.in1d(fracDet_512["HPIX_512"], sys["HPIX_512"], assume_unique=False, invert=False)
+    frac_mask = np.in1d(fracDet["PIXEL"], sys["PIXEL"], assume_unique=False, invert=False)
 
     #make an array with signals corresponding to pixel values 
-    mask[sys["HPIX_512"]] = sys["SIGNAL"]
+#    mask[sys["HPIX_512"]] = sys["SIGNAL"]
+    mask[sys["PIXEL"]] = sys["SIGNAL"]
 
     #array only including fracDet/sys seen pixels sys signal values 
     #print(mask[mask != hp.UNSEEN])
-    frac_sys = mask[fracDet_512["HPIX_512"][frac_mask]]
+#    frac_sys = mask[fracDet_512["HPIX_512"][frac_mask]]
+    frac_sys = mask[fracDet["PIXEL"][frac_mask]]
 
     #print(frac_sys[frac_sys != hp.UNSEEN])
     #print(frac_sys[frac_sys != hp.UNSEEN].size)
@@ -389,13 +415,24 @@ def area_pixels(sysMap, fracDet_512):
     #print("sum: ", sum(fracDet_512["SIGNAL"]))
 
     #weights of fracDet in the overlap applied for accurate areas
-    area,_ = np.histogram(frac_sys[frac_sys != hp.UNSEEN] , bins=pbin , weights = fracDet_512["SIGNAL"][frac_mask][frac_sys != hp.UNSEEN])
+    area,_ = np.histogram(frac_sys[frac_sys != hp.UNSEEN] , bins=pbin , weights = fracDet["SIGNAL"][frac_mask][frac_sys != hp.UNSEEN])
     print('area with weights:')
     print(area)
     # area = units of healpixels
 
     return area
 
+def random_pixel(random_val_fracselected):
+    phi = random_val_fracselected['RA'] * np.pi / 180.0
+    theta = ( 90.0 - random_val_fracselected['DEC'] ) * np.pi/180.0
+    nside= 4096
+
+    HPIX_4096 = hp.ang2pix(4096, theta, phi)
+
+    random_val = append_fields(random_val_fracselected, 'HPIX_4096', HPIX_4096, usemask=False)
+    #print(random_val.dtype.names)
+    
+    return random_val
 
 def downgrade_ran(random_val_fracselected):
     # convert nside for randoms:
@@ -466,7 +503,7 @@ def number_density(sysMap, h, area):
     total_num_density = total_h/total_area
 
     #print("total number density: ", total_num_density_ran)
-
+    
     # apply normalization: 
     #print(number_density)
     norm_number_density = number_density/total_num_density
@@ -475,8 +512,9 @@ def number_density(sysMap, h, area):
     fracerr = np.sqrt(h) #1 / sqrt(number of randoms cmass galaxies in each bin)
     fracerr_norm = (fracerr/area)/total_num_density
     #print("normalized error: ", fracerr_ran_norm)
-
+    
     return pcenter, norm_number_density, fracerr_norm
+
 
 def chi2(norm_number_density, x2_value, fracerr_norm, n):
     #chi**2 values for qualitative analysis:
@@ -503,19 +541,27 @@ for i_pca in range(5): #50
 
     path = '/fs/scratch/PCON0008/warner785/bwarner/'
     
-    sysMap = cut_and_downgradePCA(sysMap)
+#    sysMap = cut_and_downgradePCA(sysMap)
+    sysMap = cutPCA(sysMap)
     fracDet = fitsio.read(path+'y3a2_griz_o.4096_t.32768_coverfoot_EQU.fits.gz')
-    fracDet_512 = downgrade_fracDet(fracDet)
+    fracDet['PIXEL'] = hp.nest2ring(4096, fracDet['PIXEL'])
+#    fracDet_512 = downgrade_fracDet(fracDet)
 
-    dmass_chron = downgrade_dmass(dmass_val)
+#    dmass_chron = downgrade_dmass(dmass_val)
+    index_mask = np.argsort(dmass_val)
+    dmass_chron = dmass_val[index_mask] # ordered by hpix values
+    dmass_chron['HPIX_4096'] = hp.nest2ring(4096, dmass_chron['HPIX_4096'])    
     h = number_gal(sysMap, dmass_chron)
-    area = area_pixels(sysMap, fracDet_512)
-    random_chron = downgrade_ran(random_val_fracselected)
+    area = area_pixels(sysMap, fracDet)
+#    random_chron = downgrade_ran(random_val_fracselected)
+    randoms4096 = random_pixel(random_val_fracselected)
+    index_ran_mask = np.argsort(randoms4096)
+    random_chron = randoms4096[index_ran_mask]
     h_ran = number_gal(sysMap, random_chron)
 
-    pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
     pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
-
+    pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
+    
 
     #plotting:
 
@@ -525,7 +571,7 @@ for i_pca in range(5): #50
     plt.legend()
     xlabel = input_keyword
     plt.xlabel(xlabel)
-    plt.ylabel("n_gal/n_tot 512")
+    plt.ylabel("n_gal/n_tot 4096")
     #plt.ylim(top=1.2)  # adjust the top leaving bottom unchanged
     #plt.ylim(bottom=0.85)
     plt.axhline(y=1, color='grey', linestyle='--')
