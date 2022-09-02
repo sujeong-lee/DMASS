@@ -318,7 +318,7 @@ def downgrade_dmass(dmass_val):
     
     return dmass_chron
 
-def number_gal(sysMap, dmass_chron):
+def number_gal(sysMap, dmass_chron, sys_weights = False): # apply systematic weights here
     
     minimum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 1)
     #minimum = np.min(sysMap['SIGNAL'][dim_mask]) #FWHM signal (for g filter)
@@ -355,10 +355,14 @@ def number_gal(sysMap, dmass_chron):
     #print(x.size, sysval_gal.size, dmass_chron.size)
     #print(maximum, minimum)
     #print((sysval_gal != 0.0).any())
-    h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["WEIGHT"][sysval_gal != hp.UNSEEN]) # -- density of dmass sample, not gold sample
+    
+    if sys_weights == True:
+        h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["WEIGHT"][sysval_gal != hp.UNSEEN]*dmass_chron["SYS_WEIGHT"][sysval_gal != hp.UNSEEN])
+    else:
+        h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["WEIGHT"][sysval_gal != hp.UNSEEN]) # -- density of dmass sample, not gold sample
     #print(h)
     
-    return h
+    return h, sysval_gal
 
 def area_pixels(sysMap, fracDet):
     
@@ -541,6 +545,11 @@ for i_pca in range(5): #50
 
     path = '/fs/scratch/PCON0008/warner785/bwarner/'
     
+    sys_weights = True
+    
+    linear = False
+    quadratic = False
+    
 #    sysMap = cut_and_downgradePCA(sysMap)
     sysMap = cutPCA(sysMap)
     fracDet = fitsio.read(path+'y3a2_griz_o.4096_t.32768_coverfoot_EQU.fits.gz')
@@ -548,16 +557,20 @@ for i_pca in range(5): #50
 #    fracDet_512 = downgrade_fracDet(fracDet)
 
 #    dmass_chron = downgrade_dmass(dmass_val)
-    index_mask = np.argsort(dmass_val)
-    dmass_chron = dmass_val[index_mask] # ordered by hpix values
-    dmass_chron['HPIX_4096'] = hp.nest2ring(4096, dmass_chron['HPIX_4096'])    
-    h = number_gal(sysMap, dmass_chron)
+    if sys_weights == True:
+        dmass_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'dmass_sys_weight.fits')
+    else:
+        index_mask = np.argsort(dmass_val)
+        dmass_chron = dmass_val[index_mask] # ordered by hpix values
+        dmass_chron['HPIX_4096'] = hp.nest2ring(4096, dmass_chron['HPIX_4096']) 
+        
+    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = True)
     area = area_pixels(sysMap, fracDet)
 #    random_chron = downgrade_ran(random_val_fracselected)
     randoms4096 = random_pixel(random_val_fracselected)
     index_ran_mask = np.argsort(randoms4096)
     random_chron = randoms4096[index_ran_mask]
-    h_ran = number_gal(sysMap, random_chron)
+    h_ran,_= number_gal(sysMap, random_chron, sys_weights = False)
 
     pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
     pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
@@ -575,69 +588,89 @@ for i_pca in range(5): #50
     #plt.ylim(top=1.2)  # adjust the top leaving bottom unchanged
     #plt.ylim(bottom=0.85)
     plt.axhline(y=1, color='grey', linestyle='--')
-    plt.title(xlabel+' systematic check')
-    fig.savefig(xlabel+'.pdf')
+#    plt.title(xlabel+' systematic check')
+    plt.title(xlabel+' sys weights applied')
+    fig.savefig(xlabel+'sys_applied.pdf')
 
     ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, 1, fracerr_ran_norm, 0)
-
     print('ran_chi2: ', ran_chi2_reduced)
+    
+    if sys_weights == True:
+        trend_chi2, trend_chi2_reduced = chi2(norm_number_density, 1, fracerr_norm, 2)
+        print('applied_sys_chi2: ', trend_chi2_reduced)
+    
+    if sys_weights == False:
+        #trendline:
+        # fit to trend:
+        fig,ax = plt.subplots(1,1)
+        #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
+        z = np.polyfit(pcenter, norm_number_density, 1)
+        p = np.poly1d(z)
 
-    #trendline:
-    # fit to trend:
-    fig,ax = plt.subplots(1,1)
-    #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
-    z = np.polyfit(pcenter, norm_number_density, 1)
-    p = np.poly1d(z)
+        print(p)
 
-    print(p)
-#print(p(pcenter))
-#print(pcenter)
+        ax.plot(pcenter,p(pcenter),"r--")
+        ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
+        plt.title(xlabel+' systematic linear trendline')
+        fig.savefig(xlabel+'linear.pdf')
 
-    ax.plot(pcenter,p(pcenter),"r--")
-    ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
+        trend_chi2, trend_chi2_reduced = chi2(norm_number_density, p(pcenter), fracerr_norm, 2)
 
-#plt.ylim(top=1.4)  # adjust the top leaving bottom unchanged
-#plt.ylim(bottom=0.8)
-#plt.xlim(right=10) 
-#plt.xlim(left=-4)
-
-    plt.title(xlabel+' systematic linear trendline')
-    fig.savefig(xlabel+'linear.pdf')
-
-    trend_chi2, trend_chi2_reduced = chi2(norm_number_density, p(pcenter), fracerr_norm, 2)
-
-    print('linear trend_chi2: ', trend_chi2_reduced)
+        print('linear trend_chi2: ', trend_chi2_reduced)
     
 # difference between sum(chi2) between models (free parameters-- 1 new, want more than 1 better in sum(chi2))
 
-    # second trendline:
-    # fit to trend:
-    fig,ax = plt.subplots(1,1)
-    #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
-    z2 = np.polyfit(pcenter, norm_number_density, 2)
-    p2 = np.poly1d(z2)
+        # second trendline:
+        # fit to trend:
+        fig,ax = plt.subplots(1,1)
+        #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
+        z2 = np.polyfit(pcenter, norm_number_density, 2)
+        p2 = np.poly1d(z2)
 
-    print(p2)
-#print(p(pcenter))
-#print(pcenter)
+        print(p2)
 
-    ax.plot(pcenter,p2(pcenter),"r--")
-    ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
+        ax.plot(pcenter,p2(pcenter),"r--")
+        ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
+        plt.title(xlabel+' systematic quadratic trendline')
+        fig.savefig(xlabel+'quadratic.pdf')
 
-#plt.ylim(top=1.4)  # adjust the top leaving bottom unchanged
-#plt.ylim(bottom=0.8)
-#plt.xlim(right=10) 
-#plt.xlim(left=-4)
+        trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, p2(pcenter), fracerr_norm, 3)
+        diff_chi2 = abs(sum(trend_chi2)-sum(trend2_chi2))
+        print('quadratic trend_chi2: ', trend2_chi2_reduced)
 
-    plt.title(xlabel+' systematic quadratic trendline')
-    fig.savefig(xlabel+'quadratic.pdf')
+        print("difference of chi2 between models: ", diff_chi2)
+        if diff_chi2 > 1:
+            quadratic=True
+            print("Quadratic is better fit for ", xlabel)
+        else:
+            linear=True
+            print("Linear fit is suitable for ", xlabel)
+        
+        # work on applying the weights to dmass:
 
-    trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, p2(pcenter), fracerr_norm, 3)
-    diff_chi2 = abs(sum(trend_chi2)-sum(trend2_chi2))
-    print('quadratic trend_chi2: ', trend2_chi2_reduced)
-
-    print("difference of chi2 between models: ", diff_chi2)
-    if diff_chi2 > 1:
-        print("Quadratic is better fit for ", xlabel)
-    else:
-        print("Linear fit is suitable for ", xlabel)
+        #linear:
+        #weight_pixel = (1/p(sysMap["PIXEL"]))
+        if linear==True:
+            weight_object = (1/p(sysval_gal))
+            weight_object[sysval_gal == hp.UNSEEN] = 0
+            avg = np.average(weight_object)
+            print(avg)  # should be aprox. 1
+            # normalize density
+            weight_object = weight_object/avg
+        
+        # quadratic:
+        #weight_pixel = (1/p2(sysMap["PIXEL"]))
+        if quadratic==True:
+            weight_object = (1/p2(sysval_gal))
+            weight_object[sysval_gal == hp.UNSEEN] = 0
+            avg = np.average(weight_object)
+            print(avg)  # should be aprox. 1
+            #normalize density
+            weight_object = weight_object/avg
+        
+        dmass_chron = append_fields(dmass_chron, 'SYS_WEIGHT', weight_object, usemask=False)
+        print(dmass_chron["SYS_WEIGHT"], dmass_chron["SYS_WEIGHT"].size)
+    
+        outdir = '../output/test/train_cat/y3/'
+        os.makedirs(outdir, exist_ok=True)
+        esutil.io.write( outdir+xlabel+'dmass_sys_weight.fits', dmass_chron, overwrite=True)
