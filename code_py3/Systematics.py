@@ -8,6 +8,7 @@ from systematics import *
 from systematics_module import *
 import os
 from numpy.lib.recfunctions import append_fields
+import scipy.stats
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -527,7 +528,7 @@ def chi2(norm_number_density, x2_value, fracerr_norm, n):
     x2 = x2_value
     err = fracerr_norm
     chi2 = (x1-x2)**2 / err **2 
-    chi2_reduced = sum(chi2)/(chi2.size-n)  # n = 2 for linear fit, -3 for quad.
+    chi2_reduced = sum(chi2)/(chi2.size-n)  # n = 2 for linear fit, 3 for quad.
     #print("chi2: ",chi2_reduced)
     
     return chi2, chi2_reduced
@@ -538,14 +539,14 @@ def chi2(norm_number_density, x2_value, fracerr_norm, n):
 input_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_maps_jointmask_no_stars1623/'
 #y3/band_z/
 keyword_template = 'pca{0}_'
-for i_pca in range(5): #50
+for i_pca in range(50): #50
     input_keyword = keyword_template.format(i_pca)
     print(input_keyword)
     sysMap = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
 
     path = '/fs/scratch/PCON0008/warner785/bwarner/'
     
-    sys_weights = True
+    sys_weights = False
     
     linear = False
     quadratic = False
@@ -555,21 +556,21 @@ for i_pca in range(5): #50
     fracDet = fitsio.read(path+'y3a2_griz_o.4096_t.32768_coverfoot_EQU.fits.gz')
     fracDet['PIXEL'] = hp.nest2ring(4096, fracDet['PIXEL'])
 #    fracDet_512 = downgrade_fracDet(fracDet)
-
 #    dmass_chron = downgrade_dmass(dmass_val)
+#    random_chron = downgrade_ran(random_val_fracselected)
     if sys_weights == True:
         dmass_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'dmass_sys_weight.fits')
+        random_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'randoms.fits')
     else:
         index_mask = np.argsort(dmass_val)
         dmass_chron = dmass_val[index_mask] # ordered by hpix values
         dmass_chron['HPIX_4096'] = hp.nest2ring(4096, dmass_chron['HPIX_4096']) 
+        randoms4096 = random_pixel(random_val_fracselected)
+        index_ran_mask = np.argsort(randoms4096)
+        random_chron = randoms4096[index_ran_mask]
         
-    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = True)
+    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = False)
     area = area_pixels(sysMap, fracDet)
-#    random_chron = downgrade_ran(random_val_fracselected)
-    randoms4096 = random_pixel(random_val_fracselected)
-    index_ran_mask = np.argsort(randoms4096)
-    random_chron = randoms4096[index_ran_mask]
     h_ran,_= number_gal(sysMap, random_chron, sys_weights = False)
 
     pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
@@ -589,17 +590,23 @@ for i_pca in range(5): #50
     #plt.ylim(bottom=0.85)
     plt.axhline(y=1, color='grey', linestyle='--')
 #    plt.title(xlabel+' systematic check')
-    plt.title(xlabel+' sys weights applied')
-    fig.savefig(xlabel+'sys_applied.pdf')
+    if sys_weights == True:
+        plt.title(xlabel+' sys weights applied')
+        fig.savefig(xlabel+'sys_applied.pdf')
+    else:
+        plt.title(xlabel+' systematics check')
+        fig.savefig(xlabel+'sys_check.pdf')        
 
     ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, 1, fracerr_ran_norm, 0)
     print('ran_chi2: ', ran_chi2_reduced)
     
     if sys_weights == True:
-        trend_chi2, trend_chi2_reduced = chi2(norm_number_density, 1, fracerr_norm, 2)
+        trend_chi2, trend_chi2_reduced = chi2(norm_number_density, 1, fracerr_norm, 0)
         print('applied_sys_chi2: ', trend_chi2_reduced)
     
-    if sys_weights == False:
+    if sys_weights == False:    
+        dmass_chi2, dmass_chi2_reduced = chi2(norm_number_density, 1, fracerr_norm, 0)
+        print('checking chi2 before correction: ', dmass_chi2_reduced)
         #trendline:
         # fit to trend:
         fig,ax = plt.subplots(1,1)
@@ -651,6 +658,19 @@ for i_pca in range(5): #50
         #linear:
         #weight_pixel = (1/p(sysMap["PIXEL"]))
         if linear==True:
+            
+            #check chi2 first
+            chi2_ = np.linspace(0,30,100)
+            print(chi2_)
+            y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
+            index = np.where(y == y.min())[0][0]
+            threshold = chi2_[index]/12
+            print(threshold)
+            for x in range(len(trend_chi2)):
+                if trend_chi2[x]>threshold:
+                    print(xlabel, " needs to be flagged", x)
+            
+            #make sure object density stays the same
             weight_object = (1/p(sysval_gal))
             weight_object[sysval_gal == hp.UNSEEN] = 0
             avg = np.average(weight_object)
@@ -661,6 +681,19 @@ for i_pca in range(5): #50
         # quadratic:
         #weight_pixel = (1/p2(sysMap["PIXEL"]))
         if quadratic==True:
+            
+            #check chi2 first
+            chi2_ = np.linspace(0,30,100)
+            print(chi2_)
+            y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
+            index = np.where(y == y.min())[0][0]
+            threshold = chi2_[index]/12
+            print(threshold)
+            for x in range(len(trend2_chi2)):
+                if trend2_chi2[x]>threshold:
+                    print(xlabel, " needs to be flagged", x)
+                    
+            #make sure object density stays the same
             weight_object = (1/p2(sysval_gal))
             weight_object[sysval_gal == hp.UNSEEN] = 0
             avg = np.average(weight_object)
@@ -674,3 +707,5 @@ for i_pca in range(5): #50
         outdir = '../output/test/train_cat/y3/'
         os.makedirs(outdir, exist_ok=True)
         esutil.io.write( outdir+xlabel+'dmass_sys_weight.fits', dmass_chron, overwrite=True)
+        esutil.io.write( outdir+xlabel+'randoms.fits', random_chron, overwrite=True)
+        
