@@ -661,7 +661,6 @@ for i_pca in range(50): #50
             
             #check chi2 first
             chi2_ = np.linspace(0,30,100)
-            print(chi2_)
             y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
             index = np.where(y == y.min())[0][0]
             threshold = chi2_[index]/12
@@ -684,7 +683,6 @@ for i_pca in range(50): #50
             
             #check chi2 first
             chi2_ = np.linspace(0,30,100)
-            print(chi2_)
             y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
             index = np.where(y == y.min())[0][0]
             threshold = chi2_[index]/12
