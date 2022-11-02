@@ -548,7 +548,7 @@ chi2_trend2 = []
 chi2_dmassf = []
 trend = []
 
-for i_pca in range(5): #50
+for i_pca in range(50): #50
     input_keyword = keyword_template.format(i_pca)
     print(input_keyword)
     sysMap = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
@@ -568,7 +568,7 @@ for i_pca in range(5): #50
 #    dmass_chron = downgrade_dmass(dmass_val)
 #    random_chron = downgrade_ran(random_val_fracselected)
     if sys_weights == True:
-        dmass_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'dmass2_sys_weight.fits')
+        dmass_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'dmass_sys_weight2.fits')
 #        random_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'randoms.fits')
         h_ran = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'h_ran2.fits')
         norm_number_density_ran = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'norm_ran2.fits')
@@ -585,7 +585,7 @@ for i_pca in range(5): #50
         area = area_pixels(sysMap, fracDet)
         pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
         
-    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = False)
+    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = False) # change this to true if sys weights run
     area = area_pixels(sysMap, fracDet)
     pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
     
@@ -730,11 +730,11 @@ for i_pca in range(5): #50
 # save everything in text files
 
 if sys_weights == False:
-    np.savetxt(xlabel+'chi2_randoms2.fits', chi2_randoms)
-    np.savetxt(xlabel+'chi2_dmassi2.fits', chi2_dmassi)
-    np.savetxt(xlabel+'chi2_trend12.fits', chi2_trend1)
-    np.savetxt(xlabel+'chi2_trend22.fits', chi2_trend2)
-    np.savetxt(xlabel+'trend2.fits', trend)
+    np.savetxt('chi2_randoms2.fits', chi2_randoms)
+    np.savetxt('chi2_dmassi2.fits', chi2_dmassi)
+    np.savetxt('chi2_trend12.fits', chi2_trend1)
+    np.savetxt('chi2_trend22.fits', chi2_trend2)
+    np.savetxt('trend2.fits', trend)
 
 if sys_weights == True:
-    np.savetxt(xlabel+'chi2_dmassf2.fits', chi2_dmassf)
+    np.savetxt('chi2_dmassf2.fits', chi2_dmassf)
