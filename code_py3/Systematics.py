@@ -697,7 +697,7 @@ for i_pca in range(50): #50
             #make sure object density stays the same
             weight_object = (1/p(sysval_gal))
             weight_object[sysval_gal == hp.UNSEEN] = 0
-            avg = np.average(weight_object)
+            avg = np.average(weight_object[weight_object!=0])
 #            print(avg)  # should be aprox. 1
             # normalize density
             weight_object = weight_object/avg
@@ -717,7 +717,7 @@ for i_pca in range(50): #50
             #make sure object density stays the same
             weight_object = (1/p2(sysval_gal))
             weight_object[sysval_gal == hp.UNSEEN] = 0
-            avg = np.average(weight_object)
+            avg = np.average(weight_object[weight_object!=0])
 #            print(avg)  # should be aprox. 1
             #normalize density
             weight_object = weight_object/avg
