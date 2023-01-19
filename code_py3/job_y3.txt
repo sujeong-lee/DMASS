@@ -1,0 +1,12 @@
+#PBS -A PCON0008
+#PBS -N dmass-spt-Y3
+#PBS -l walltime=168:00:00
+#PBS -l nodes=1:ppn=40
+#PBS -j oe
+#PBS -m abe
+
+
+source activate DES_env
+cd $users/PCON0003/warner785/DMASSY3/code_py3
+
+time python DMASS.py

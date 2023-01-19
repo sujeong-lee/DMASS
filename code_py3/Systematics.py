@@ -172,7 +172,7 @@ def uniform_random_on_sphere(data, size = None ):
 
 # import DMASS in validation region
 #lens, randoms = calling_lens_catalog('/fs/scratch/PCON0003/warner785/bwarner/dmass_y1_public_v1.fits')
-dmass_val, randoms = calling_lens_catalog('../output/test/train_cat/y3/dmass_st82_DET200_TRAIN.fits')
+dmass_val, randoms = calling_lens_catalog('../output/test/train_cat/y3/dmass_st82_DET200_VAL.fits')
 
 random_val = uniform_random_on_sphere(dmass_val, size = 10*int(np.sum(dmass_val['WEIGHT']))) #larger size of randoms
 # applying LSS mask 
@@ -213,14 +213,14 @@ def cutPCA(sysMap):
     sysMap = keepGoodRegion(sysMap)
 
     # for validation region
-    #mask4 =(sysMap['RA']>18)&(sysMap['RA']<43)
-    #mask4 = mask4 & (sysMap['DEC']>-10) & (sysMap['DEC']<10)
-    #sysMap = sysMap[mask4]
+    mask4 =(sysMap['RA']>18)&(sysMap['RA']<43)
+    mask4 = mask4 & (sysMap['DEC']>-10) & (sysMap['DEC']<10)
+    sysMap = sysMap[mask4]
     
     # for training region
-    mask = (sysMap['RA']>310) & (sysMap['RA']<360)|(sysMap['RA']<7)
-    mask = mask & (sysMap['DEC']>-10) & (sysMap['DEC']<10)
-    sysMap = sysMap[mask]
+#    mask = (sysMap['RA']>310) & (sysMap['RA']<360)|(sysMap['RA']<7)
+#    mask = mask & (sysMap['DEC']>-10) & (sysMap['DEC']<10)
+#    sysMap = sysMap[mask]
     
     return sysMap
 
@@ -554,14 +554,14 @@ chi2_trend2 = []
 chi2_dmassf = []
 trend = []
 
-for i_pca in range(50): #50
+for i_pca in range(1): #50
     input_keyword = keyword_template.format(i_pca)
     print(input_keyword)
     sysMap = io.SearchAndCallFits(path = input_path, keyword = input_keyword)
 
     path = '/fs/scratch/PCON0008/warner785/bwarner/'
     
-    sys_weights = False
+    sys_weights = True
     
     linear = False
     quadratic = False
@@ -574,11 +574,11 @@ for i_pca in range(50): #50
 #    dmass_chron = downgrade_dmass(dmass_val)
 #    random_chron = downgrade_ran(random_val_fracselected)
     if sys_weights == True:
-        dmass_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'dmass_sys_weight_train.fits')
+        dmass_chron =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'dmass_sys_weight_val_lin2.fits')
 #        random_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'randoms.fits')
-        h_ran = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'h_ran_train.fits')
-        norm_number_density_ran = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'norm_ran_train.fits')
-        fracerr_ran_norm = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'fracerr_ran_train.fits')
+        h_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'h_ran_val_lin2.fits')
+        norm_number_density_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'norm_ran_val_lin2.fits')
+        fracerr_ran_norm = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'fracerr_ran_val_lin2.fits')
         
     else:
         index_mask = np.argsort(dmass_val)
@@ -591,7 +591,7 @@ for i_pca in range(50): #50
         area = area_pixels(sysMap, fracDet)
         pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
         
-    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = False) # change this to true if sys weights run
+    h, sysval_gal = number_gal(sysMap, dmass_chron, sys_weights = True) # change this to true if sys weights run
     area = area_pixels(sysMap, fracDet)
     pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
     
@@ -610,11 +610,13 @@ for i_pca in range(50): #50
     plt.axhline(y=1, color='grey', linestyle='--')
 #    plt.title(xlabel+' systematic check')
     if sys_weights == True:
+        plt.ylim(top=1.2)
+        plt.ylim(bottom=0.85)
         plt.title(xlabel+' sys weights applied')
-        fig.savefig(xlabel+'sys_applied_train.pdf')
+        fig.savefig(xlabel+'sys_applied_val.pdf')
     else:
         plt.title(xlabel+' systematics check')
-        fig.savefig(xlabel+'sys_check_train.pdf')        
+        fig.savefig(xlabel+'sys_check_val.pdf')        
 
     ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, 1, fracerr_ran_norm, 0)
     print('ran_chi2: ', ran_chi2_reduced)
@@ -634,7 +636,7 @@ for i_pca in range(50): #50
         # fit to trend:
         fig,ax = plt.subplots(1,1)
         #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
-        z = np.polyfit(pcenter, norm_number_density, 1)
+        z = np.polyfit(pcenter, norm_number_density, 1, w = 1/(fracerr_norm))
         p = np.poly1d(z)
 
         print(p)
@@ -642,7 +644,7 @@ for i_pca in range(50): #50
         ax.plot(pcenter,p(pcenter),"r--")
         ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
         plt.title(xlabel+' systematic linear trendline')
-        fig.savefig(xlabel+'linear_train.pdf')
+        fig.savefig(xlabel+'linear_val.pdf')
 
         trend_chi2, trend_chi2_reduced = chi2(norm_number_density, p(pcenter), fracerr_norm, 2)
 
@@ -655,7 +657,7 @@ for i_pca in range(50): #50
         # fit to trend:
         fig,ax = plt.subplots(1,1)
         #linear trends first -- chi2 for higher order study --- check for threshold value (afterward)
-        z2 = np.polyfit(pcenter, norm_number_density, 2)
+        z2 = np.polyfit(pcenter, norm_number_density, 2, w = 1/(fracerr_norm))
         p2 = np.poly1d(z2)
 
         print(p2)
@@ -663,7 +665,7 @@ for i_pca in range(50): #50
         ax.plot(pcenter,p2(pcenter),"r--")
         ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in validation")
         plt.title(xlabel+' systematic quadratic trendline')
-        fig.savefig(xlabel+'quadratic_train.pdf')
+        fig.savefig(xlabel+'quadratic_val.pdf')
 
         trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, p2(pcenter), fracerr_norm, 3)
         diff_chi2 = sum(trend_chi2)-sum(trend2_chi2)
@@ -671,7 +673,7 @@ for i_pca in range(50): #50
         chi2_trend2.append(trend2_chi2_reduced)
 
         print("difference of chi2 between models: ", diff_chi2)
-        if diff_chi2 > 1:
+        if diff_chi2 > 4:
             quadratic=True
             print("Quadratic is better fit for ", xlabel)
             trend.append(1)
@@ -687,6 +689,8 @@ for i_pca in range(50): #50
         if linear==True:
             
             #check chi2 first
+            # plot chi2 of linears versus distribution as check for p-value
+            # input parameters not hard-coded (change later)
             chi2_ = np.linspace(0,30,100)
             y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
             index = np.where(y == y.min())[0][0]
@@ -708,6 +712,7 @@ for i_pca in range(50): #50
             
             #check chi2 first
             chi2_ = np.linspace(0,30,100)
+            # check p-value threshold ******
             y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold****
             index = np.where(y == y.min())[0][0]
             threshold = chi2_[index]
@@ -725,22 +730,22 @@ for i_pca in range(50): #50
         dmass_chron = append_fields(dmass_chron, 'SYS_WEIGHT', weight_object, usemask=False)
 #        print(dmass_chron["SYS_WEIGHT"], dmass_chron["SYS_WEIGHT"].size)
     
-        outdir = '../output/test/train_cat/y3/'
+        outdir = '/fs/scratch/PCON0008/warner785/bwarner/'
         os.makedirs(outdir, exist_ok=True)
-        esutil.io.write( outdir+xlabel+'dmass_sys_weight_train.fits', dmass_chron, overwrite=True)
-        esutil.io.write( outdir+xlabel+'h_ran_train.fits', h_ran, overwrite=True)
-        esutil.io.write( outdir+xlabel+'norm_ran_train.fits', norm_number_density_ran, overwrite=True)
-        esutil.io.write( outdir+xlabel+'fracerr_ran_train.fits', fracerr_ran_norm, overwrite=True)
+        esutil.io.write( outdir+xlabel+'dmass_sys_weight_val_lin2.fits', dmass_chron, overwrite=True)
+        esutil.io.write( outdir+xlabel+'h_ran_val_lin2.fits', h_ran, overwrite=True)
+        esutil.io.write( outdir+xlabel+'norm_ran_val_lin2.fits', norm_number_density_ran, overwrite=True)
+        esutil.io.write( outdir+xlabel+'fracerr_ran_val_lin2.fits', fracerr_ran_norm, overwrite=True)
         
         
 # save everything in text files
 
 if sys_weights == False:
-    np.savetxt('chi2_randoms_train.txt', chi2_randoms)
-    np.savetxt('chi2_dmassi_train.txt', chi2_dmassi)
-    np.savetxt('chi2_trend1_train.txt', chi2_trend1)
-    np.savetxt('chi2_trend2_train.txt', chi2_trend2)
-    np.savetxt('trend_train.txt', trend)
+    np.savetxt('chi2_randoms_val_lin2.txt', chi2_randoms)
+    np.savetxt('chi2_dmassi_val_lin2.txt', chi2_dmassi)
+    np.savetxt('chi2_trend1_val_lin2.txt', chi2_trend1)
+    np.savetxt('chi2_trend2_val_lin2.txt', chi2_trend2)
+    np.savetxt('trend_val_lin2.txt', trend)
 
 if sys_weights == True:
-    np.savetxt('chi2_dmassf_train.txt', chi2_dmassf)
+    np.savetxt('chi2_dmassf_val_lin2.txt', chi2_dmassf)
