@@ -14,7 +14,13 @@ import healpy as hp
 #label used when saving PCA maps
 label = 'SP106_validationregion'
 output_order = 'ring'
-outdir = './pca_SP106_validationregion/'
+
+test = True
+
+if test == True:
+    outdir = './pca_{0}_test/'.format(label)
+else:
+    outdir = './pca_{0}/'.format(label)
 if os.path.exists(outdir) == False: #if the output directory does not exist
     os.mkdir(outdir) #make it
 
@@ -42,6 +48,9 @@ sp_files.append(starfile1)
 extfile = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
 sp_files.append(extfile)
 
+if test == True:
+    sp_files = sp_files[:3]
+
 nmaps = len(sp_files)
 
 #load the LSS mask (slightly different format to usual)
@@ -63,6 +72,7 @@ index_n2r = hp.ring2nest(4096,np.arange(hp.nside2npix(4096))) #remember the orde
 
 spmaps = []
 for ifile, filename in enumerate(sp_files):
+    print("LOADING SP {0}: {1}".format(ifile, filename))
     
     #load the SP maps
     
@@ -92,6 +102,7 @@ for ifile, filename in enumerate(sp_files):
     spmaps.append(sp_patch)
     
 #Fit the PCA
+print("FITTING PCA")
 pca = PCA(n_components=len(spmaps))
 data = np.array(spmaps)
 pca.fit(data.T)
@@ -104,8 +115,11 @@ f.close()
 #construct the PCA maps from the coefficients (components)
 pcamaps = []
 for imap in range(len(spmaps)):
+    print("SAVING PC{0}".format(imap))
+    
     pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN
-    pci[totalmask] = np.sum([pca.components_[imap][i]*data[i] for i in range(len(spmaps))],axis=0)
+    #pci[totalmask] = np.sum([pca.components_[imap][i]*data[i] for i in range(len(spmaps))],axis=0)
+    pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
     pcamaps.append(pci)
     
     pca_filename = 'pc{0}_{1}_4096{2}.fits.gz'.format(imap, label, output_order)
