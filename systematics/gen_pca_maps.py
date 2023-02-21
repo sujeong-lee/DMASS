@@ -114,6 +114,6 @@ for imap in range(len(spmaps)):
         outarray = pci
     elif output_order == 'ring':
         outarray = pci[index_n2r]
-    fio.write(outdir + pcafilename, outarray)
+    fio.write(outdir + pca_filename, outarray)
     
     
