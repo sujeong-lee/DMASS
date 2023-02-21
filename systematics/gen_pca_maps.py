@@ -12,9 +12,9 @@ import fitsio as fio
 import healpy as hp 
 
 #label used when saving PCA maps
-label = 'SP107_validationregion'
+label = 'SP106_validationregion'
 output_order = 'ring'
-outdir = './pca_SP107_validationregion/'
+outdir = './pca_SP106_validationregion/'
 if os.path.exists(outdir) == False: #if the output directory does not exist
     os.mkdir(outdir) #make it
 
@@ -97,7 +97,7 @@ data = np.array(spmaps)
 pca.fit(data.T)
 
 np.savetxt(outdir + 'components.txt', pca.components_)
-f = open('sp_input.txt','w')
+f = open(outdir + 'sp_input.txt','w')
 f.write('\n'.join(sp_files))
 f.close()
 
