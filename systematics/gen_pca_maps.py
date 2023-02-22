@@ -12,10 +12,10 @@ import fitsio as fio
 import healpy as hp 
 
 #label used when saving PCA maps
-label = 'SP106_validationregion'
+label = 'SP107_validationregion'
 output_order = 'ring'
 
-test = True
+test = False
 
 if test == True:
     outdir = './pca_{0}_test/'.format(label)
@@ -42,14 +42,14 @@ sp_files.append(starfile1)
 
 #This one has UNSEEN values and might be redundant?
 #will remove for now
-#starfile2 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/stars/y3_stellar_density_4096_ring_jointmask_v2.2.fits.gz'
-#sp_files.append(starfile2)
+starfile2 = '/global/cfs/cdirs/des/jelvinpo/sysmaps/y3/stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
+sp_files.append(starfile2)
 
 extfile = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
 sp_files.append(extfile)
 
 if test == True:
-    sp_files = sp_files[:3]
+    sp_files = sp_files[-4:]
 
 nmaps = len(sp_files)
 
@@ -107,27 +107,31 @@ pca = PCA(n_components=len(spmaps))
 data = np.array(spmaps)
 pca.fit(data.T)
 
+#save the PCA
 np.savetxt(outdir + 'components.txt', pca.components_)
+np.savetxt(outdir + 'explained_variance.txt', pca.explained_variance_)
 f = open(outdir + 'sp_input.txt','w')
 f.write('\n'.join(sp_files))
 f.close()
+np.save(outdir + 'pca_object.npy', pca)
 
 #construct the PCA maps from the coefficients (components)
-pcamaps = []
+
+#since the mask of all the PCs are the same
+#we can use a single array for the maps
+#this might help to conserve memory
+pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN #since the mask of all the PCs are the smae 
+
 for imap in range(len(spmaps)):
     print("SAVING PC{0}".format(imap))
-    
-    pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN
-    #pci[totalmask] = np.sum([pca.components_[imap][i]*data[i] for i in range(len(spmaps))],axis=0)
+
     pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
-    pcamaps.append(pci)
     
     pca_filename = 'pc{0}_{1}_4096{2}.fits.gz'.format(imap, label, output_order)
     
     if output_order == 'nest':
-        outarray = pci
+        fio.write(outdir + pca_filename, pci)
     elif output_order == 'ring':
-        outarray = pci[index_n2r]
-    fio.write(outdir + pca_filename, outarray)
-    
+        fio.write(outdir + pca_filename, pci[index_n2r])
+
     
