@@ -16,6 +16,7 @@ label = 'SP107_validationregion'
 output_order = 'ring'
 
 test = False
+resume=True
 
 if test == True:
     outdir = './pca_{0}_test/'.format(label)
@@ -95,6 +96,9 @@ for ifile, filename in enumerate(sp_files):
             sp_hp[sp_data['PIXEL']] = sp_data['SIGNAL']
     
     sp_patch = sp_hp[totalmask]
+    
+    #standardize the SP map (mean=0, std=1)
+    sp_patch = (sp_patch-np.mean(sp_patch))/np.std(sp_patch)
 
     if (sp_patch == hp.UNSEEN).any():
         raise RuntimeError('{0}/{1} pixels in the patch are unseen for map {2}'.format( sum(sp_patch == hp.UNSEEN),len(sp_patch),filename ))
@@ -125,9 +129,15 @@ pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN #since the mask of all the PCs are 
 for imap in range(len(spmaps)):
     print("SAVING PC{0}".format(imap))
 
-    pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
-    
     pca_filename = 'pc{0}_{1}_4096{2}.fits.gz'.format(imap, label, output_order)
+    if os.path.exists(outdir + pca_filename)==True and resume==True:
+        print("SKIPPING PC{0}, file already found".format(imap))
+        continue
+    else:
+        print("SAVING PC{0}".format(imap))
+        
+    
+    pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
     
     if output_order == 'nest':
         fio.write(outdir + pca_filename, pci)
