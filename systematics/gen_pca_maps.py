@@ -26,11 +26,11 @@ if os.path.exists(outdir) == False: #if the output directory does not exist
     os.mkdir(outdir) #make it
 
 #path to the observational SP maps on NERSC
-sp_dir1 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/band_g/'
-sp_dir2 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/band_r/'
-sp_dir3 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/band_i/'
-sp_dir4 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/band_z/'
-sp_dir5 = '/global/cfs/cdirs/des/monroy/systematics_analysis/spmaps/sof_depth/'
+sp_dir1 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_g/'
+sp_dir2 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_r/'
+sp_dir3 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_i/'
+sp_dir4 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_z/'
+sp_dir5 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/sof_depth/'
 sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1)] + \
             [sp_dir2 + filename for filename in os.listdir(sp_dir2)] + \
             [sp_dir3 + filename for filename in os.listdir(sp_dir3)] + \
@@ -38,15 +38,16 @@ sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1)] + \
             [sp_dir5 + filename for filename in os.listdir(sp_dir5)]
 
 #paths to the astrophysical SP maps on NERSC
-starfile1 = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/stars/stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz'
+starfile1 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/stars/stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz'
 sp_files.append(starfile1)
 
 #This one has UNSEEN values and might be redundant?
 #will remove for now
-starfile2 = '/global/cfs/cdirs/des/jelvinpo/sysmaps/y3/stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
-sp_files.append(starfile2)
 
-extfile = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
+#starfile2 = '/global/cfs/cdirs/des/jelvinpo/sysmaps/y3/stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
+#sp_files.append(starfile2)
+
+extfile = '/fs/scratch/PCON0008/warner785/bwarner/PCA/extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
 sp_files.append(extfile)
 
 if test == True:
@@ -55,18 +56,27 @@ if test == True:
 nmaps = len(sp_files)
 
 #load the LSS mask (slightly different format to usual)
-lssmask_file = '/global/cfs/cdirs/des/jelvinpo/cats/y3/bao/v2p2/MASK_Y3LSSBAOSOF_22_3_v2p2_y3_format.fits.gz'
+lssmask_file = '/fs/scratch/PCON0008/warner785/bwarner/MASK_Y3LSSBAOSOF_22_3_v2p2.fits'
 lssmask = fio.read(lssmask_file)
 mask = np.zeros(hp.nside2npix(4096))
-mask[hp.ring2nest(4096, lssmask['HPIX'])] = 1.
+mask[hp.ring2nest(4096, lssmask['PIXEL'])] = 1.
 mask = mask.astype('bool')
 
-#validation region mask
 ra_pix,dec_pix = hp.pix2ang(4096,np.arange(hp.nside2npix(4096)),nest=True,lonlat=True) #ra and dec of all pixels
+
+# validation region mask
 mask4 = (ra_pix>18)&(ra_pix<43)
 mask4 = mask4 & (dec_pix>-10) & (dec_pix<10)
 
-totalmask = mask & mask4
+# SPT region mask
+mask_train = (ra_pix>310) & (ra_pix<360)|(ra_pix['RA']<7)
+mask_train = mask_train & (dec_pix>-10) & (dec_pix<10)
+mask_spt = not mask_4 & not mask_train
+
+# SPT *including* validation mask
+mask_all = not mask_train  # not sliver
+
+totalmask = mask & mask4 # change depending on region
 
 index_r2n = hp.nest2ring(4096,np.arange(hp.nside2npix(4096))) #for converting hp arrays 
 index_n2r = hp.ring2nest(4096,np.arange(hp.nside2npix(4096))) #remember the order is counter intuative
