@@ -83,11 +83,13 @@ nmaps = len(sp_files)
 
 if system == 'nersc':
     lssmask_file = lssmask_file_nersc
+    pix_name = 'HPIX'
 elif system == 'osc':
     lssmask_file = lssmask_file_osc
+    pix_name = 'PIXEL'
 lssmask = fio.read(lssmask_file)
 mask = np.zeros(hp.nside2npix(4096))
-mask[hp.ring2nest(4096, lssmask['PIXEL'])] = 1.
+mask[hp.ring2nest(4096, lssmask[pix_name])] = 1.
 mask = mask.astype('bool')
 
 ra_pix,dec_pix = hp.pix2ang(4096,np.arange(hp.nside2npix(4096)),nest=True,lonlat=True) #ra and dec of all pixels
@@ -99,10 +101,10 @@ mask4 = mask4 & (dec_pix>-10) & (dec_pix<10)
 # SPT region mask
 mask_train = (ra_pix>310) & (ra_pix<360)|(ra_pix['RA']<7)
 mask_train = mask_train & (dec_pix>-10) & (dec_pix<10)
-mask_spt = not mask_4 & not mask_train
+#mask_spt = not mask_4 & not mask_train #commented these out as it was giving a syntax error
 
 # SPT *including* validation mask
-mask_all = not mask_train  # not sliver
+#mask_all = not mask_train  # not sliver
 
 totalmask = mask & mask4 # change depending on region
 
@@ -162,7 +164,16 @@ np.save(outdir + 'pca_object.npy', pca)
 #since the mask of all the PCs are the same
 #we can use a single array for the maps
 #this might help to conserve memory
-pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN #since the mask of all the PCs are the smae 
+
+#savemethod = 'hp'
+savemethod = 'condensed'
+
+if savemethod == 'hp':
+    pci = np.ones(hp.nside2npix(4096))*hp.UNSEEN #since the mask of all the PCs are the same
+elif savemethod == 'condensed':
+    output_pixels = np.arange(hp.nside2npix(4096))[totalmask]
+    out_data = np.zeros(len(output_pixels), dtype=[('PIXEL','int'),('SIGNAL','float')])
+    out_data['PIXEL'] = output_pixels
 
 for imap in range(len(spmaps)):
     print("SAVING PC{0}".format(imap))
@@ -174,12 +185,19 @@ for imap in range(len(spmaps)):
     else:
         print("SAVING PC{0}".format(imap))
         
+    if savemethod == 'hp':
+        pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
+    elif savemethod == 'condensed':
+        output_signal = np.sum(pca.components_[imap]*data.T,axis=1)
     
-    pci[totalmask] = np.sum(pca.components_[imap]*data.T,axis=1)
-    
-    if output_order == 'nest':
-        fio.write(outdir + pca_filename, pci)
-    elif output_order == 'ring':
-        fio.write(outdir + pca_filename, pci[index_n2r])
+    if savemethod == 'hp':
+        if output_order == 'nest':
+            fio.write(outdir + pca_filename, pci)
+        elif output_order == 'ring':
+            fio.write(outdir + pca_filename, pci[index_n2r])
+    elif savemethod == 'condensed':
+        out_data['SIGNAL'] = output_signal
+        fio.write(outdir + pca_filename, out_data)
+        
 
     
