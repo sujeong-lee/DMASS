@@ -10,6 +10,7 @@ from sklearn.decomposition import PCA
 import os 
 import fitsio as fio
 import healpy as hp 
+import sys
 
 #label used when saving PCA maps
 label = 'SP107_validationregion'
@@ -25,12 +26,35 @@ else:
 if os.path.exists(outdir) == False: #if the output directory does not exist
     os.mkdir(outdir) #make it
 
+#paths to the base SP/PCA map directory
+osc_path = '/fs/scratch/PCON0008/warner785/bwarner/PCA/'
+nersc_path = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/'
+
+lssmask_file_osc   = '/fs/scratch/PCON0008/warner785/bwarner/MASK_Y3LSSBAOSOF_22_3_v2p2.fits'
+lssmask_file_nersc = '/global/cfs/cdirs/des/jelvinpo/cats/y3/bao/v2p2/MASK_Y3LSSBAOSOF_22_3_v2p2_y3_format.fits.gz'
+
+#apologies for the un-pythonic way to read arguments
+if len(sys.argv) == 1: #no additional arguments
+    system = 'osc'
+else:
+    if sys.argv[1]=='--nersc':
+        system = 'nersc'
+    elif sys.argv[1]=='--osc':
+        system = 'osc'
+    else:
+        raise IOerror('optional argument should be --nersc or --osc')
+
+if system == 'nersc':
+    sp_base_path = nersc_path
+elif system == 'osc':
+    sp_base_path = osc_path
+
 #path to the observational SP maps on NERSC
-sp_dir1 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_g/'
-sp_dir2 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_r/'
-sp_dir3 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_i/'
-sp_dir4 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/band_z/'
-sp_dir5 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/sof_depth/'
+sp_dir1 = sp_base_path+'band_g/'
+sp_dir2 = sp_base_path+'band_r/'
+sp_dir3 = sp_base_path+'band_i/'
+sp_dir4 = sp_base_path+'band_z/'
+sp_dir5 = sp_base_path+'sof_depth/'
 sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1)] + \
             [sp_dir2 + filename for filename in os.listdir(sp_dir2)] + \
             [sp_dir3 + filename for filename in os.listdir(sp_dir3)] + \
@@ -38,7 +62,7 @@ sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1)] + \
             [sp_dir5 + filename for filename in os.listdir(sp_dir5)]
 
 #paths to the astrophysical SP maps on NERSC
-starfile1 = '/fs/scratch/PCON0008/warner785/bwarner/PCA/stars/stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz'
+starfile1 = sp_base_path+'stars/stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz'
 sp_files.append(starfile1)
 
 #This one has UNSEEN values and might be redundant?
@@ -47,7 +71,7 @@ sp_files.append(starfile1)
 #starfile2 = '/global/cfs/cdirs/des/jelvinpo/sysmaps/y3/stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
 #sp_files.append(starfile2)
 
-extfile = '/fs/scratch/PCON0008/warner785/bwarner/PCA/extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
+extfile = sp_base_path+'extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
 sp_files.append(extfile)
 
 if test == True:
@@ -56,7 +80,11 @@ if test == True:
 nmaps = len(sp_files)
 
 #load the LSS mask (slightly different format to usual)
-lssmask_file = '/fs/scratch/PCON0008/warner785/bwarner/MASK_Y3LSSBAOSOF_22_3_v2p2.fits'
+
+if system == 'nersc':
+    lssmask_file = lssmask_file_nersc
+elif system == 'osc':
+    lssmask_file = lssmask_file_osc
 lssmask = fio.read(lssmask_file)
 mask = np.zeros(hp.nside2npix(4096))
 mask[hp.ring2nest(4096, lssmask['PIXEL'])] = 1.
