@@ -4,7 +4,6 @@ and run a PCA on them
 
 We will provide options to create PCAS for validation region, or science region
 """
-
 import numpy as np
 from sklearn.decomposition import PCA
 import os 
@@ -12,8 +11,12 @@ import fitsio as fio
 import healpy as hp 
 import sys
 
+fix_random_seed = True #makes the PCA reproducable
+if fix_random_seed == True:
+    np.random.seed(417)
+
 #label used when saving PCA maps
-label = 'SP107_validationregion'
+label = 'SP107_validationregion_cformat'
 output_order = 'ring'
 
 test = False
@@ -28,7 +31,9 @@ if os.path.exists(outdir) == False: #if the output directory does not exist
 
 #paths to the base SP/PCA map directory
 osc_path = '/fs/scratch/PCON0008/warner785/bwarner/PCA/'
+#nersc_path = '/global/cfs/projectdirs/des/jelvinpo/sysmaps/y3/'
 nersc_path = '/global/cfs/projectdirs/des/monroy/systematics_analysis/spmaps/'
+nersc_star_density_path = '/global/cfs/projectdirs/des/jelvinpo/sysmaps/y3/'
 
 lssmask_file_osc   = '/fs/scratch/PCON0008/warner785/bwarner/MASK_Y3LSSBAOSOF_22_3_v2p2.fits'
 lssmask_file_nersc = '/global/cfs/cdirs/des/jelvinpo/cats/y3/bao/v2p2/MASK_Y3LSSBAOSOF_22_3_v2p2_y3_format.fits.gz'
@@ -55,21 +60,22 @@ sp_dir2 = sp_base_path+'band_r/'
 sp_dir3 = sp_base_path+'band_i/'
 sp_dir4 = sp_base_path+'band_z/'
 sp_dir5 = sp_base_path+'sof_depth/'
-sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1)] + \
-            [sp_dir2 + filename for filename in os.listdir(sp_dir2)] + \
-            [sp_dir3 + filename for filename in os.listdir(sp_dir3)] + \
-            [sp_dir4 + filename for filename in os.listdir(sp_dir4)] + \
-            [sp_dir5 + filename for filename in os.listdir(sp_dir5)]
+sp_files =  [sp_dir1 + filename for filename in os.listdir(sp_dir1) if '.fits' in filename] + \
+            [sp_dir2 + filename for filename in os.listdir(sp_dir2) if '.fits' in filename] + \
+            [sp_dir3 + filename for filename in os.listdir(sp_dir3) if '.fits' in filename] + \
+            [sp_dir4 + filename for filename in os.listdir(sp_dir4) if '.fits' in filename] + \
+            [sp_dir5 + filename for filename in os.listdir(sp_dir5) if '.fits' in filename]
 
 #paths to the astrophysical SP maps on NERSC
 starfile1 = sp_base_path+'stars/stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz'
 sp_files.append(starfile1)
 
-#This one has UNSEEN values and might be redundant?
-#will remove for now
-
-#starfile2 = '/global/cfs/cdirs/des/jelvinpo/sysmaps/y3/stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
-#sp_files.append(starfile2)
+if system == 'nersc':
+    star_density_path = nersc_star_density_path
+elif system == 'osc':
+    star_density_path = sp_base_path
+starfile2 = star_density_path+'stars/y3_stellar_density_4096_ringbaosample_v2p2.fits'
+sp_files.append(starfile2)
 
 extfile = sp_base_path+'extinction/ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz'
 sp_files.append(extfile)
@@ -99,7 +105,7 @@ mask4 = (ra_pix>18)&(ra_pix<43)
 mask4 = mask4 & (dec_pix>-10) & (dec_pix<10)
 
 # SPT region mask
-mask_train = (ra_pix>310) & (ra_pix<360)|(ra_pix['RA']<7)
+mask_train = (ra_pix>310) & (ra_pix<360)|(ra_pix<7)
 mask_train = mask_train & (dec_pix>-10) & (dec_pix<10)
 #mask_spt = not mask_4 & not mask_train #commented these out as it was giving a syntax error
 
@@ -176,7 +182,6 @@ elif savemethod == 'condensed':
     out_data['PIXEL'] = output_pixels
 
 for imap in range(len(spmaps)):
-    print("SAVING PC{0}".format(imap))
 
     pca_filename = 'pc{0}_{1}_4096{2}.fits.gz'.format(imap, label, output_order)
     if os.path.exists(outdir + pca_filename)==True and resume==True:
