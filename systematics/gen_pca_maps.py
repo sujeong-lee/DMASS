@@ -179,7 +179,10 @@ if savemethod == 'hp':
 elif savemethod == 'condensed':
     output_pixels = np.arange(hp.nside2npix(4096))[totalmask]
     out_data = np.zeros(len(output_pixels), dtype=[('PIXEL','int'),('SIGNAL','float')])
-    out_data['PIXEL'] = output_pixels
+    if output_order == 'nest':
+        out_data['PIXEL'] = output_pixels
+    elif output_order == 'ring':
+        out_data['PIXEL'] = hp.nest2ring(4096,output_pixels)
 
 for imap in range(len(spmaps)):
 
