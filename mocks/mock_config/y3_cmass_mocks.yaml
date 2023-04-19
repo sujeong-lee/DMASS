@@ -41,8 +41,7 @@ k0: 1.5 #from Su
 
 # fits file of mask (expects the redmagic mask format)
 # for Y3 CMASS this should be the BAO mask plus cuts to exclude non-science area (we will need to make this)
-#maskfile: <mask file> 
-maskfile: /Users/jackelvinpoole/DES/cats/y3/masks/MASK_Y3LSSBAOSOF_22_3_v2p2_y3_format.fits.gz
+maskfile: <mask file> 
 
 # number densities of each bin in arcmin^-2
 num_dens: 0.026 #This is approx but should be close. replace with density from real sample
