@@ -49,7 +49,7 @@ num_dens: 0.026 #This is approx but should be close. replace with density from r
 # directory containing the theory galaxy C(l) to use to generate the mocks
 # is expecting cosmosis output format 
 # if you have multiple z bins, this should include both auto and cross power spectra
-cldir: <path to this directory>/input_theory/test_theory_cmass_desY3/galaxy_cl/
+cldir: <path to this directory>/input_theory/output/galaxy_cl/
 
 #which bins from cldir do you want to make mocks for
 #if all it will use all of them
