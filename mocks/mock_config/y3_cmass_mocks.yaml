@@ -25,8 +25,8 @@ cache_path: None
 outdir: <directory you want to save the mocks to>
 
 #number of mocks to generate
-#(set to 1 or 2 for testing, then large number for production run)
-nmocks: 700
+#set to 1 for testing, then large number for production run
+nmocks: 1
 
 #log-normal or gaussian, enter "LN" or "G" 
 LN_or_G: LN
@@ -41,7 +41,8 @@ k0: 1.5 #from Su
 
 # fits file of mask (expects the redmagic mask format)
 # for Y3 CMASS this should be the BAO mask plus cuts to exclude non-science area (we will need to make this)
-maskfile: <mask file> 
+#maskfile: <mask file> 
+maskfile: /Users/jackelvinpoole/DES/cats/y3/masks/MASK_Y3LSSBAOSOF_22_3_v2p2_y3_format.fits.gz
 
 # number densities of each bin in arcmin^-2
 num_dens: 0.026 #This is approx but should be close. replace with density from real sample
@@ -60,6 +61,11 @@ binlist: all
 #do you want to contaminate the mocks?
 #the remaining options do nothing if apply_contamination=F
 apply_contamination: F
+
+#this option will generate a catalog of ra dec positions for each *galaxy*
+#rather than just the healpix map
+#for higher density samples, this file could get large
+gen_catalog: T
 
 
 ######### If apply_contamination: F the below will do nothing
