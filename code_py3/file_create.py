@@ -63,7 +63,7 @@ input_path = '/fs/scratch/PCON0008/warner785/bwarner/PCA/'
 y1 = 7
 y_all = 10
 covariance = None
-n_mock = 508
+n_mock = 1
 n_pca = 34
 
 AIRMASS =('y3a2_g_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_r_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_i_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_z_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz')
@@ -93,8 +93,8 @@ maps = np.array([AIRMASS, SKYBRITE, SIGMA_MAG_ZERO, FGCM_GRY, SKYVAR_UNCERT, T_E
 map_name = ['AIRMASS','SKYBRITE', 'SIGMA_MAG_ZERO', 'FGCM_GRY', 'SKYVAR_UNCERT', 'T_EFF_EXPTIME', 'FWHM_FLUXRAD', 'SFD98', 'STELLAR_DENS', 'SOF_DEPTH']
      
 
-ndens_array = np.zeros((n_pca,n_mock,12)) #<N PCA maps>,<N mocks>,<N PCA bins>
-for mock_i in range(n_mock): 
+#ndens_array = np.zeros((n_pca,n_mock,12)) #<N PCA maps>,<N mocks>,<N PCA bins>
+for mock_i in range(n_mock):
     i_pca=-1
     mock_keyword = mock_template.format(mock_i)
     print("using ", mock_keyword, "...")
@@ -107,53 +107,57 @@ for mock_i in range(n_mock):
     dmass_hpix = hp.ang2pix(4096, theta, phi)
                       
     for y in range(y_all):
-        if y<y1:
-            for x in range(4):
-                i_pca+=1
-                full_path = input_path + band[x]+'/'
-                print("path: ", full_path)
-                current_map = map_name[y]+fil[x]
-                current = maps[y]
-                print("current map: ", current_map)
-                input_keyword = current[x]
-                
-                print("pca: ",i_pca, "mock: ",mock_i)
-                ndens = go_through_mock(full_path, input_keyword, current_map, fracHp, ndens_array,  dmass_hpix, dmass_weight)
-                ndens_array[i_pca,mock_i]= ndens
-                
-        else:
-            if y == 7:
-                print("SECOND SET")
-                amount = 1
-                full_path = ex_dir
-                print("path: ", full_path)
-                current_map = map_name[y]
-                print("current map: ", current_map)
-
-            if y == 8:
-                amount = 1 
-                full_path = stars_dir
-                print("path: ", full_path)
-                current_map = map_name[y]  
-                print("current map: ", current_map)
-            if y == 9:
-                amount = 4
-            for x in range(amount):
-                i_pca+=1
-                if y == 9:
-                    full_path = sof_dir
+        if y>7: # get specific maps
+            if y<y1:
+                for x in range(4):
+                    i_pca+=1
+                    full_path = input_path + band[x]+'/'
                     print("path: ", full_path)
                     current_map = map_name[y]+fil[x]
+                    current = maps[y]
                     print("current map: ", current_map)
+                    input_keyword = current[x]
                 
-                current = maps[y]
-                input_keyword = current[x]
+                    print("pca: ",i_pca, "mock: ",mock_i)
+                    go_through_maps(full_path, input_keyword, current_map, fracHp,  dmass_hpix, dmass_weight)
                 
-                print("pca: ",i_pca, "mock: ",mock_i)                
-                ndens = go_through_mock(full_path, input_keyword, current_map, fracHp, ndens_array, dmass_hpix, dmass_weight)
-                ndens_array[i_pca,mock_i]= ndens
+            else:
+                if y == 7:
+                    print("SECOND SET")
+                    amount = 1
+                    full_path = ex_dir
+                    print("path: ", full_path)
+                    current_map = map_name[y]
+                    print("current map: ", current_map)
+                    star_map = False
+                    flatten = False
+                if y == 8:
+                    amount = 1 
+                    full_path = stars_dir
+                    print("path: ", full_path)
+                    current_map = map_name[y]  
+                    star_map = True
+                    flatten = True
+                    print("current map: ", current_map)
+                if y == 9:
+                    amount = 4
+                    star_map = True
+                    flatten = True
+                for x in range(amount):
+                    i_pca+=1
+                    if y == 9:
+                        full_path = sof_dir
+                        print("path: ", full_path)
+                        current_map = map_name[y]+fil[x]
+                        print("current map: ", current_map)
+                
+                    current = maps[y]
+                    input_keyword = current[x]
+                
+                    print("pca: ",i_pca, "mock: ",mock_i)                
+                    go_through_maps(full_path, input_keyword, current_map, fracHp, dmass_hpix, dmass_weight, star_map = star_map, flatten = flatten)
                   
-    mock_outdir = '/fs/scratch/PCON0008/warner785/bwarner/mocks/'    
-    for i_pca in range(n_pca):
-        np.savetxt(mock_outdir+"mock_SP_34maps"+str(i_pca)+".txt", ndens_array[i_pca])
+    #mock_outdir = '/fs/scratch/PCON0008/warner785/bwarner/mocks/'    
+    #for i_pca in range(n_pca):
+        #np.savetxt(mock_outdir+"mock_SP_34maps"+str(i_pca)+".txt", ndens_array[i_pca])
             

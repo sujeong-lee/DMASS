@@ -133,7 +133,7 @@ def cutPCA(sysMap, SPT, SPmap):
     
     return sysMap
 
-def number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = False, mocks = False): # apply systematic weights here
+def number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = False, mocks = False, iterative = False): # apply systematic weights here
     
     minimum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 1)
     maximum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 99)
@@ -153,13 +153,17 @@ def number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = False, mo
             print("weights being applied...")
             h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["CMASS_PROB"][sysval_gal != hp.UNSEEN]*dmass_chron_weights[sysval_gal != hp.UNSEEN])
         else:
-            h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["CMASS_PROB"][sysval_gal != hp.UNSEEN]) # -- density of dmass sample, not gold sample
+            if iterative != True:
+                h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["CMASS_PROB"][sysval_gal != hp.UNSEEN]) # -- density of dmass sample, not gold sample
+        if iterative == True:
+            print("weights being applied...")
+            h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron["CMASS_PROB"][sysval_gal != hp.UNSEEN]*dmass_chron_weights[sysval_gal != hp.UNSEEN])
     else:
         h,_ = np.histogram(sysval_gal[sysval_gal != hp.UNSEEN], bins=pbin, weights = dmass_chron_weights[sysval_gal != hp.UNSEEN])
     
     return h, sysval_gal
 
-def area_pixels(sysMap, frac_weight, fracDet, SPmap, custom):
+def area_pixels(sysMap, frac_weight, custom):
     
     minimum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 1)
     maximum = np.percentile(sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN], 99)
@@ -168,25 +172,26 @@ def area_pixels(sysMap, frac_weight, fracDet, SPmap, custom):
     pcenter = pbin[:-1] + pstep/2
     
 # number of galaxies in each pixel:
-    if SPmap != True:
-        if custom == True:
-            sys_signal = sysMap['SIGNAL']
-            area,_ = np.histogram(sys_signal[sys_signal != hp.UNSEEN] , bins=pbin , weights = frac_weight)
-        else:   
-            sys_signal = sysMap['SIGNAL']
-            area,_ = np.histogram(sys_signal[sys_signal != hp.UNSEEN] , bins=pbin , weights = sysMap['FRACDET'][sys_signal != hp.UNSEEN])
-
-# number of galaxies in each pixel:
-    else:
+    #if debug != True:
+    if custom == True:
         sys_signal = sysMap['SIGNAL']
+        area,_ = np.histogram(sys_signal[sys_signal != hp.UNSEEN] , bins=pbin , weights = frac_weight)
+    else:   
+        sys_signal = sysMap['SIGNAL']
+        area,_ = np.histogram(sys_signal[sys_signal != hp.UNSEEN] , bins=pbin , weights = sysMap['FRACDET'][sys_signal != hp.UNSEEN])
+            
+    #else:  (for SP if other method isn't working)
+# number of galaxies in each pixel:
+        #debug this to be like the PCA set
+        #sys_signal = sysMap['SIGNAL']
 
-        sys = sysMap
-        mask = np.full(hp.nside2npix(4096), hp.UNSEEN)
-        frac_mask = np.in1d(fracDet["PIXEL"], sys["PIXEL"], assume_unique=False, invert=False)
+        #sys = sysMap
+        #mask = np.full(hp.nside2npix(4096), hp.UNSEEN)
+        #frac_mask = np.in1d(fracDet["PIXEL"], sys["PIXEL"], assume_unique=False, invert=False)
 
-        mask[sys["PIXEL"]] = sys["SIGNAL"]
-        frac_sys = mask[fracDet["PIXEL"][frac_mask]]
-        area,_ = np.histogram(frac_sys[frac_sys != hp.UNSEEN] , bins=pbin , weights = fracDet["SIGNAL"][frac_mask][frac_sys != hp.UNSEEN])
+        #mask[sys["PIXEL"]] = sys["SIGNAL"]
+        #frac_sys = mask[fracDet["PIXEL"][frac_mask]]
+        #area,_ = np.histogram(frac_sys[frac_sys != hp.UNSEEN] , bins=pbin , weights = fracDet["SIGNAL"][frac_mask][frac_sys != hp.UNSEEN])
 
     
     return area
@@ -259,3 +264,150 @@ def quad(pcenter,a,b2,c):
 
 def is_pos_def(x):
     return np.all(np.linalg.eigvals(x) > 0)
+
+def go_through_mock(full_path, input_keyword, current_map, fracHp, ndens_array, dmass_hpix, dmass_weight):
+        
+    map_path = '/fs/scratch/PCON0008/warner785/bwarner/SPmaps_cut/'
+    print("fits file", input_keyword)
+    sysMap = io.SearchAndCallFits(path = map_path, keyword = current_map+'.fits')
+    
+    frac_weight = fracHp[sysMap['PIXEL']]
+    sysMap = sysMap[frac_weight != hp.UNSEEN]
+    
+    h, sysval_gal = number_gal(sysMap, dmass_hpix, dmass_weight, sys_weights = False, mocks = True)
+    area = area_pixels(sysMap, frac_weight, custom = True)
+    pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
+
+    ndens = norm_number_density
+    
+    return ndens
+
+def go_through_maps(full_path, input_keyword, current_map, fracHp, dmass_hpix, dmass_weight, star_map = False, flatten = False):
+        
+        print("fits file", input_keyword)
+        sysMap = io.SearchAndCallFits(path = full_path, keyword = input_keyword)
+        if star_map == True:
+            if flatten == True:
+                flat = sysMap['I'].flatten()
+                pixels = np.zeros(flat.size)
+            else:
+                pixels = np.zeros(sysMap.size)
+            for x in range(pixels.size):
+                if x>0:
+                    pixels[x]=pixels[x-1]+1
+            sysMap = np.zeros( len(pixels), dtype=[('PIXEL','int'), ('SIGNAL','float')])
+            if flatten == True:
+                sysMap['SIGNAL'] = flat
+            else:
+                signal = sysMap['I']
+                sysMap['SIGNAL'] = signal
+            sysMap['PIXEL'] = pixels
+    
+#    path = '/fs/scratch/PCON0008/warner785/bwarner/'
+        sysMap = cutPCA(sysMap,SPT=True,SPmap=True)
+        
+        outdir = '/fs/scratch/PCON0008/warner785/bwarner/SPmaps_cut/'
+        os.makedirs(outdir, exist_ok=True)
+        esutil.io.write( outdir+current_map+'.fits', sysMap, overwrite=True)
+
+
+def go_through_SP(full_path, input_keyword, current_map, fracHp, cov, i_pca, dmass_chron, dmass_chron_weights, sys_weights = False):
+
+    map_path = '/fs/scratch/PCON0008/warner785/bwarner/SPmaps_cut/'
+    print("fits file", input_keyword)
+    sysMap = io.SearchAndCallFits(path = map_path, keyword = current_map+'.fits')
+
+    frac_weight = fracHp[sysMap['PIXEL']]
+    sysMap = sysMap[frac_weight != hp.UNSEEN]
+    
+    covariance_i = cov[i_pca]
+    covariance = np.copy(covariance_i)
+    covariance[0][-1]=0
+    covariance[-1][0]=0
+    if is_pos_def(covariance) == True:
+        cov_matrix = covariance
+    else:
+        print("NOT POSITIVE DEFINITE") # try not zeroing out, or taking anout zeroing out //
+        covariance[1][-1] = 0
+        covariance[-1][1] = 0
+        covariance[0][-2] = 0
+        covariance[-2][0] = 0
+        if is_pos_def(covariance) == True:
+            cov_matrix = covariance
+        else: 
+            print("STILL NOT POSITIVE DEFINITE")
+    
+    diag_cov = np.diagonal(covariance)
+    error_cov = np.sqrt(diag_cov)
+
+    h, sysval_gal = number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = sys_weights)
+    area = area_pixels(sysMap, frac_weight, custom = True)
+    pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
+    
+    return pcenter, norm_number_density, error_cov, fracerr_norm
+
+
+def plot_figure(input_keyword, current_map, run_name, pcenter, norm_number_density, error_cov, fracerr_norm, sys_weights = False, SPT = True, custom = True):
+    
+    fig, ax = plt.subplots()
+    if SPT == True: # change based on used weights ---------------------------------------
+        ax.errorbar( pcenter, norm_number_density, yerr=error_cov, label = "dmass spt, weights "+ run_name)
+            #ax.errorbar( pcenter, norm_number_density_ran, yerr=fracerr_ran_norm, label = "randoms spt")
+    else:
+        ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass val")
+            #ax.errorbar( pcenter, norm_number_density_ran, yerr=fracerr_ran_norm, label = "randoms val")
+    plt.legend()
+    xlabel = input_keyword
+    plt.xlabel(current_map)
+    plt.ylabel("n_gal/n_tot 4096")
+    plt.axhline(y=1, color='grey', linestyle='--')
+#    plt.title(xlabel+' systematic check')
+    if sys_weights == True:
+        if SPT == True:
+            plt.title(current_map+' SPT region with '+run_name+'weights applied')
+            if custom == True:
+                fig.savefig('../SPmap_custom/'+run_name+current_map+' spt_check.pdf')
+            else:
+                fig.savefig('../SPmap_official/'+run_name+current_map+' spt_check.pdf')
+        else:
+            plt.title(current_map+' VAL region with weights applied')
+            fig.savefig('../SPmap_check/'+current_map+' val.pdf')
+    else:
+        if SPT == True:
+            plt.title('systematics check, no weights: '+current_map+' in spt')
+            if custom == True:
+                fig.savefig('../SPmap_custom/'+current_map+'spt.pdf')
+            else:
+                fig.savefig('../SPmap_official/'+current_map+'spt.pdf')
+        else:
+            plt.title('systematics check, no weights: '+current_map+' in val')
+            fig.savefig('../SPmap_check/'+current_map+'val.pdf')
+
+
+'''          
+extra bit:
+
+        print("fits file", input_keyword)
+        # use fitsio.read in separate file:
+    sysMap = io.SearchAndCallFits(path = full_path, keyword = input_keyword)
+
+    path = '/fs/scratch/PCON0008/warner785/bwarner/'
+#sysMap['PIXEL'] = hp.nest2ring(4096, sysMap['PIXEL'])
+    sysMap = cutPCA(sysMap,SPT=True,SPmap=True)
+    if star_map == True:
+        if flatten == True:
+            flat = sysMap['I'].flatten()
+            pixels = np.zeros(flat.size)
+        else:
+            pixels = np.zeros(sysMap.size)
+        for x in range(pixels.size):
+            if x>0:
+                pixels[x]=pixels[x-1]+1
+        sysMap = np.zeros( len(sysMap), dtype=[('PIXEL','int'), ('SIGNAL','float')])
+        sysMap['PIXEL'] = pixels
+        if flatten == True:
+            sysMap['SIGNAL'] = flat
+        else:
+            sysMap['SIGNAL'] = sysMap['I']
+            
+'''  

@@ -24,16 +24,15 @@ from sys_functions import *
 
 #variables to set:
 
-run_name = "quad_run2"
+run_name = "finalized_linear_v2"
 SPT = True
 SPmap = False
-linear = False
-quadratic = False
-linear_run = False
+linear_run = True
 sys_weights = False
 STOP = False
 custom = True
-first_set = False # pca0-pca49 = first set; pca 50-106 = second set
+iterative = False # -- reading in weights from other runs
+first_set = True # pca0-pca49 = first set; pca 50-106 = second set
 
 # -----------------------
 
@@ -152,7 +151,11 @@ else:
 # ----------------------------------------------------
 
 for i_pca in range(n_pca): #50, 56
-    if i_pca > -1: # -1
+    if i_pca > -1: # can check individual maps this way
+        
+        linear = True
+        quadratic = False
+        
         if custom == True:
             if first_set == True:
                 input_keyword = keyword_template.format(i_pca)
@@ -186,24 +189,44 @@ for i_pca in range(n_pca): #50, 56
             h_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'h_ran_spt_full.fits')
             norm_number_density_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'norm_ran_spt_full.fits')
             fracerr_ran_norm = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'fracerr_ran_spt_full.fits')
-            area = area_pixels(sysMap, frac_weight, fracDet, SPmap=SPmap)
+            area = area_pixels(sysMap, frac_weight, custom = custom)
         
         else:
             dmass_chron_weights = None
             print("sysMap signal: ",sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN])
             h_ran,_= number_gal(sysMap, random_chron, None, sys_weights = False)
-            area = area_pixels(sysMap, frac_weight, fracDet, SPmap=SPmap, custom=custom)
+            area = area_pixels(sysMap, frac_weight, custom=custom)
             pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
+        if iterative == True:
+            dmass_chron_weights =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/june23_tests/'+'quad2_2.fits') 
         
-        h, sysval_gal = number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = sys_weights) 
+        h, sysval_gal = number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = sys_weights, iterative = iterative) 
         pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
         diag_cov = np.diagonal(covariance)
         error_cov = np.sqrt(diag_cov)
         if is_pos_def(covariance) == True:
             cov_matrix = covariance
         else:
-            print("NOT POSITIVE DEFINITE")
-            cov_matrix = error_cov
+            print("NOT POSITIVE DEFINITE") # try not zeroing out, or taking anout zeroing out //
+            covariance[1][-1] = 0
+            covariance[-1][1] = 0
+            covariance[0][-2] = 0
+            covariance[-2][0] = 0
+            if is_pos_def(covariance) == True:
+                cov_matrix = covariance
+            else:
+                print("STILL NOT POSITIVE DEFINITE")
+                covariance[0][-3] = 0
+                covariance[-3][0] = 0
+                covariance[1][-2] = 0
+                covariance[-2][1] = 0
+                covariance[2][-1] = 0
+                covariance[-1][2] = 0
+                if is_pos_def(covariance) == True:
+                    cov_matrix = covariance
+                else:
+                    print("STILL NOT POSITIVE DEFINITE x2")
+                    cov_matrix = error_cov
 
     #plotting:
         xlabel = input_keyword
@@ -329,7 +352,13 @@ for i_pca in range(n_pca): #50, 56
                     diff_chi2 = trend_chi2-trend2_chi2
 
                     print("difference of chi2 between models: ", diff_chi2)
-                    if diff_chi2 > 2:
+                    
+                    chi2_ = np.linspace(0,30,100)
+            # check p-value threshold ******
+                    y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold****
+                    index = np.where(y == y.min())[0][0]
+                    threshold = chi2_[index]
+                    if trend_chi2 > threshold: #diff_chi2
                         quadratic=True
                         print("Quadratic is better fit for ", xlabel)
                         trend.append(1)
@@ -343,16 +372,13 @@ for i_pca in range(n_pca): #50, 56
         #linear:
         #weight_pixel = (1/p(sysMap["PIXEL"]))
                 if linear==True:
+                    print("linear weights applied...")
             
             #check chi2 first
             # plot chi2 of linears versus distribution as check for p-value
             # input parameters not hard-coded (change later)
-                    chi2_ = np.linspace(0,30,100)
-                    y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold
-                    index = np.where(y == y.min())[0][0]
-                    threshold = chi2_[index]
-                    if trend_chi2>threshold:
-                        print(xlabel, " NEEDS TO BE FLAGGED")
+                    #if trend_chi2>threshold:
+                        #print(xlabel, " NEEDS TO BE FLAGGED")
             
             #make sure object density stays the same
                     weight_object = (1/lin(sysval_gal, m,b1))
@@ -364,15 +390,9 @@ for i_pca in range(n_pca): #50, 56
         
         # quadratic:
                 if quadratic==True:
-            
-            #check chi2 first
-                    chi2_ = np.linspace(0,30,100)
-            # check p-value threshold ******
-                    y = np.abs((100*(1.-scipy.stats.chi2(12).cdf(chi2_))-5.))  #for 5% p-value threshold****
-                    index = np.where(y == y.min())[0][0]
-                    threshold = chi2_[index]
-                    if trend2_chi2>threshold:
-                        print(xlabel, " NEEDS TO BE FLAGGED")
+                    print("quadratic weights applied...")
+                    #if trend2_chi2>threshold:
+                        #print(xlabel, " NEEDS TO BE FLAGGED")
                     
             #make sure object density stays the same
                     weight_object = (1/quad(sysval_gal, a,b2,c))
@@ -412,3 +432,5 @@ if sys_weights == False:
 # linear_run2
 # quad_run1
 # quad_run2
+# quad_updated1
+# quad_updated2
