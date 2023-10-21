@@ -1,0 +1,85 @@
+#
+# Config file to create lognormal mocks for CMASS-like sample
+#
+# This should be run with the DES lss_sys code found here:
+# https://github.com/des-science/lss_sys/tree/master/lsssys
+#
+# the mocks can be created by running this from the lss_sys directory 
+# python lsssys/generate_mocks.py <path to this config file>
+#
+#
+ 
+#the output files and directories will all use this label
+label: y3_cmass_mocks_example
+
+#The cache will save the degraded mask, degraded weight maps and the theory object (lognormalized if requested)
+#to the specified path. The file names will use the "label" above. This significantly speeds up the code when run a *second* time
+#(useful when testing small changes)
+#WARNING if you change any settings related to the cached files, you will need to either change the label or set use_cache: F 
+#or the changes won't be implemented! 
+use_cache: F
+cache_path: None
+
+#output directory
+#if unspecified it will create a directory called {label}_output wherever you ran the script
+outdir: <directory you want to save the mocks to>
+
+#number of mocks to generate
+#set to 1 for testing, then large number for production run
+nmocks: 1
+
+#log-normal or gaussian, enter "LN" or "G" 
+LN_or_G: LN
+
+#desired Nside healpix resolution of the mocks
+nside: 512
+
+# lognormal skewness paramaters
+# equivalent to lambda in FLASK
+# will do nothing if LN_or_g=G
+k0: 1.5 #from Su
+
+# fits file of mask (expects the redmagic mask format)
+# for Y3 CMASS this should be the BAO mask plus cuts to exclude non-science area (we will need to make this)
+maskfile: <mask file> 
+
+# number densities of each bin in arcmin^-2
+num_dens: 0.026 #This is approx but should be close. replace with density from real sample
+
+# directory containing the theory galaxy C(l) to use to generate the mocks
+# is expecting cosmosis output format 
+# if you have multiple z bins, this should include both auto and cross power spectra
+cldir: <path to this directory>/input_theory/output/galaxy_cl/
+
+#which bins from cldir do you want to make mocks for
+#if all it will use all of them
+# if binlist: 1 2
+# it will only run mocks for the 1st and 2nd bins
+binlist: all
+
+#do you want to contaminate the mocks?
+#the remaining options do nothing if apply_contamination=F
+apply_contamination: F
+
+#this option will generate a catalog of ra dec positions for each *galaxy*
+#rather than just the healpix map
+#for higher density samples, this file could get large
+gen_catalog: T
+
+
+######### If apply_contamination: F the below will do nothing
+
+# contamination_method
+# can be "default" (poission sample at higher number density and accept objects with prob 1/w)
+# "default" will output a contaminated and uncontaminated mocks from the same realisation
+# or can be "density" where the 1/w is applied to the density field, which is then poisson sampled
+# "density" only putputs the contaminated map
+contamination_method: default
+
+#
+weight_map_dir: None
+weight_map_files: None
+weight_map_nside: 4096
+
+
+
