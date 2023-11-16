@@ -16,7 +16,8 @@ from xdgmm import XDGMM as XDGMM_Holoien
 os.chdir('../../DMASSY3/code_py3/')
 print(os.getcwd())
 
-gold_spt = fitsio.read('../output/test/train_cat/y3/gold_spt.fits')
+#gold_spt = fitsio.read('../output/test/train_cat/y3/gold_spt.fits')
+gold_spt = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+'cardinal_masked.fits')
 
 def GenerateRegions(jarrs, jras, jdecs, jfile, njack, jtype):
 
@@ -93,5 +94,5 @@ os.makedirs(outdir, exist_ok=True)
 #plt.scatter(ra,dec,marker='.',c=ind)
 
 for i in range(len(split_spt)):
-    fitsio.write( outdir+'split_spt_' + str(i) + '.fits', split_spt[i], overwrite=True)
+    fitsio.write( outdir+'split_cardinal_' + str(i) + '.fits', split_spt[i], overwrite=True)
     

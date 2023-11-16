@@ -29,6 +29,7 @@ custom = True
 mocks = True
 
 sys_weights = False
+equal_area = True
 
 # -----------------------
 
@@ -64,7 +65,7 @@ y1 = 7
 y_all = 10
 covariance = None
 n_mock = 508
-n_pca = 34
+n_pca = 4
 
 AIRMASS =('y3a2_g_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_r_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_i_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz','y3a2_z_o.4096_t.32768_AIRMASS.WMEAN_EQU.fits.gz')
 
@@ -93,7 +94,7 @@ maps = np.array([AIRMASS, SKYBRITE, SIGMA_MAG_ZERO, FGCM_GRY, SKYVAR_UNCERT, T_E
 map_name = ['AIRMASS','SKYBRITE', 'SIGMA_MAG_ZERO', 'FGCM_GRY', 'SKYVAR_UNCERT', 'T_EFF_EXPTIME', 'FWHM_FLUXRAD', 'SFD98', 'STELLAR_DENS', 'SOF_DEPTH']
      
 
-ndens_array = np.zeros((n_pca,n_mock,12)) #<N PCA maps>,<N mocks>,<N PCA bins>
+ndens_array = np.zeros((n_pca,n_mock,10)) #<N PCA maps>,<N mocks>,<N PCA bins>
 for mock_i in range(n_mock): 
     i_pca=-1
     mock_keyword = mock_template.format(mock_i)
@@ -107,7 +108,7 @@ for mock_i in range(n_mock):
     dmass_hpix = hp.ang2pix(4096, theta, phi)
                       
     for y in range(y_all):
-        if y<y1:
+        if y<y1 and y==3:
             for x in range(4):
                 i_pca+=1
                 full_path = input_path + band[x]+'/'
@@ -118,10 +119,10 @@ for mock_i in range(n_mock):
                 input_keyword = current[x]
                 
                 print("pca: ",i_pca, "mock: ",mock_i)
-                ndens = go_through_mock(full_path, input_keyword, current_map, fracHp, ndens_array,  dmass_hpix, dmass_weight)
+                ndens = go_through_mock(full_path, input_keyword, current_map, y, fracHp, ndens_array,  dmass_hpix, dmass_weight)
                 ndens_array[i_pca,mock_i]= ndens
-                
-        else:
+        if y == 10:        
+        #else:
             if y == 7:
                 print("SECOND SET")
                 amount = 1
@@ -150,10 +151,12 @@ for mock_i in range(n_mock):
                 input_keyword = current[x]
                 
                 print("pca: ",i_pca, "mock: ",mock_i)                
-                ndens = go_through_mock(full_path, input_keyword, current_map, fracHp, ndens_array, dmass_hpix, dmass_weight)
+                ndens = go_through_mock(full_path, input_keyword, current_map, y, fracHp, ndens_array, dmass_hpix, dmass_weight)
                 ndens_array[i_pca,mock_i]= ndens
                   
     mock_outdir = '/fs/scratch/PCON0008/warner785/bwarner/mocks/'    
     for i_pca in range(n_pca):
-        np.savetxt(mock_outdir+"mock_SP_34maps"+str(i_pca)+".txt", ndens_array[i_pca])
+        np.savetxt(mock_outdir+"mock_SP_fgcm"+str(i_pca)+".txt", ndens_array[i_pca])
+        
+#mock_SP_FGCM
             

@@ -58,7 +58,7 @@ def train_st82(params, param_file):
         train_path = params['train_des_path']
         train_keyword = params['train_des_keyword']
     except : 
-        train_path = '/fs/scratch/cond0080/DATA/'
+        train_path = '/fs/scratch/PCON0003/warner785/bwarner/gold_cat/GOLD_STRIPE82/'
         train_keyword = 'Y1A1_GOLD_STRIPE82_v2'
 
     #out_catname = params['out_catname']
@@ -69,8 +69,8 @@ def train_st82(params, param_file):
     columns = None
     gold_st82 = io.SearchAndCallFits(path = train_path, columns = columns, keyword = train_keyword )
     #gold_st82 = gold_st82[(gold_st82['MODEST_CLASS'] == 1)&(gold_st82['FLAGS_GOLD'] == 0 )]
-    goldY3mask_map = fitsio.read('')
-    gold_mask = goldY3_masking(cat=dmassY3, valid_hpind=goldY3mask_map['HPIX'])
+    goldY1mask_map = fitsio.read('/fs/scratch/PCON0003/warner785/bwarner/Y1LSSmask_v2_redlimcut_il22_seeil4.0_4096ring.fits')
+    gold_mask = goldY1_masking(cat=dmassY1, valid_hpind=goldY1mask_map['HPIX'])
     gold_st82 = gold_st82[(gold_st82['FLAGS_GOLD'] == 0 ) & gold_mask ]
     #gold_st82 = Cuts.keepGoodRegion(gold_st82)
 
@@ -163,8 +163,8 @@ def train_st82(params, param_file):
             print(cmass_pickle)
             print(no_pickle)
     
-    mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
-    err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
+    mag = ['MAG_DETMODEL', 'MAG_DETMODEL' ]
+    err = ['MAGERR_DETMODEL', 'MAGERR_DETMODEL']
 
     clf_cmass = XD_fitting( data = clean_cmass_data_des, pickleFileName = cmass_pickle, mag=mag, err=err,
         n_cl = n_cmass, n_iter = 10000, tol = tol, verbose = True, init_params= init_params_cmass)                 
@@ -260,8 +260,8 @@ def construct_jk_catalog_ind( cat, njack = 10, root='./', jtype = 'generate', jf
 
 def main_spt(params):
     
-    mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
-    err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
+    mag = ['MAG_DETMODEL', 'MAG_DETMODEL' ]
+    err = ['MAGERR_DETMODEL', 'MAGERR_DETMODEL']
       
     output_dir = params['output_dir']
     cmass_fraction = params['cmass_fraction']

@@ -26,7 +26,7 @@ from sys_functions import *
 SPT = True
 SPmap = True
 custom = True
-mocks = True
+mocks = False
 
 sys_weights = False
 
@@ -86,8 +86,8 @@ SFD98 = ("ebv_sfd98_fullres_nside_4096_nest_equatorial_des.fits.gz")
 sof_dir = '/fs/scratch/PCON0008/warner785/bwarner/PCA/sof_depth/'
 SOF_DEPTH = ("y3a2_gold_2_2_1_sof_nside4096_nest_g_depth.fits.gz", "y3a2_gold_2_2_1_sof_nside4096_nest_r_depth.fits.gz", "y3a2_gold_2_2_1_sof_nside4096_nest_i_depth.fits.gz", "y3a2_gold_2_2_1_sof_nside4096_nest_z_depth.fits.gz")
 
-stars_dir = '/fs/scratch/PCON0008/warner785/bwarner/PCA/stars/'
-STELLAR_DENS = ("stars_extmashsof0_16_20_zeros_footprint_nside_4096_nest.fits.gz")
+stars_dir = '/fs/scratch/PCON0008/warner785/bwarner/'
+STELLAR_DENS = ("y3_stellar_density_4096_ring_jointmask_v2.2.fits.gz")
 
 maps = np.array([AIRMASS, SKYBRITE, SIGMA_MAG_ZERO, FGCM_GRY, SKYVAR_UNCERT, T_EFF_EXPTIME, FWHM_FLUXRAD, SFD98, STELLAR_DENS, SOF_DEPTH])
 map_name = ['AIRMASS','SKYBRITE', 'SIGMA_MAG_ZERO', 'FGCM_GRY', 'SKYVAR_UNCERT', 'T_EFF_EXPTIME', 'FWHM_FLUXRAD', 'SFD98', 'STELLAR_DENS', 'SOF_DEPTH']
@@ -107,7 +107,7 @@ for mock_i in range(n_mock):
     dmass_hpix = hp.ang2pix(4096, theta, phi)
                       
     for y in range(y_all):
-        if y>7: # get specific maps
+        if y == 7 : # get specific maps
             if y<y1:
                 for x in range(4):
                     i_pca+=1
@@ -129,7 +129,7 @@ for mock_i in range(n_mock):
                     print("path: ", full_path)
                     current_map = map_name[y]
                     print("current map: ", current_map)
-                    star_map = False
+                    star_map = True # usually False, except csfd
                     flatten = False
                 if y == 8:
                     amount = 1 
@@ -152,7 +152,10 @@ for mock_i in range(n_mock):
                         print("current map: ", current_map)
                 
                     current = maps[y]
-                    input_keyword = current[x]
+                    if y!=8:
+                        input_keyword = current[x]
+                    else:
+                        input_keyword = 'y3_stellar_density_4096_ring_jointmask_v2.2.fits.gz'
                 
                     print("pca: ",i_pca, "mock: ",mock_i)                
                     go_through_maps(full_path, input_keyword, current_map, fracHp, dmass_hpix, dmass_weight, star_map = star_map, flatten = flatten)

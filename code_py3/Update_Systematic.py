@@ -24,8 +24,8 @@ from sys_functions import *
 
 #variables to set:
 
-run_name = "finalized_linear_v2"
-SPT = True
+run_name = "vali" #"finalized_linear_vFINAL2"
+SPT = False
 SPmap = False
 linear_run = True
 sys_weights = False
@@ -33,6 +33,7 @@ STOP = False
 custom = True
 iterative = False # -- reading in weights from other runs
 first_set = True # pca0-pca49 = first set; pca 50-106 = second set
+equal_area = True
 
 # -----------------------
 
@@ -88,8 +89,9 @@ index_ran_mask = np.argsort(randoms4096)
 random_chron = randoms4096[index_ran_mask]
     
 #--------------------------different loaded files:----------------------#
+
 if first_set == True:
-    n_pca = 50
+    n_pca = 50 #50
 else:
     n_pca = 56
 # PCA maps in RING by default
@@ -97,7 +99,7 @@ else:
 if SPT==True:
     input_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_SP107_SPT_v2_cformat/'
 else:
-    input_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_SP107_validationregion/'
+    input_path = '/users/PCON0003/warner785/DMASSy3/systematics/pca_SP107_VAL_v2_cformat/'
 final_path = '/fs/scratch/PCON0008/warner785/bwarner/pca_maps_jointmask_no_stars1623/'
 #y3/band_z/
 keyword_template = 'pc{0}_'
@@ -112,46 +114,10 @@ trend = []
 
 mock_outdir = '/fs/scratch/PCON0008/warner785/bwarner/'
 
-# OPENING COVARIANCE MATRICES: -----------------------
-if first_set == True:
-    cov = []
-    m_pca = 50 #50
-    cov_template = 'cov{0}'
-    for i_pca in range(m_pca): #n_pca
-        cov_input= cov_template.format(i_pca)
-        cov.append(cov_input)
-
-    cov_template = 'covariance{0}'
-    for i_pca in range(m_pca): #n_pca
-        cov_keyword = cov_template.format(i_pca)
-        #print(cov_keyword)
-        with open(mock_outdir + cov_keyword + '.txt') as mocks:
-            array1 = [x.split() for x in mocks]
-            array2 = np.array(array1)
-            cov[i_pca] = array2.astype(float)
-        mocks.close()
-
-else:
-    cov = []
-    m_pca = 56 #56
-    cov_template = 'cov{0}'
-    for i_pca in range(m_pca): #n_pca
-        cov_input= cov_template.format(i_pca)
-        cov.append(cov_input)
-
-    cov_template = 'covar107_{0}'
-    for i_pca in range(m_pca): #n_pca
-        cov_keyword = cov_template.format(i_pca+50)
-        #print(cov_keyword)
-        with open(mock_outdir + cov_keyword + '.txt') as mocks:
-            array1 = [x.split() for x in mocks]
-            array2 = np.array(array1)
-            cov[i_pca] = array2.astype(float)
-        mocks.close()
-# ----------------------------------------------------
-
-for i_pca in range(n_pca): #50, 56
+for i_pca in range(50): #50, 56
     if i_pca > -1: # can check individual maps this way
+        
+        #save = False
         
         linear = True
         quadratic = False
@@ -172,61 +138,61 @@ for i_pca in range(n_pca): #50, 56
                 input_keyword = final_template.format(i_pca+50)
             print(input_keyword)
             sysMap = io.SearchAndCallFits(path = final_path, keyword = input_keyword)
-            sysMap = cutPCA(sysMap)
+            sysMap = cutPCA(sysMap, SPT = SPT, SPmap = SPmap)
             frac_weight = None
             
         #fixing problem with chi2 -- getting rid of outer-most diagonal noise
-        covariance_i = cov[i_pca]
-        covariance = np.copy(covariance_i)
+        covariance = np.loadtxt('/fs/scratch/PCON0008/warner785/bwarner/'+'cov_area_full_'+str(i_pca)+'.txt')
         covariance[0][-1]=0
         covariance[-1][0]=0
 
         path = '/fs/scratch/PCON0008/warner785/bwarner/'
     
         if sys_weights == True:
-            dmass_chron_weights =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/dmass_validation_check107.fits') 
+            dmass_chron_weights =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/june23_tests/final_weight_sept_v2.fits') 
 #        random_chron = fitsio.read('../output/test/train_cat/y3/'+input_keyword+'randoms.fits')
-            h_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'h_ran_spt_full.fits')
-            norm_number_density_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'norm_ran_spt_full.fits')
-            fracerr_ran_norm = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'fracerr_ran_spt_full.fits')
-            area = area_pixels(sysMap, frac_weight, custom = custom)
+            #h_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'h_ran_spt_full.fits')
+            #norm_number_density_ran = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'norm_ran_spt_full.fits')
+            #fracerr_ran_norm = fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/'+input_keyword+'fracerr_ran_spt_full.fits')
+            area = area_pixels(sysMap, frac_weight, custom = custom, equal_area = equal_area)
         
         else:
             dmass_chron_weights = None
             print("sysMap signal: ",sysMap['SIGNAL'][sysMap['SIGNAL']!=hp.UNSEEN])
-            h_ran,_= number_gal(sysMap, random_chron, None, sys_weights = False)
-            area = area_pixels(sysMap, frac_weight, custom=custom)
-            pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area)
+            h_ran,_= number_gal(sysMap, random_chron, None, sys_weights = False, equal_area = equal_area)
+            area = area_pixels(sysMap, frac_weight, custom=custom, equal_area = equal_area)
+            pcenter, norm_number_density_ran, fracerr_ran_norm = number_density(sysMap, h_ran, area, equal_area = equal_area)
         if iterative == True:
-            dmass_chron_weights =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/june23_tests/'+'quad2_2.fits') 
+            dmass_chron_weights =fitsio.read('/fs/scratch/PCON0008/warner785/bwarner/june23_tests/'+'final27.fits') 
         
-        h, sysval_gal = number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = sys_weights, iterative = iterative) 
-        pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area)
+        h, sysval_gal = number_gal(sysMap, dmass_chron, dmass_chron_weights, sys_weights = sys_weights, iterative = iterative, equal_area = equal_area) 
+        pcenter, norm_number_density, fracerr_norm = number_density(sysMap, h, area, equal_area = equal_area)
+        
         diag_cov = np.diagonal(covariance)
         error_cov = np.sqrt(diag_cov)
-        if is_pos_def(covariance) == True:
-            cov_matrix = covariance
-        else:
-            print("NOT POSITIVE DEFINITE") # try not zeroing out, or taking anout zeroing out //
-            covariance[1][-1] = 0
-            covariance[-1][1] = 0
-            covariance[0][-2] = 0
-            covariance[-2][0] = 0
-            if is_pos_def(covariance) == True:
-                cov_matrix = covariance
-            else:
-                print("STILL NOT POSITIVE DEFINITE")
-                covariance[0][-3] = 0
-                covariance[-3][0] = 0
-                covariance[1][-2] = 0
-                covariance[-2][1] = 0
-                covariance[2][-1] = 0
-                covariance[-1][2] = 0
-                if is_pos_def(covariance) == True:
-                    cov_matrix = covariance
-                else:
-                    print("STILL NOT POSITIVE DEFINITE x2")
-                    cov_matrix = error_cov
+        
+        # check to make sure covariance matrix is symmetric
+#        print("symmetric: ", is_sym(covariance))
+#        if is_sym(covariance) != True:
+#            cov_sym = symmetric(covariance)
+#        else:
+#            cov_sym =  covariance
+            
+#        print("invertible: ", invertible(cov_sym), ", positive definite: ", is_pos_def(cov_sym))
+#        print(np.linalg.eigvals(cov_sym))
+        
+#        if invertible(cov_sym) == True and is_pos_def(cov_sym) == True:
+#            cov_matrix = cov_sym
+#            cov_chi2 = cov_matrix
+            #save = True
+            
+        # JUST FOR SQRT RUN ---------------------------------------------------------
+        cov_matrix = diag_cov
+        vec_c = np.array(cov_matrix)
+        diag_matrix = np.diag(vec_c)
+        cov_chi2 = diag_matrix
+        print("applied sqrt")
+        # ---------------------------------------------------------------------------     
 
     #plotting:
         xlabel = input_keyword
@@ -246,40 +212,45 @@ for i_pca in range(n_pca): #50, 56
             plt.ylim(bottom=0.85)
             plt.title(xlabel+' sys weights applied')
             if SPT == True:
-                fig.savefig(xlabel+'sys_applied_spt.pdf')
+                fig.savefig('/users/PCON0003/warner785/DMASSY3/Sept23/'+xlabel+'sys_applied_spt.pdf')
             else:
                 fig.savefig(xlabel+'sys_applied_val.pdf')
         else:
             plt.title(xlabel+' systematics check, no weights')
             if SPT == True:
-                fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_custom/'+xlabel+'sys_check_spt.pdf')
+                fig.savefig('/users/PCON0003/warner785/DMASSY3/Sept23/'+xlabel+'sys_check_spt.pdf')
             else:
                 fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_validation/'+xlabel+'sys_check_val.pdf')
         plt.close()
-
-        ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, np.ones(12), fracerr_ran_norm, 0 , None, SPT = False)
-        print('ran_chi2: ', ran_chi2_reduced)
-        chi2_randoms.append(ran_chi2_reduced)
+        
+        #if save == True:
+            #np.savetxt(str(i_pca)+'_pcenter.
+        #ran_chi2, ran_chi2_reduced = chi2(norm_number_density_ran, np.ones(10), fracerr_ran_norm, 0 , None, SPT = False)
+        #print('ran_chi2: ', ran_chi2_reduced)
+        #chi2_randoms.append(ran_chi2_reduced)
     
         if sys_weights == True:
-            trend_chi2, trend_chi2_reduced = chi2(norm_number_density, np.ones(12), None, 0, covariance, SPT = SPT)
+            trend_chi2, trend_chi2_reduced = chi2(norm_number_density, np.ones(10), fracerr_norm, 0, cov_chi2, SPT = SPT)
             chi2_f =  trend_chi2_reduced
             print('applied_sys_chi2: ', chi2_f)
             chi2_dmassf.append(chi2_f)
-        
+            params = scipy.optimize.curve_fit(lin, pcenter, norm_number_density, sigma = cov_matrix)
+            [m, b1] = params[0]
+            trend_chi2, trend_chi2_reduced = chi2(norm_number_density, lin(pcenter, m, b1), fracerr_norm, 2, cov_chi2, SPT = SPT)
+            chi2_trend1.append(trend_chi2_reduced)
+            
         if sys_weights == False: 
             #import pdb
             #pdb.set_trace()
-            dmass_chi2, dmass_chi2_reduced = chi2(norm_number_density, np.ones(12), None, 0, covariance, SPT = SPT)
+            dmass_chi2, dmass_chi2_reduced = chi2(norm_number_density, np.ones(10), fracerr_norm, 0, cov_chi2, SPT = SPT)
             chi2_i = dmass_chi2_reduced
             print('checking chi2 before correction: ', chi2_i)
             
             #if chi2_i < 2:  ------ for later runs
                 #STOP=True
                 #print("skip-- not sufficient")
-            chi2_dmassi.append(chi2_i)
-        
-        
+            chi2_dmassi.append(dmass_chi2)
+            
  # -------------- only continue if chi2_dmassi is sufficient -------------------        
         #trendline:
         # fit to trend:
@@ -302,16 +273,16 @@ for i_pca in range(n_pca): #50, 56
                 
                 if SPT == True:
                     ax.errorbar( pcenter, norm_number_density, yerr=error_cov, label = "dmass in spt")
-                    fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_custom/' +xlabel+'linear_spt.pdf')
+                    fig.savefig('/users/PCON0003/warner785/DMASSY3/Sept23/' +xlabel+'linear_spt.pdf')
 
                 else:
                     ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in val")
-                    fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_val/' +xlabel+'linear_val.pdf')
+                    fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_validation/' +xlabel+'linear_val.pdf')
 
-                trend_chi2, trend_chi2_reduced = chi2(norm_number_density, lin(pcenter, m, b1), fracerr_norm, 2, covariance, SPT = SPT)
+                trend_chi2, trend_chi2_reduced = chi2(norm_number_density, lin(pcenter, m, b1), fracerr_norm, 2, cov_chi2, SPT = SPT)
 
                 print('linear trend_chi2: ', trend_chi2_reduced)
-                chi2_trend1.append(trend_chi2_reduced)
+                chi2_trend1.append(trend_chi2)
                 plt.close()
     
 # difference between sum(chi2) between models (free parameters-- 1 new, want more than 1 better in sum(chi2))
@@ -337,13 +308,13 @@ for i_pca in range(n_pca): #50, 56
                 
                     if SPT == True:
                         ax.errorbar( pcenter, norm_number_density, yerr=error_cov, label = "dmass in spt")
-                        fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_custom/' +xlabel+'quad_spt.pdf')
+                        fig.savefig('/users/PCON0003/warner785/DMASSY3/Sept23/' +xlabel+'quad_spt.pdf')
 
                     else:
                         ax.errorbar( pcenter, norm_number_density, yerr=fracerr_norm, label = "dmass in val")
-                        fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_val/' +xlabel+'quad_val.pdf')
+                        fig.savefig('/users/PCON0003/warner785/DMASSY3/june23_validation/' +xlabel+'quad_val.pdf')
 
-                    trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, quad(pcenter, a, b2, c), fracerr_norm, 3, covariance, SPT = SPT)
+                    trend2_chi2, trend2_chi2_reduced = chi2(norm_number_density, quad(pcenter, a, b2, c), fracerr_norm, 3, cov_chi2, SPT = SPT)
 
                     print('quadratic trend_chi2: ', trend2_chi2_reduced)
                     chi2_trend2.append(trend2_chi2_reduced)
@@ -361,11 +332,13 @@ for i_pca in range(n_pca): #50, 56
                     if trend_chi2 > threshold: #diff_chi2
                         quadratic=True
                         print("Quadratic is better fit for ", xlabel)
-                        trend.append(1)
+                        trend.append(trend2_chi2) #chi2, not reduced
+                        print(trend2_chi2)
                     else:
                         linear=True
                         print("Linear fit is suitable for ", xlabel)
-                        trend.append(0)
+                        trend.append(trend_chi2) #chi2, not reduced
+                        print(trend_chi2)
         
         # work on applying the weights to dmass:
 
@@ -405,11 +378,15 @@ for i_pca in range(n_pca): #50, 56
                 dmass_chron_sys_weight = weight_object
                 print("weights being applied: ",dmass_chron_sys_weight, "weights that are zero: ", dmass_chron_sys_weight[dmass_chron_sys_weight==0].size)
     
-                outdir = '/fs/scratch/PCON0008/warner785/bwarner/june23_tests/'
+                outdir = '/fs/scratch/PCON0008/warner785/bwarner/june23_validation/'
                 os.makedirs(outdir, exist_ok=True)
                 print("saving files...")
      # ONLY SAVE WEIGHTS COLUMN FOR FASTER RUN #
                 esutil.io.write( outdir+run_name+xlabel+'dmass_weight_spt.fits', dmass_chron_sys_weight, overwrite=True)
+        
+                #if save == True:
+                esutil.io.write(outdir+'random_val_chron.fits', random_chron, overwrite=True)
+                
                 #esutil.io.write( outdir+xlabel+'h_ran_spt_full.fits', h_ran, overwrite=True)
                 #esutil.io.write( outdir+xlabel+'norm_ran_spt_full.fits', norm_number_density_ran, overwrite=True)
                 #esutil.io.write( outdir+xlabel+'fracerr_ran_spt_full.fits', fracerr_ran_norm, overwrite=True)
@@ -418,19 +395,16 @@ for i_pca in range(n_pca): #50, 56
 # save everything in text files
 
 if sys_weights == False:
-    np.savetxt(run_name+'chi2_randoms_spt.txt', chi2_randoms)
+#    np.savetxt(run_name+'chi2_randoms_spt.txt', chi2_randoms)
     np.savetxt(run_name+'chi2_dmassi_spt.txt', chi2_dmassi)
-##    np.savetxt('chi2_trend1_spt.txt', chi2_trend1)
+    np.savetxt(run_name+'chi2_trend_spt.txt', chi2_trend1)
 ##    np.savetxt('chi2_trend2_spt.txt', chi2_trend2)
 ##    np.savetxt('trend_spt.txt', trend)
 
-#if sys_weights == True:
-    #np.savetxt('chi2_dmassf_spt.txt', chi2_dmassf)
+if sys_weights == True:
+    np.savetxt('chi2_dmassf_spt.txt', chi2_dmassf)
+    np.savetxt(run_name+'chi2_trend_spt.txt', chi2_trend1)
     
 # variable names:
-# linear_run1
-# linear_run2
-# quad_run1
-# quad_run2
-# quad_updated1
-# quad_updated2
+# linear: final_area_run.fits
+

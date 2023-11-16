@@ -206,8 +206,8 @@ print('num of train_sample after des veto', train_sample.size)
 
 #call in catalogs
 # Assigning CMASS probabilities to Gold Y3 in Stripe 82 Training/Testing Region.
-mag = ['MAG_DETMODEL', 'MAG_DETMODEL']
-err = ['MAGERR_DETMODEL', 'MAGERR_DETMODEL']
+mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
+err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
 filter = ['G', 'R', 'I']
 
 mask = (gold_st82['RA']>310) & (gold_st82['RA']<360)|(gold_st82['RA']<7)
@@ -267,7 +267,7 @@ tol = 1E-5
 # Fitted parameters and covariance will be stored as a pickle
 outdir = 'output/test/fitting/'
 os.makedirs(outdir, exist_ok=True)
-gold_xd_bovy_filename = outdir+'gauss_gold_bovyY3_final2.xdgmm'
+gold_xd_bovy_filename = outdir+'gauss_gold_bovyY3_SOF.xdgmm'
 
 # Magnitudes and corresponding errors you want to use to train the algorithm. 
 # `mixing_color` automatically constructs [mag g, mag r, color (g-r), color (r-i)] and 
@@ -275,8 +275,8 @@ gold_xd_bovy_filename = outdir+'gauss_gold_bovyY3_final2.xdgmm'
 # I simply put `SOF_CM_MAG_CORRECTED` magnitudes for now. 
 # If you want to use different combinations of mags and colors, 
 # modify `mixing_color` or build your own function. 
-mag = ['MAG_DETMODEL', 'MAG_DETMODEL']
-err = ['MAGERR_DETMODEL', 'MAGERR_DETMODEL']
+mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
+err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
 filter = ['G', 'R', 'I']
 
 # This generates four columns of gold training sample. order : mag r, mag i, (g-r), (r-i)
@@ -286,7 +286,7 @@ X_gold, X_gold_cov = mixing_color(clean_cmass_data_des_train,
 
 # Fitting start with Bovy's method
 clf_gold = XDnew_fitting_X( X_gold, X_gold_cov, FileName = gold_xd_bovy_filename, 
-                    n_cl = 12, n_iter = n_iter_gold, tol = tol, method='Bovy')
+                    n_cl = 10, n_iter = n_iter_gold, tol = tol, method='Bovy')
 
 #Next: noncmass data
 
@@ -304,7 +304,7 @@ tol = 1E-5
 # Fitted parameters and covariance will be stored as a pickle
 outdir = 'output/test/fitting/'
 os.makedirs(outdir, exist_ok=True)
-gold_xd_bovy_filename = outdir+'gauss_nogold_bovyY3_final2.xdgmm'
+gold_xd_bovy_filename = outdir+'gauss_nogold_bovyY3_SOF.xdgmm'
 
 # Magnitudes and corresponding errors you want to use to train the algorithm. 
 # `mixing_color` automatically constructs [mag g, mag r, color (g-r), color (r-i)] and 
@@ -312,8 +312,8 @@ gold_xd_bovy_filename = outdir+'gauss_nogold_bovyY3_final2.xdgmm'
 # I simply put `SOF_CM_MAG_CORRECTED` magnitudes for now. 
 # If you want to use different combinations of mags and colors, 
 # modify `mixing_color` or build your own function. 
-mag = ['MAG_DETMODEL', 'MAG_DETMODEL']
-err = ['MAGERR_DETMODEL', 'MAGERR_DETMODEL']
+mag = ['SOF_CM_MAG_CORRECTED', 'SOF_CM_MAG_CORRECTED' ]
+err = ['SOF_CM_MAG_ERR', 'SOF_CM_MAG_ERR']
 filter = ['G', 'R', 'I']
 
 # This generates four columns of gold training sample. order : mag r, mag i, (g-r), (r-i)
@@ -323,4 +323,4 @@ X_nogold, X_nogold_cov = mixing_color(nocmass_random,
 
 # Fitting start with Bovy's method
 clf_nogold = XDnew_fitting_X( X_nogold, X_nogold_cov, FileName = gold_xd_bovy_filename, 
-                    n_cl = 46 , n_iter = n_iter_gold, tol = tol, method='Bovy')
+                    n_cl = 42 , n_iter = n_iter_gold, tol = tol, method='Bovy')

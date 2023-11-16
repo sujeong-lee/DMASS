@@ -1,4 +1,4 @@
-# Run Model in SPT region:
+# Run Model in SPT region: KEEP for reference 
 
 import os, sys
 import esutil
