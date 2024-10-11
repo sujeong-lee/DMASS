@@ -21,7 +21,7 @@ multiprocessing
 
 ### Install
 
-```git clone https://github.com/sujeong-lee/CMASS.git```
+```git clone https://github.com/sujeong-lee/DMASS.git```
 
 
 ### Configuration setting 
