@@ -12,14 +12,14 @@ from fitsio import FITS, FITSHDR
 def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = None):
     import os, sys
     
-    print '\n--------------------------------\n Existing catalog\n--------------------------------'
+    print('\n--------------------------------\n Existing catalog\n--------------------------------')
     
     if no_keyword is None : 
         tables = []
         for i in os.listdir(path):
             if os.path.isfile(os.path.join(path,i)) and keyword in i:
                 tables.append(path+i)
-                print i
+                print(i)
                 sys.stdout.flush()
 
     else : 
@@ -28,7 +28,7 @@ def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = Non
             if os.path.isfile(os.path.join(path,i)) and keyword in i:
                 if no_keyword not in i:
                     tables.append(path+i)
-                    print i
+                    print(i)
                     sys.stdout.flush()
 
                 else: pass
@@ -39,17 +39,18 @@ def SearchFitsByName(path = None, keyword = None, no_keyword=None, columns = Non
 
 def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = None):
     import os, sys
-    print keyword, no_keyword
+    #print(keyword, no_keyword)
 
-    print '\n--------------------------------\n calling catalog\n--------------------------------'
-    
+    #print('\n--------------------------------\n calling catalog\n--------------------------------')
+    print('\nCalling catalogs >>>')
+
     if no_keyword is None : 
         tables = []
         for i in os.listdir(path):
             if os.path.isfile(os.path.join(path,i)) and keyword in i:
                 #if no_keyword not in i:
                 tables.append(path+i)
-                print i
+                print(i)
                 sys.stdout.flush()
 
     elif no_keyword is not None : 
@@ -60,17 +61,26 @@ def SearchAndCallFits(path = None, keyword = None, no_keyword=None, columns = No
                     pass
                 elif no_keyword not in i:
                     tables.append(path+i)
-                    print i
+                    print(i)
                     sys.stdout.flush()
 
                #else: pass
-
-    data = esutil.io.read(tables, columns = columns, combine = True)
+    
+    data = []
+    N = len(tables)
+    for i, t in enumerate(tables):
+        d = esutil.io.read(t, columns = columns)
+        print ('reading {}/{}'.format(i+1, N), t)
+        data.append(d)
+    data = np.hstack(data)
+    
+    
+    #data = esutil.io.read(tables, columns = columns, combine = True)
     return data
 
 def getSGCCMASSphotoObjcat():
     
-    print '\n--------------------------------\n calling BOSS SGC CMASS catalog\n--------------------------------'
+    print('\n--------------------------------\n calling BOSS SGC CMASS catalog\n--------------------------------')
     
     import esutil
     import numpy as np
@@ -100,8 +110,8 @@ def getSGCCMASSphotoObjcat():
 
     cmass = cmass[no_duplicate_mask]
 
-    print "Applying Healpix BOSS SGC footprint mask"
-    print "Change healpix mask to spatial cut later..... Don't forget!!! "
+    print("Applying Healpix BOSS SGC footprint mask")
+    print("Change healpix mask to spatial cut later..... Don't forget!!! ")
     HPboss = esutil.io.read('/n/des/lee.5922/data/cmass_cat/healpix_boss_footprint_SGC_1024.fits')
     from systematics import hpRaDecToHEALPixel
     HealInds = hpRaDecToHEALPixel( cmass['RA'],cmass['DEC'], nside= 1024, nest= False)
@@ -154,7 +164,7 @@ def getCatalogsWithKeys(keyword = None, path = None):
     for i in os.listdir(path):
         if os.path.isfile(os.path.join(path,i)) and keyword in i:
             tables.append(path+i)
-            print i
+            print(i)
             sys.stdout.flush()
     des_data = esutil.io.read( tables, combine=True)
     return des_data
@@ -186,7 +196,7 @@ def getDESY1A1catalogs(keyword = 'Y1A1', gold = False, size = None, sdssmask=Tru
     for i in os.listdir(path):
         if os.path.isfile(os.path.join(path,i)) and keyword in i:
             tables.append(path+i)
-            print i
+            print(i)
             sys.stdout.flush()
 
     rows = None
@@ -228,19 +238,19 @@ def LoadBalrog(user = 'JELENA', truth = None):
     tables = []
     for i in os.listdir(path):
         if os.path.isfile(os.path.join(path,i)) and user.upper() in i and kind in i:
-            print i
+            print(i)
             tables.append(path+i)
 
     balrog_data = esutil.io.read( tables, combine=True, columns = tags)
 
-    print "no RA and DEC columns. Use ALPHAWIN_J2000 and DELTAWIN_J2000"
+    print("no RA and DEC columns. Use ALPHAWIN_J2000 and DELTAWIN_J2000")
     ra = balrog_data['ALPHAWIN_J2000_DET']
     dec = balrog_data['DELTAWIN_J2000_DET']
     cut = ra < 0
     ra1 = ra[cut] + 360
     ra[cut] = ra1
 
-    print "alphaJ2000, deltaJ2000  -->  ra, dec"
+    print("alphaJ2000, deltaJ2000  -->  ra, dec")
     balrogname = list( balrog_data.dtype.names)
     alphaInd = balrogname.index('ALPHAWIN_J2000_DET')
     deltaInd = balrogname.index('DELTAWIN_J2000_DET')
