@@ -777,24 +777,21 @@ def XD_fitting( data = None,
 def XD_fitting_X( X = None, Xcov=None, 
         pickleFileName = 'pickle/XD_fitting_test.pkl', 
         init_params = None, 
-        suffix='', 
-        mag = ['MAG_MODEL', 'MAG_DETMODEL'],
-        err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
-        filter = ['G', 'R', 'I'],
-        n_cl = None, n_iter = 500, tol=1E-5, verbose=False ):
+        n_clusters = None, max_iter = 500, tol=1E-5, verbose=False ):
 
     from astroML.decorators import pickle_results
     @pickle_results(pickleFileName, verbose = True)
-    def compute_XD(X, Xcov, init_params = None, n_iter=500, 
-    verbose=False, n_cl = None, tol=1E-5):
+    def compute_XD(X, Xcov, init_params = None, max_iter=500, 
+    verbose=False, n_clusters = None, tol=1E-5):
+        
         if init_params != None : 
-            n_cl = 10
+            n_clusters = 10
 
-        if n_cl is None : 
-            n_cl,_,_= _FindOptimalN( np.arange(2, 50, 2), X, 
+        if n_clusters is None : 
+            N = np.arange(2, 50, 2)
+            n_clusters,_,_= _FindOptimalN( N, X, 
             pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
-
-        clf= XDGMM(n_cl, n_iter=n_iter, tol=tol, verbose=verbose)
+        clf= XDGMM(n_clusters, n_iter=max_iter, tol=tol, verbose=verbose)
         clf.fit(X, Xcov, init_params = init_params)
         return clf
 
@@ -805,10 +802,8 @@ def XD_fitting_X( X = None, Xcov=None,
         clf = pickle['retval']        
         
     else:
-        #X, Xcov = mixing_color(data, mag=mag, err=err, filter=filter, 
-        #suffix = suffix, no_zband=False)
-        clf = compute_XD(X, Xcov, init_params=init_params, n_cl = n_cl, 
-        n_iter = n_iter, tol=tol, verbose=verbose)
+        clf = compute_XD(X, Xcov, init_params=init_params, n_clusters = n_clusters, 
+        max_iter = max_iter, tol=tol, verbose=verbose)
     return clf
 
 
@@ -1075,19 +1070,17 @@ def doVisualization2(true_data, test_data, labels = None, ranges = None, nbins=1
 
 
 def _FindOptimalN( N, Xdata, pickleFileName = None, suffix = None):
-    #from sklearn.mixture import GMM
     #data, _ = mixing_color(data, suffix = suffix)
     @pickle_results( pickleFileName )
-    def compute_GMM( N, covariance_type='full', n_iter=1000):
+    def compute_GMM( N, covariance_type='full', max_iter=1000):
         models = [None for n in N]
         for i in range(len(N)):
             sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '.format(i * 1./len(N) * 100.))
             sys.stdout.flush()
-            models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
+            models[i] = GaussianMixture(n_components=N[i], max_iter=max_iter,
                             covariance_type=covariance_type)
             models[i].fit(Xdata)
         return models
-    
     models = compute_GMM(N)
     AIC = [m.aic(Xdata) for m in models]
     BIC = [m.bic(Xdata) for m in models]
@@ -1478,6 +1471,90 @@ def assignCMASSProb( test, clf_cmass, clf_nocmass, cmass_fraction = None,
         #test['noLogLikelihood'] = no_logprob_a
         
     return test
+
+
+def assignCMASSProb_X( X, Xcov, clf_cmass, clf_nocmass, cmass_fraction = None, 
+                     #mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+                     #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+                     #filter = ['G', 'R', 'I'],
+                     suffix = None ):
+    
+    print("calculate loglikelihood gaussian with multiprocessing module")
+    
+    #try: X, Xcov = mixing_color( test, mag=mag, err=err, filter=filter )
+    #except ValueError : X, Xcov = mixing_color( test, mag=mag, err=err, filter=filter, suffix = '')
+        
+    from multiprocessing import Process, Queue
+    # split data
+    n_process = 12
+    
+    X_split = np.array_split(X, n_process, axis=0)
+    Xcov_split = np.array_split(Xcov, n_process, axis=0)
+    
+    def logprob_process(q,  classname, order, xxx_todo_changeme2):
+        (data, cov) = xxx_todo_changeme2
+        re = classname.logprob_a(data, cov)
+        result = logsumexp(re, axis = 1)
+        q.put((order, result))
+    
+    inputs = [ (X_split[i], Xcov_split[i]) for i in range(n_process) ]
+    
+    q_cmass = Queue()
+    #q_all = Queue()
+    q_no = Queue()
+    cmass_Processes = [Process(target = logprob_process, args=(q_cmass, clf_cmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    #all_Processes = [Process(target = logprob_process, args=(q_all, clf, z[0], z[1])) for z in zip(range(n_process), inputs)]
+    no_Processes = [Process(target = logprob_process, args=(q_no, clf_nocmass, z[0], z[1])) for z in zip(list(range(n_process)), inputs)]
+    
+    #sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+    
+    for p in cmass_Processes: p.start()
+    
+    percent = 0.0
+    result = []
+    for p in cmass_Processes:
+        result.append(q_cmass.get())
+        percent += + 1./( n_process * 2 ) * 100
+        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+        sys.stdout.flush()
+    
+    #result = [q_cmass.get() for p in cmass_Processes]
+    result.sort()
+    cmass_logprob_a = np.hstack([np.array(r[1]) for r in result ])
+
+    for p in no_Processes: p.start()
+    
+    resultno = []
+    for p in no_Processes:
+        resultno.append(q_no.get())
+        percent += + 1./( n_process * 2 ) * 100
+        sys.stdout.write("\r" + 'multiprocessing {:0.0f} %'.format( percent ))
+        sys.stdout.flush()
+    
+    resultno.sort()
+    no_logprob_a = np.hstack([r[1] for r in resultno ])
+    
+    sys.stdout.write("\r" + 'multiprocessing {:0.0f} % \n'.format( 100 ))
+
+    numerator =  np.exp(cmass_logprob_a) * cmass_fraction
+    #denominator = np.exp(all_logprob_a)
+    denominator = numerator + np.exp(no_logprob_a) * (1. - cmass_fraction)
+    
+    denominator_zero = denominator == 0
+    CMASS_PROB = np.zeros( numerator.shape )
+    CMASS_PROB[~denominator_zero] = numerator[~denominator_zero]/denominator[~denominator_zero]
+
+    # try:
+    #     test = rf.append_fields(test, 'CMASS_PROB', CMASS_PROB)
+    #     #test = rf.append_fields(test, 'cmassLogLikelihood', cmass_logprob_a)
+    #     #test = rf.append_fields(test, 'noLogLikelihood', no_logprob_a)
+    # except ValueError:
+    #     test['CMASS_PROB'] = CMASS_PROB
+    #     #test['cmassLogLikelihood'] = cmass_logprob_a
+    #     #test['noLogLikelihood'] = no_logprob_a
+    #     
+    # return test
+    return CMASS_PROB
 
 def assignELGProb( test, clf_cmass, clf_nocmass, cmass_fraction = None, 
                      mag = ['MAG_MODEL', 'MAG_DETMODEL'],
