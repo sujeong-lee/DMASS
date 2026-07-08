@@ -21,7 +21,21 @@ multiprocessing
 
 ### Install
 
-```git clone https://github.com/sujeong-lee/CMASS.git```
+```
+git clone --recursive https://github.com/sujeong-lee/DMASS.git
+
+# install XDGMM 
+cd XDGMM
+python setup.py install 
+
+# install Bovy extreme deconvolution
+cd ../extreme-deconvolution
+make
+make install INSTALL_DIR=/your/path/to/install/lib/
+make pywrapper INSTALL_DIR=/your/path/to/install/lib/
+python setup.py install 
+
+```
 
 
 ### Configuration setting 
