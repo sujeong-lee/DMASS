@@ -37,6 +37,13 @@ python setup.py install
 
 ```
 
+Bovy's extreme-deconvolution algorithm does not work with multi-threads. 
+At the very top of your jupyter notebook, set 
+```
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+```
+
 
 ### Configuration setting 
 
