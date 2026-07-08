@@ -1,0 +1,6 @@
+[submodule "extreme-deconvolution"]
+	path = extreme-deconvolution
+	url = https://github.com/jobovy/extreme-deconvolution.git
+[submodule "XDGMM"]
+	path = XDGMM
+	url = https://github.com/sujeong-lee/XDGMM.git

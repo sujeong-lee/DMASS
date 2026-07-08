@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys
+import sys, os
 from time import time
 import numpy as np
 from astroML.decorators import pickle_results
@@ -18,6 +18,12 @@ from numpy import linalg
 from multiprocessing import Process, Queue
 #from sklearn.mixture import GMM as GaussianMixture
 from sklearn.mixture import GaussianMixture
+
+#xdgmm_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'XDGMM/')
+#sys.path.insert(0,xdgmm_path)
+from xdgmm import XDGMM as XDGMM_Holoien
+
+import time 
 
 def getCMASSparam(filename = None ):
     
@@ -736,7 +742,96 @@ def mixing_color_elg(data, suffix = '',
     Xcov = np.tensordot(np.dot(Xcov, W.T), W, (-2, -1))
     return X, Xcov
 
+
+def _FindOptimalN_with_err( N, Xdata, Xcov, pickleFileName = None, suffix = None):
+    #from sklearn.mixture import GMM
+    #data, _ = mixing_color(data, suffix = suffix)
+    @pickle_results( pickleFileName )
+    def compute_GMM( N, covariance_type='full', n_iter=1000):
+        models = [None for n in N]
+        for i in range(len(N)):
+            sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                             .format(i * 1./len(N) * 100.))
+            sys.stdout.flush()
+            models[i] = GaussianMixture(n_components=N[i], max_iter=n_iter,
+                            covariance_type=covariance_type)
+            models[i].fit(Xdata, Xcov)
+        return models
     
+    models = compute_GMM(N)
+    AIC = [m.aic(Xdata) for m in models]
+    BIC = [m.bic(Xdata) for m in models]
+    i_best = np.argmin(BIC)
+    gmm_best = models[i_best]
+    sys.stdout.write("\r" + 'Finding optimal number of cluster : {:0.0f} % '\
+                     .format(100))
+    print("\nbest fit converged:", gmm_best.converged_, end=' ')
+    print(" n_components =  %i" % N[i_best])
+    return N[i_best], AIC, BIC
+
+
+def XD_fitting_X( X = None, Xcov=None, 
+        pickleFileName = None, 
+        init_params = None, 
+        #suffix='', 
+        #mag = ['MAG_MODEL', 'MAG_DETMODEL'],
+        #err = [ 'MAGERR_MODEL','MAGERR_DETMODEL'],
+        #filter = ['G', 'R', 'I'],
+        n_clusters = None, max_iter = 500, tol=1E-5, method='Bovy', verbose=False ):
+
+    try: 
+        xdgmm_obj = XDGMM_Holoien(filename=pickleFileName) 
+        print ('Using precomputed results from ', pickleFileName)
+        return xdgmm_obj
+    except FileNotFoundError: pass
+    
+    if X is None:
+        # calling pre-computed model
+        xdgmm_obj = XDGMM_Holoien(filename=pickleFileName) 
+        print ('Using precomputed results from ', pickleFileName)
+        return xdgmm_obj
+
+    else: 
+        if n_clusters == None : 
+            param_range=np.arange(2, 50, 2)
+            optimal_n_comp,_,_= _FindOptimalN_with_err( param_range, X, Xcov, 
+            pickleFileName = pickleFileName+'.n_cluster' , suffix = '')
+            
+            #xdgmm_test = XDGMM_Holoien( n_iter=n_iter, tol=tol, method=method )
+            ## Define the range of component numbers, and get ready to compute the BIC for each one:
+            #param_range = np.arange(2, 50, 2)
+            ## Loop over component numbers, fitting XDGMM model and computing the BIC:
+            #bic, optimal_n_comp, lowest_bic = xdgmm_test.bic_test(X, Xcov, param_range)
+            ##n_cl = optimal_n_comp[np.argmin(bic)]
+        else: optimal_n_comp = n_clusters
+
+        #import time
+        # fitting
+        #initiated class
+        from threadpoolctl import threadpool_limits
+        with threadpool_limits(limits=1):
+            xdgmm_obj = XDGMM_Holoien(n_components=optimal_n_comp, n_iter=max_iter, tol=tol, method=method )
+            #xdgmm.n_components = optimal_n_comp
+            print ('n_components=', optimal_n_comp)
+            print ('fitting started. This will take for a while.')
+            t1 = time.time()
+            xdgmm_obj = xdgmm_obj.fit(X, Xcov)
+            t2 = time.time()
+            print ('fitting finished')
+            print ('elapsed time:', (t2-t1)/60.0,'s')
+        
+        #t3 = time.time()
+        print ('saving xdgmm object to.. ', pickleFileName)
+        xdgmm_obj.save_model(pickleFileName)
+        print ('file saved')
+        #print ('saving obj. time:', (t3-t2)%60,'s')
+        
+        #t4 = time.time()
+        xdgmm_obj = XDGMM_Holoien(filename=pickleFileName) 
+        #print ('loading obj. time:', (t4-t3)%60,'s')
+        return xdgmm_obj
+    
+
 def XD_fitting( data = None, 
         pickleFileName = 'pickle/XD_fitting_test.pkl', 
         init_params = None, 
@@ -774,7 +869,7 @@ def XD_fitting( data = None,
     return clf
     
     
-def XD_fitting_X( X = None, Xcov=None, 
+def XDold_fitting_X( X = None, Xcov=None, 
         pickleFileName = 'pickle/XD_fitting_test.pkl', 
         init_params = None, 
         n_clusters = None, max_iter = 500, tol=1E-5, verbose=False ):
